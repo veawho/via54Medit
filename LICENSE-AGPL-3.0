@@ -1,0 +1,42 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2026 巫师叔叔 (via54) and contributors
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as published
+ by the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/agpl-3.0.txt>.
+
+================================================================================
+
+This file is the AGPL-3.0 license grant for the **source code** of via54Medit,
+including but not limited to:
+
+  - All Go source files (*.go) under cmd/, internal/, pkg/, tests/
+  - All Rust source files (*.rs) under rust/
+  - All shell scripts (*.sh) under scripts/
+  - GitHub Actions YAML files under .github/workflows/
+  - Configuration files (YAML/JSON/TOML) used at build/runtime
+
+================================================================================
+
+The full text of the GNU Affero General Public License v3.0 is available at:
+  https://www.gnu.org/licenses/agpl-3.0.txt
+
+A human-readable summary (not a substitute for the full text) is available at:
+  https://www.gnu.org/licenses/agpl-3.0.html
+
+================================================================================
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+Compatible with via54Design's source license (AGPL-3.0).

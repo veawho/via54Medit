@@ -1,0 +1,25 @@
+[workspace]
+members = ["."]
+resolver = "2"
+
+[package]
+name = "medit_rust"
+version = "0.1.0"
+edition = "2021"
+description = "Rust hot-path library for via54Medit (PDF extraction, chunking)"
+license = "AGPL-3.0-or-later"
+authors = ["巫师叔叔 (via54) <via54@example.com>"]
+repository = "https://github.com/veawho/via54Medit"
+readme = "../README.md"
+
+[lib]
+name = "medit_rust"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+# pdf-extract = "0.7"  # Phase 3 启用
+# tokenizers = "0.15"  # Phase 3 启用
+# rayon = "1.10"       # Phase 3 启用
+
+[dev-dependencies]
+# 单元测试用

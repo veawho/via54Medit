@@ -1,0 +1,72 @@
+# Build artifacts
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+
+# Go
+/vendor/
+go.sum.bak
+coverage.out
+coverage.html
+*.test
+*.out
+
+# Rust
+rust/target/
+rust/Cargo.lock.bak
+
+# Python (anno2ppt 子进程)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local config / secrets
+.env
+.env.local
+*.local.yaml
+config.local.yaml
+
+# Runtime data (user-specific)
+medit-data/
+~/.medit/
+
+# Logs
+*.log
+logs/
+
+# Audit
+audit/
+
+# OS
+$RECYCLE.BIN/
+System Volume Information/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OneDrive sync artifacts (防误同步)
+*.lnk
+desktop.ini
+
+# Test artifacts
+tests/e2e/screenshots/
+tests/e2e/output/
+tests/stress/logs/

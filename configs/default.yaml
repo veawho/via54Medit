@@ -1,0 +1,151 @@
+# via54Medit 默认配置
+# 复制到 ~/.medit/config.yaml 后按需修改
+#
+# 配置加载顺序 (后者覆盖前者):
+#   1. defaults (本文件)
+#   2. ~/.medit/config.yaml
+#   3. --config 指定的文件
+#   4. 环境变量 (MEDIT_*)
+#   5. CLI flags
+
+version: 1
+
+# ===========================
+# 文献源 (4 个, 默认全启用)
+# ===========================
+sources:
+  pubmed:
+    enabled: true
+    api_key: ""                    # 留空用匿名 (3 req/s), 填了提升到 10 req/s
+    rate_limit: 3                  # req/s
+    email: ""                      # NCBI 礼貌邮箱 (强烈建议填, 提升到 10 req/s)
+
+  openalex:
+    enabled: true
+    email: ""                      # polite pool 必填, 提升到 10 req/s
+    rate_limit: 10                 # req/s
+
+  s2:
+    enabled: true
+    api_key: ""                    # 留空 5K req/day, 填了 100K/day
+    rate_limit: 1                  # req/s (无 key)
+
+  antfu:
+    enabled: true
+    cdp_url: "http://localhost:9223"   # Chrome DevTools Protocol
+    deep_search: true              # true=48s高质量 false=8s快速
+    timeout: 60s
+
+# ===========================
+# Embedder (插件式, 默认 bge-m3)
+# ===========================
+embedder:
+  default: bge-m3
+  bge-m3:
+    model_path: "~/.medit/models/bge-m3"   # 首次运行自动下载
+    device: "auto"                          # auto | cuda:0 | cpu
+    max_length: 8192
+
+  openai:
+    api_key: ""
+    model: "text-embedding-3-small"
+    base_url: ""                             # 自定义 endpoint
+
+  sense-nova:
+    api_key: ""
+    model: "sense-nova-embedding"
+
+# ===========================
+# VectorStore (插件式, 默认 qdrant)
+# ===========================
+vectorstore:
+  default: qdrant
+  qdrant:
+    url: "http://localhost:6333"
+    api_key: ""                              # Qdrant Cloud 必填
+    collection: "medlit"
+    vector_size: 1024                        # bge-m3 = 1024 维
+
+  meilisearch:
+    url: "http://localhost:7700"
+    api_key: ""
+
+  sqlite:
+    path: "~/.medit/vecstore.db"             # 内置 sqlite-vec 扩展
+
+# ===========================
+# LLM (用于 PICO/摘要/分类)
+# ===========================
+llm:
+  default: hermes
+  providers:
+    hermes:
+      endpoint: "http://localhost:8642"
+      model: "MiniMax-M3"
+      api_key: ""
+
+    openai:
+      api_key: ""
+      model: "gpt-4o-mini"
+      base_url: ""
+
+    anthropic:
+      api_key: ""
+      model: "claude-3-5-sonnet-20241022"
+
+    ollama:
+      endpoint: "http://localhost:11434"
+      model: "qwen2.5:7b"
+
+# ===========================
+# Router 策略
+# ===========================
+router:
+  concurrency: 4
+  timeout_per_source: 30s
+  max_retries: 3
+  fallback_order: [antfu, pubmed, openalex, s2]
+
+  fusion:
+    weights:
+      cited_by: 0.3
+      recency: 0.2
+      fwci: 0.3
+      multi_source: 0.2
+    simhash_hamming_threshold: 3
+
+  classify:
+    # 启用本地 LLM 分类 (false = 仅用关键词启发式)
+    use_llm: true
+    # 启用 PICO 抽取 (true = ask/pico 子命令才能用)
+    enable_pico: true
+
+# ===========================
+# 持久化
+# ===========================
+storage:
+  qa_dir: "~/.medit/qa"           # 每个问题一个 JSON + .md
+  index_db: "~/.medit/fts5.db"    # SQLite FTS5
+  pdf_dir: "~/.medit/pdfs"        # 全文 PDF 缓存
+  knowledge_base: "medlit"        # Qdrant collection
+  audit_log: "~/.medit/audit"     # JSONL 审计日志
+
+# ===========================
+# 输出
+# ===========================
+output:
+  default_format: "json"          # json | yaml | markdown
+  pretty: true
+  color: "auto"                   # auto | always | never
+  language: "auto"                # zh | en | auto
+
+# ===========================
+# anno2ppt (Phase 3 启用)
+# ===========================
+anno2ppt:
+  template: "antfu-card-v1"       # 引用卡片模板
+  cards_per_slide: 4
+  highlight_color: "#FF4444"
+  highlight_width: 3
+  dpi: 200
+  python_path: "python"            # python-pptx 子进程
