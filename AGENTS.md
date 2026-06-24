@@ -13,7 +13,7 @@
 - **GitHub**: github.com/veawho/via54Medit (private)
 - **本地路径**: `G:\agent\developments\via54Medit\`
 - **许可**: MIT (templates/configs/docs) + AGPL-3.0 (source code)
-- **依赖**: github.com/veawho/via54Design (MIT+AGPL-3.0)
+- **依赖**: github.com/veawho/via54Design（**可选借鉴**,非强制 — 2026-06-24 修订,见 ARCHITECTURE §21）
 
 ## 技术栈
 
@@ -91,14 +91,15 @@ cd rust && cargo fmt --check
 - **并发**: worker pool + semaphore, 不裸 goroutine 撒
 - **依赖**: 显式 go.mod / Cargo.toml, 不用 replace 除非必要
 
-## 关键约束 (从 via54Design 继承)
+## 关键约束 (从 via54Design 借鉴,**2026-06-24 降级为可选**)
 
 1. **不跑本地 LLM** (7B 质量低 + 4-10GB RAM)，bge-m3 (1GB) 是唯一例外
 2. **map 遍历前必排序** (Go spec 规定随机)
 3. **Plugin 模式**: --embedder / --vectorstore / --provider 三个 flag 必支持
 4. **跨平台首发**: Win + Mac + Linux 三平台 binary
 5. **CI 必过**: push 前跑 `go test -race -coverprofile=coverage.out`
-6. **不依赖 Hermes 内部 API**: via54Medit 是 standalone Go 项目，Hermes 只是开发助手
+6. **不依赖 Hermes 内部 API**: via54Medit 是 standalone Go 项目,Hermes 只是开发助手
+7. **不依赖任何私有仓库**（**2026-06-24 新增铁律**）: `git clone && go build` 必须 100% 成功。via54Design 借鉴接口设计即可,实现走 `internal/foundation/` hand-roll。**ARCHITECTURE §21** 是最高优先级。
 
 ## 任务流转
 

@@ -61,7 +61,7 @@ medit-mcp
 
 ## 致谢
 
-- [via54Design](https://github.com/veawho/via54Design) — 共享 embedder/vectorstore/llm/config/log 基础层
+- [via54Design](https://github.com/veawho/via54Design) — 借鉴接口设计（embedder/vectorstore/llm/config/log 抽象）;**实现独立**走 `internal/foundation/`（2026-06-24 修订,见 ARCHITECTURE §21）
 - [antfu-evidence-search](https://github.com/) (v1.11.0) — 蚂蚁阿福 driver / 引用提取 / persist_qa 移植源
 - [medlit-anno-ppt](https://github.com/) — antfu 样式 PPT 卡片设计移植源
 - [PubMed E-utilities](https://www.ncbi.nlm.nih.gov/books/NBK25500/) — NCBI 官方 API

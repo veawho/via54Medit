@@ -26,14 +26,14 @@
 | 形态 | CLI + MCP | CLI + MCP（一致） |
 | 语言 | Go + Rust + JS(1) | Go + Shell + Rust（一致） |
 | 许可 | MIT + AGPL-3.0 | MIT + AGPL-3.0（一致） |
-| Embedder | 插件式（默认 bge-m3） | **复用同一套**——via54Medit 依赖 via54Design 库 |
-| VectorStore | 插件式（默认 Qdrant） | **复用同一套** |
-| 跨项目包 | `github.com/veawho/via54Design` | 依赖之：`github.com/veawho/via54Design/embedder`、`.../vectorstore` |
+| Embedder | 插件式（默认 bge-m3） | **可借鉴 via54Design**——但 via54Medit **不强制依赖**，见 §21 独立运行原则 |
+| VectorStore | 插件式（默认 Qdrant） | **可借鉴 via54Design**——但 via54Medit **不强制依赖**，见 §21 |
+| 跨项目包 | `github.com/veawho/via54Design` | **可选依赖**——若 via54Design 仓库 ready 则 import；否则 via54Medit hand-roll 等价接口（见 §17 / §21） |
 
-**关键设计原则**：`via54Medit` 不重新造 embedder/vectorstore 的轮子，直接依赖 via54Design 的 `pkg/embedder` 和 `pkg/vectorstore` 接口。这样：
-- bge-m3 / Qdrant 部署一次，两边都用
-- 插件切换逻辑共享（一个 `--embedder` flag 在两个 CLI 都生效）
-- 维护成本减半
+**关键设计原则**（2026-06-24 修订）：`via54Medit` 优先**独立运行**——`git clone` 后不依赖任何私有仓库即可编译运行。via54Design 的 embedder/vectorstore/llm/config/log 接口是**可借鉴设计**，不是**强制依赖**：
+- 若你（开发者）已部署 via54Design + bge-m3 + Qdrant → 可选 import 共享
+- 若新成员只想跑 medit → 0 外部业务依赖，只用 cobra 一个第三方包即可
+- 后续若第三项目需要 → 抽出 `vea-kit` 公共包（见 §17.3 路径 ③）
 
 ---
 
@@ -81,12 +81,16 @@
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: 基础层 (Foundation) — 依赖 via54Design                    │
-│  ├── via54Design/pkg/embedder/         embedder 接口 + bge-m3     │
-│  ├── via54Design/pkg/vectorstore/      vectorstore 接口 + Qdrant  │
-│  ├── via54Design/pkg/llm/              多 provider 抽象            │
-│  ├── via54Design/pkg/config/           YAML 配置                  │
-│  └── via54Design/pkg/log/              结构化日志                  │
+│  Layer 1: 基础层 (Foundation) — **优先独立**（via54Design 可选）  │
+│  └── via54Design/pkg/...              ？（可选，运行时 if-imported）  │
+│  ├── embedder/         hand-roll bge-m3 + openai + sense-nova  │
+│  │                      （若 via54Design ready 则 import 替换）   │
+│  ├── vectorstore/      hand-roll qdrant + meilisearch + sqlite │
+│  │                      （同上）                                  │
+│  ├── llm/              hand-roll hermes + openai + anthropic    │
+│  │                      + ollama 多 provider 抽象               │
+│  ├── config/           hand-roll YAML 加载（gopkg.in/yaml.v3）  │
+│  └── log/              hand-roll 结构化日志（log/slog）          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -377,38 +381,53 @@ storage:
 
 ---
 
-## 9. 关键依赖（依赖 via54Design 的库 + 新增）
+## 9. 关键依赖（**独立运行优先**，via54Design 改为可选借鉴）
 
-### 9.1 复用 via54Design
+> **2026-06-24 修订**:via54Design 不再是强制依赖。via54Medit 必须能 `git clone && go build` 跑起来，**不依赖**任何私有仓库。
+
+### 9.1 via54Design（**可选借鉴**，非强制）
+
 ```go
-import (
-    "github.com/veawho/via54Design/pkg/embedder"
-    "github.com/veawho/via54Design/pkg/vectorstore"
-    "github.com/veawho/via54Design/pkg/llm"
-    "github.com/veawho/via54Design/pkg/config"
-    "github.com/veawho/via54Design/pkg/log"
-)
+// 可选：仅当开发者本地已部署 via54Design 且 import 路径可达时才启用
+//
+// import (
+//     "github.com/veawho/via54Design/pkg/embedder"
+//     "github.com/veawho/via54Design/pkg/vectorstore"
+//     "github.com/veawho/via54Design/pkg/llm"
+//     "github.com/veawho/via54Design/pkg/config"
+//     "github.com/veawho/via54Design/pkg/log"
+// )
 ```
 
-### 9.2 新增 Go 依赖
-| 包 | 用途 | 备注 |
-|---|---|---|
-| `github.com/gorilla/websocket` | CDP 客户端（蚂蚁阿福） | 移植自 antfu cdp_client.py |
-| `github.com/PuerkitoBio/goquery` | HTML 解析（蚂蚁阿福引文提取） | 移植自 extract_antfu_refs.py |
-| `github.com/spf13/cobra` | CLI 框架 | 标准 |
-| `github.com/spf13/viper` | YAML 配置 | 标准 |
-| `modernc.org/sqlite` | 纯 Go SQLite + FTS5 | 零 CGO |
-| `github.com/modelcontextprotocol/go-sdk` | MCP Server SDK | 官方 |
+实际策略（见 §21 独立运行原则）：
+- **默认** = `internal/foundation/` hand-roll 等价接口 + 实现
+- **可选** = 若 `go.mod` 的 `replace` 指令指向本地 via54Design 路径，则用 build tag `//go:build viadesign` 切换
+- **永远不阻塞** = 主分支必须 0 via54Design 依赖也能编译
 
-### 9.3 Rust 热路径（cargo 子项目）
+### 9.2 Go 运行时依赖（**强制最小集**）
+
+| 包 | 用途 | 必要性 |
+|---|---|---|
+| `github.com/spf13/cobra` | CLI 框架 | ✅ 必装（Phase 0 已在用） |
+| `gopkg.in/yaml.v3` | YAML 配置解析 | ✅ Phase 1+ |
+| `golang.org/x/net` | HTTP / rate limit | ✅ Phase 1+ |
+| `modernc.org/sqlite` | 纯 Go SQLite + FTS5（零 CGO） | ✅ Phase 2+ |
+| `github.com/PuerkitoBio/goquery` | HTML 解析（蚂蚁阿福引文） | ✅ Phase 1+ |
+| `github.com/gorilla/websocket` | CDP 客户端（蚂蚁阿福） | ✅ Phase 1+ |
+| `github.com/modelcontextprotocol/go-sdk` | MCP Server SDK | ✅ Phase 4 |
+
+> **Phase 0 真实依赖**:仅 `cobra v1.8.0` 1 个包。其它都是 Phase 1+ 引入。
+
+### 9.3 Rust 热路径（cargo 子项目，Phase 3 启用）
+
 | crate | 用途 |
 |---|---|
 | `pdf-extract` | PDF 文本+元数据提取 |
 | `tokenizers` | HuggingFace tokenizers (Rust) |
 | `rayon` | 并行分块 |
-| `maturin`（可选） | 编译为 PyO3 给 Python 兜底（不用） |
 
 ### 9.4 Shell 工具
+
 - `scripts/setup.sh` 一键部署（bge-m3 + Qdrant + Chrome 9223）
 - `scripts/migrate-from-antfu.sh` 从 antfu-evidence-search v1.11 迁移历史数据
 - `scripts/release.sh` 跨平台构建
@@ -657,24 +676,32 @@ via54Medit/
 
 ---
 
-## 17. 与 via54Design 共享代码的策略
+## 17. 与 via54Design 共享代码的策略（**2026-06-24 降级为可选借鉴**）
 
-### 17.1 共享什么
-- `pkg/embedder/` 接口 + bge-m3 实现
-- `pkg/vectorstore/` 接口 + Qdrant 实现
-- `pkg/llm/` 多 provider
-- `pkg/config/` YAML 加载
-- `pkg/log/` 日志
+> **修订**: 本节原写"via54Medit 强制依赖 via54Design"。**修订后** — via54Medit 默认 hand-roll 等价接口,via54Design 是**可选借鉴**(若开发者本地已 ready)。
 
-### 17.2 不共享
-- 源适配器（via54Design 没源适配器需求）
-- PICO/GRADE 医学领域逻辑
-- anno2ppt（医学模板专用）
+### 17.1 借鉴什么（**可选**,非必须）
 
-### 17.3 共享方式
-- **方式 A**：via54Medit 直接 `import "github.com/veawho/via54Design/pkg/..."`（推荐）
-- **方式 B**：抽取到 `github.com/veawho/vea-kit` 第三方包
-- **先选 A**，等第三个项目需要时再抽 B
+- `pkg/embedder/` 接口设计 + bge-m3 配置参考
+- `pkg/vectorstore/` 接口设计 + Qdrant collection schema 经验
+- `pkg/llm/` 多 provider 抽象思路
+- `pkg/config/` YAML 加载范式
+- `pkg/log/` 结构化日志字段约定
+
+### 17.2 完全独立
+
+- 源适配器（pubmed/openalex/s2/antfu）—— via54Medit 自己写
+- PICO/GRADE 医学领域逻辑 —— via54Medit 自己写
+- anno2ppt 医学模板 —— via54Medit 自己写
+- 全部 `internal/` 子包 —— **via54Medit 0 外部业务依赖**
+
+### 17.3 共享方式（**3 选 1,默认 ②**）
+
+- **方式 ①（推荐但非强制）** = 若 `github.com/veawho/via54Design` 公开可用,via54Medit import 其 embedder/vectorstore/llm 子包。**前提**:此仓库 public 且稳定。**Phase 0 现实**:此仓库 private,本路径阻塞。
+- **方式 ②（默认,2026-06-24 选定）** = via54Medit hand-roll 等价接口在 `internal/foundation/`,独立可跑。**`go.mod` 0 via54Design 依赖**。
+- **方式 ③（远期）** = 抽出 `github.com/veawho/vea-kit` 公共包,via54Medit + via54Design 都依赖之。**v0.5 之后**评估。
+
+**Phase 1 落地**:走 ②。`internal/foundation/embedder.go`、`vectorstore.go`、`llm.go`、`config.go`、`log.go` 五个文件 hand-roll,接口签名与 via54Design 保持一致(便于未来切换)。
 
 ---
 
@@ -700,38 +727,36 @@ via54Medit/
 5. **是否做 Windows 安装包**：MSI / NSIS？还是只发 zip？
 6. **是否先不发 GitHub**：先在 G 盘内部迭代到 v0.5，再发公开？
 
-## 19.1 Phase 0 实际状态注脚（2026-06-24 深度验证后补）
+## 19.1 Phase 0 实际状态注脚（2026-06-24 深度验证后补，**同日修订**）
 
-> 本节记录文档承诺与 Phase 0 代码实际状态之间的差距，**Phase 1 启动前必须解决**。
+> **2026-06-24 二次修订**: 本节原写"Phase 1 入口前必须拍板 via54Design"。**已修订** — 用户拍板走 §17.3 方式 ②(hand-roll),via54Medit **0 外部业务依赖**。本节作为**历史记录保留**。
 
-### A. via54Design 实际接入状态：**未接入**
+### A. via54Design 实际接入状态：未接入（已降级为可选借鉴）
 
-第 2 节、第 9 节、第 17 节均声称 via54Medit 依赖 `github.com/veawho/via54Design/pkg/embedder`、`.../vectorstore`、`.../llm`、`.../config`、`.../log` 五套包。
+第 2 节、第 9 节、第 17 节原写"via54Medit 依赖 `github.com/veawho/via54Design/pkg/embedder`、`.../vectorstore`、`.../llm`、`.../config`、`.../log` 五套包"。
 
-**Phase 0 真实状态**（`go.mod` + `go.sum` + 全代码 `grep` 验证）：
+**修订后**：via54Medit **不强制依赖** via54Design。`go.mod` 维持只有 cobra 一个第三方包,内部走 `internal/foundation/` hand-roll 等价接口。
 
-| 维度 | 文档声明 | Phase 0 现实 |
-|---|---|---|
-| `go.mod` require | via54Design 五个子包 | ❌ 0 依赖（仅 cobra v1.8.0） |
-| `go.sum` 哈希 | via54Design 模块哈希 | ❌ 0 行 |
-| `SourceAdapter` 接口 | import via54Design 后手薄 | ⚠️ **hand-roll**（`internal/source/interface.go` 自己定义） |
-| `embedder` flag | via54Design 共享 | ⚠️ CLI 注册了 flag 但无后端实现 |
-| `vectorstore` flag | via54Design 共享 | ⚠️ 同上 |
-| LLM provider (`--provider`) | via54Design 多 provider 抽象 | ⚠️ 同上 |
+**Phase 0 真实状态**（`go.mod` + `go.sum` + 全代码 `grep` 验证,2026-06-24）：
 
-**结论**：
-- §17.3 选定的"方式 A：直接 import via54Design" 在 Phase 0 **未执行**。
-- Phase 1 入口前的**强制决策点**：via54Design 仓库是否已 ready？若未 ready，§9 / §17 描述属于**愿景文档**，需在 ARCHITECTURE.md 顶部加 status banner。
+| 维度 | 文档原声明 | Phase 0 现实 | 修订后定性 |
+|---|---|---|---|
+| `go.mod` require | via54Design 五个子包 | ❌ 0 依赖（仅 cobra v1.8.0） | ✅ 维持（强制最小集） |
+| `go.sum` 哈希 | via54Design 模块哈希 | ❌ 0 行 | ✅ 维持 |
+| `SourceAdapter` 接口 | import via54Design 后手薄 | ⚠️ hand-roll | ✅ 维持 hand-roll |
+| `embedder` flag | via54Design 共享 | ⚠️ CLI 注册了 flag 但无后端实现 | 🔜 Phase 1 落 `internal/foundation/embedder.go` |
+| `vectorstore` flag | via54Design 共享 | ⚠️ 同上 | 🔜 同上 |
+| LLM provider (`--provider`) | via54Design 多 provider 抽象 | ⚠️ 同上 | 🔜 同上 |
 
-### B. via54Design 接入的三条路径
+### B. via54Design 接入路径（**已选 ②**）
 
 ```
-路径 ① (推荐) 等 via54Design 仓库就绪 → 真实 import 五个子包 → 删除 hand-roll 接口
-路径 ② (务实) 在 via54Medit 内 hand-roll 全部接口 + bge-m3/Qdrant 客户端 → ARCHITECTURE §17 改为"待评估"
-路径 ③ (折中)  抽出第三方 vea-kit 包 → via54Medit + via54Design 都依赖 vea-kit
+路径 ① (推荐但非强制) 等 via54Design 仓库就绪 + public → 真实 import 五个子包
+路径 ② (默认,2026-06-24 选定) via54Medit hand-roll 全部接口 + 客户端 → 0 外部业务依赖
+路径 ③ (远期)  抽出第三方 vea-kit 包 → via54Medit + via54Design 都依赖 vea-kit
 ```
 
-**待用户拍板** 后再写 Phase 1.1 的 `internal/source/antfu.go`。
+**用户拍板（2026-06-24）**:走 ②。本节"待拍板"标识作废,Phase 1 直接开干 `internal/foundation/`。
 
 ### C. Phase 0 质量门禁执行实况
 
@@ -751,6 +776,63 @@ AGENTS.md §9 列的"质量门禁 8 项"中，**3 项（lint / race / coverage�
 
 ## 20. 一句话总结
 
-**`via54Medit` = via54Design 的医学循证特化版**——同样的工程哲学（确定性 + 插件式 + 单二进制 + MCP+CLI），同样的共享基础层（embedder/vectorstore/llm），但用语义路由+多源融合解决医学证据检索的真实痛点。
+**`via54Medit` = 独立运行的医学循证工具集**——**不强制依赖** via54Design 或任何私有仓库。借鉴同样的工程哲学（确定性 + 插件式 + 单二进制 + MCP+CLI），同样的接口设计（embedder/vectorstore/llm/config/log）但**通过 `internal/foundation/` hand-roll 等价实现**确保 `git clone && go build` 即可跑。用语义路由+多源融合解决医学证据检索的真实痛点。
 
 > 巫师叔叔 4A 时代的核心能力是"信息整合 + 视觉表达"，`via54Medit` 是这两个能力在医学循证领域的 Rust 级产品化。
+
+---
+
+## 21. 独立运行原则（**2026-06-24 新增**）
+
+> 本节是**最高优先级架构约束**——任何破坏独立运行的 PR 都不接受。
+
+### 21.1 铁律
+
+```
+git clone https://github.com/veawho/via54Medit.git
+cd via54Medit
+go build -o bin/medit.exe ./cmd/medit
+./bin/medit.exe version
+```
+
+**这三步必须 100% 成功,不依赖任何私有仓库。**
+
+### 21.2 强制最小集（`go.mod` 真实依赖）
+
+| 包 | 用途 | Phase |
+|---|---|---|
+| `github.com/spf13/cobra` | CLI 框架 | Phase 0 ✅ |
+
+**Phase 0 当前 = 1 个包。** Phase 1 引入 yaml.v3 + net + goquery + websocket。**via54Design 永不在此列**。
+
+### 21.3 借鉴 ≠ 依赖
+
+| 维度 | via54Medit 策略 |
+|---|---|
+| 接口设计 | 借鉴 via54Design 的 embedder/vectorstore/llm 抽象（签名一致） |
+| 实现 | hand-roll 在 `internal/foundation/embedder.go` 等文件 |
+| 切换路径 | 若 via54Design 后续 public，可在 `internal/foundation/viadesign.go` 用 build tag `//go:build viadesign` 替换,主分支维持 0 依赖 |
+| 跨项目包 | v0.5 之后评估 vea-kit 抽取,本期不做 |
+
+### 21.4 internal/foundation 落地清单（Phase 1 新增）
+
+```
+internal/foundation/
+├── embedder.go         # Embedder 接口 + bge-m3 / openai / sense-nova 实现
+├── vectorstore.go      # VectorStore 接口 + qdrant / meilisearch / sqlite 实现
+├── llm.go              # LLM Provider 接口 + hermes / openai / anthropic / ollama
+├── config.go           # YAML 加载（gopkg.in/yaml.v3）
+└── log.go              # 结构化日志（log/slog）
+```
+
+**5 个文件,500-800 行总代码量,Phase 1 一次性写完。**
+
+### 21.5 与文档历史关系
+
+- **§9** 关键依赖：via54Design 标记为"可选借鉴"
+- **§17** 共享策略：明确选 ②(hand-roll)
+- **§2** 与 via54Design 关系表：Embedder/VectorStore 列改为"可借鉴"
+- **AGENTS.md** 关键约束 6：从"不依赖 Hermes 内部 API"扩展为"不依赖任何私有仓库"
+- **README.md** 致谢：via54Design 从"共享基础层"改为"借鉴接口设计"
+
+以上所有改动**保留文档历史**（通过 §19.1 注脚 + 时间戳标注）,不删旧表述,只加"已修订"标识。

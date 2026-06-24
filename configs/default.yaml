@@ -7,7 +7,9 @@
 #   3. --config 指定的文件
 #   4. 环境变量 (MEDIT_*)
 #   5. CLI flags
-
+#
+# 2026-06-24 修订: 各 backend (embedder/vectorstore/llm) 实现走
+# internal/foundation/,不依赖 via54Design。详见 ARCHITECTURE §21。
 version: 1
 
 # ===========================
