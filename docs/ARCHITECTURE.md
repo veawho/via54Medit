@@ -700,6 +700,53 @@ via54Medit/
 5. **是否做 Windows 安装包**：MSI / NSIS？还是只发 zip？
 6. **是否先不发 GitHub**：先在 G 盘内部迭代到 v0.5，再发公开？
 
+## 19.1 Phase 0 实际状态注脚（2026-06-24 深度验证后补）
+
+> 本节记录文档承诺与 Phase 0 代码实际状态之间的差距，**Phase 1 启动前必须解决**。
+
+### A. via54Design 实际接入状态：**未接入**
+
+第 2 节、第 9 节、第 17 节均声称 via54Medit 依赖 `github.com/veawho/via54Design/pkg/embedder`、`.../vectorstore`、`.../llm`、`.../config`、`.../log` 五套包。
+
+**Phase 0 真实状态**（`go.mod` + `go.sum` + 全代码 `grep` 验证）：
+
+| 维度 | 文档声明 | Phase 0 现实 |
+|---|---|---|
+| `go.mod` require | via54Design 五个子包 | ❌ 0 依赖（仅 cobra v1.8.0） |
+| `go.sum` 哈希 | via54Design 模块哈希 | ❌ 0 行 |
+| `SourceAdapter` 接口 | import via54Design 后手薄 | ⚠️ **hand-roll**（`internal/source/interface.go` 自己定义） |
+| `embedder` flag | via54Design 共享 | ⚠️ CLI 注册了 flag 但无后端实现 |
+| `vectorstore` flag | via54Design 共享 | ⚠️ 同上 |
+| LLM provider (`--provider`) | via54Design 多 provider 抽象 | ⚠️ 同上 |
+
+**结论**：
+- §17.3 选定的"方式 A：直接 import via54Design" 在 Phase 0 **未执行**。
+- Phase 1 入口前的**强制决策点**：via54Design 仓库是否已 ready？若未 ready，§9 / §17 描述属于**愿景文档**，需在 ARCHITECTURE.md 顶部加 status banner。
+
+### B. via54Design 接入的三条路径
+
+```
+路径 ① (推荐) 等 via54Design 仓库就绪 → 真实 import 五个子包 → 删除 hand-roll 接口
+路径 ② (务实) 在 via54Medit 内 hand-roll 全部接口 + bge-m3/Qdrant 客户端 → ARCHITECTURE §17 改为"待评估"
+路径 ③ (折中)  抽出第三方 vea-kit 包 → via54Medit + via54Design 都依赖 vea-kit
+```
+
+**待用户拍板** 后再写 Phase 1.1 的 `internal/source/antfu.go`。
+
+### C. Phase 0 质量门禁执行实况
+
+| 门禁 | 声明 | 实跑结果 |
+|---|---|---|
+| `go build` | ✅ | ✅ |
+| `go vet` 0 警告 | ✅ | ✅ |
+| `gofmt -l` 0 输出 | ✅ (隐含) | ❌ 2 文件（已修） |
+| 单元测试 ≥ 1 | ❌ 未声明 | ❌ 0 个 |
+| `go test -race` | ✅ (AGENTS.md §9) | ❌ 无测试可跑 |
+| 覆盖率 ≥ 80% | ✅ (AGENTS.md §9) | ❌ N/A |
+| `git tag phase0-done` | ✅ (ROADMAP §回滚) | ❌ 缺失（本次补） |
+
+AGENTS.md §9 列的"质量门禁 8 项"中，**3 项（lint / race / coverage）从未被机械验证过**。建议在 Phase 1 把"门禁"改写为"明文可跑的脚本"（`scripts/quality-gate.sh`），杜绝文档与现实脱节。
+
 ---
 
 ## 20. 一句话总结

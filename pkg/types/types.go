@@ -63,11 +63,11 @@ type TimeRange struct {
 type Intent string
 
 const (
-	IntentSearch    Intent = "search"    // 快速检索
+	IntentSearch     Intent = "search"     // 快速检索
 	IntentSystematic Intent = "systematic" // PRISMA 综述
-	IntentGrade     Intent = "grade"     // GRADE 评级
-	IntentAnnotate  Intent = "annotate"  // 标注 PPT
-	IntentIndex     Intent = "index"     // 入知识库
+	IntentGrade      Intent = "grade"      // GRADE 评级
+	IntentAnnotate   Intent = "annotate"   // 标注 PPT
+	IntentIndex      Intent = "index"      // 入知识库
 )
 
 // Citation is a unified reference across all sources.
@@ -90,10 +90,10 @@ type Citation struct {
 	MeSH     []string `json:"mesh,omitempty"`
 
 	// Impact metrics
-	CitedBy int     `json:"cited_by,omitempty"`     // from S2
-	FWCI    float64 `json:"fwci,omitempty"`          // from OpenAlex
-	TLDR    string  `json:"tldr,omitempty"`          // from S2 AI summary
-	OAPDFURL string `json:"oa_pdf_url,omitempty"`    // Open Access PDF
+	CitedBy  int     `json:"cited_by,omitempty"`   // from S2
+	FWCI     float64 `json:"fwci,omitempty"`       // from OpenAlex
+	TLDR     string  `json:"tldr,omitempty"`       // from S2 AI summary
+	OAPDFURL string  `json:"oa_pdf_url,omitempty"` // Open Access PDF
 
 	// Provenance
 	SourceOrigin []string `json:"source_origin"` // which sources returned this
@@ -126,8 +126,8 @@ type EvidencePackage struct {
 	PPTPath    string `json:"ppt_path,omitempty"`
 
 	// Meta
-	Duration    time.Duration      `json:"duration"`
-	SourcesUsed map[string]int     `json:"sources_used"` // source -> count
-	CreatedAt   time.Time          `json:"created_at"`
-	ConvID      string             `json:"conv_id"` // unique question ID
+	Duration    time.Duration  `json:"duration"`
+	SourcesUsed map[string]int `json:"sources_used"` // source -> count
+	CreatedAt   time.Time      `json:"created_at"`
+	ConvID      string         `json:"conv_id"` // unique question ID
 }

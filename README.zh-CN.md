@@ -83,6 +83,8 @@ medit version               # 版本信息
 
 ## 4 个 MCP 工具
 
+> **Phase 0 状态**:`medit-mcp` 是 stub —— 启动后打印预期工具名（`medit_ask` / `medit_pico` / `medit_grade` / `medit_anno2ppt`）后退出 0。**真实 MCP transport（stdio）将在 Phase 4 实装**。
+
 在 Claude Desktop / Cursor / VS Code Copilot 中:
 
 ```json

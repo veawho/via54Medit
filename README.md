@@ -18,8 +18,8 @@
 - 🎯 **GRADE 评级** — 半标准 GRADE (RCT 分桶 + 多源印证 + I² 不一致性)
 - 🎨 **标注 PPT** — antfu 样式引用卡片，PDF 关键词红框标注
 - 🧠 **知识库** — 插件式 Embedder (bge-m3) + VectorStore (Qdrant) + SQLite FTS5
-- 🔌 **MCP Server** — 4 工具 (`medit_ask` / `medit_pico` / `medit_grade` / `medit_anno2ppt`)
-- ⚡ **CLI + 双二进制** — `medit` (13 子命令) + `medit-mcp` (4 工具)
+- 🔌 **MCP Server** — 4 工具 (`medit_ask` / `medit_pico` / `medit_grade` / `medit_anno2ppt`) *(Phase 0: stub，打印预期工具名后退出；Phase 4 实装)*
+- ⚡ **CLI + 双二进制** — `medit` (13 子命令) + `medit-mcp` (4 工具, Phase 0 stub)
 - 🌐 **跨平台** — Windows / macOS / Linux
 
 ## 快速开始
@@ -46,6 +46,7 @@ medit pubmed search "SGLT2 heart failure" --max 20
 medit systematic "GLP-1 受体激动剂减重"
 
 # 启动 MCP Server (在 Claude Desktop / Cursor 中调用)
+# Phase 0: 打印预期工具名后退出；Phase 4 才有真实 stdio transport
 medit-mcp
 ```
 

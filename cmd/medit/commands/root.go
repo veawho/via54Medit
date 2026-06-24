@@ -45,25 +45,25 @@ func init() {
 // registerAll wires the 13 subcommands.
 func registerAll() {
 	// --- Retrieval (5) ---
-	rootCmd.AddCommand(askCmd)         // ask <query>
-	rootCmd.AddCommand(searchCmd)      // search <query>
-	rootCmd.AddCommand(picoCmd)        // pico <query>
-	rootCmd.AddCommand(systematicCmd)  // systematic <query>
-	rootCmd.AddCommand(gradeCmd)       // grade <package>
+	rootCmd.AddCommand(askCmd)        // ask <query>
+	rootCmd.AddCommand(searchCmd)     // search <query>
+	rootCmd.AddCommand(picoCmd)       // pico <query>
+	rootCmd.AddCommand(systematicCmd) // systematic <query>
+	rootCmd.AddCommand(gradeCmd)      // grade <package>
 
 	// --- Source adapters (4) ---
-	rootCmd.AddCommand(pubmedCmd)      // pubmed <subcmd>
-	rootCmd.AddCommand(openalexCmd)    // openalex <subcmd>
-	rootCmd.AddCommand(s2Cmd)          // s2 <subcmd>
-	rootCmd.AddCommand(antfuCmd)       // antfu <subcmd>
+	rootCmd.AddCommand(pubmedCmd)   // pubmed <subcmd>
+	rootCmd.AddCommand(openalexCmd) // openalex <subcmd>
+	rootCmd.AddCommand(s2Cmd)       // s2 <subcmd>
+	rootCmd.AddCommand(antfuCmd)    // antfu <subcmd>
 
 	// --- Enrich + persist (3) ---
-	rootCmd.AddCommand(enrichCmd)      // enrich <refs.json>
-	rootCmd.AddCommand(indexCmd)       // index <file/dir>
-	rootCmd.AddCommand(queryCmd)       // query <query>
+	rootCmd.AddCommand(enrichCmd) // enrich <refs.json>
+	rootCmd.AddCommand(indexCmd)  // index <file/dir>
+	rootCmd.AddCommand(queryCmd)  // query <query>
 
 	// --- Render (1) ---
-	rootCmd.AddCommand(anno2pptCmd)    // anno2ppt <package>
+	rootCmd.AddCommand(anno2pptCmd) // anno2ppt <package>
 
 	// --- Meta (1, already in root.Version) ---
 	// rootCmd.AddCommand(versionCmd) is implicit via root.Version
