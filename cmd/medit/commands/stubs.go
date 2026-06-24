@@ -17,7 +17,10 @@ func stubCmd(use, short, phase string) *cobra.Command {
 	}
 }
 
-// 13 subcommands — all Phase 0 stubs
+// 13 subcommands — Phase 0 stubs (real impls in pubmed.go and antfu.go)
+//
+// The 4 source-adapter commands (pubmed, openalex, s2, antfu) are
+// declared in their own files when their real implementations land.
 
 var askCmd = stubCmd(
 	"ask <query>",
@@ -49,12 +52,6 @@ var gradeCmd = stubCmd(
 	"Phase 3",
 )
 
-var pubmedCmd = stubCmd(
-	"pubmed <subcmd>",
-	"直查 PubMed (search/fetch/efetch)",
-	"Phase 1",
-)
-
 var openalexCmd = stubCmd(
 	"openalex <subcmd>",
 	"直查 OpenAlex (works/authors/concepts)",
@@ -65,12 +62,6 @@ var s2Cmd = stubCmd(
 	"s2 <subcmd>",
 	"直查 Semantic Scholar (paper/search/tldr)",
 	"Phase 2",
-)
-
-var antfuCmd = stubCmd(
-	"antfu <subcmd>",
-	"蚂蚁阿福 (ask/screenshot/extract/chat-list)",
-	"Phase 1",
 )
 
 var enrichCmd = stubCmd(
