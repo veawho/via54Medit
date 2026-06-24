@@ -17,27 +17,9 @@ func stubCmd(use, short, phase string) *cobra.Command {
 	}
 }
 
-// Phase 0 stubs (real impls in pubmed.go / antfu.go / openalex_s2.go /
-// ask_search.go — all source-adapter and entry commands have their
-// own files now).
-
-var picoCmd = stubCmd(
-	"pico <query>",
-	"从自然语言抽取 PICO 四要素",
-	"Phase 3",
-)
-
-var systematicCmd = stubCmd(
-	"systematic <query>",
-	"系统综述 (PRISMA 流程)",
-	"Phase 3",
-)
-
-var gradeCmd = stubCmd(
-	"grade <package>",
-	"GRADE 证据评级",
-	"Phase 3",
-)
+// Phase 0 stubs removed — real impls in pubmed.go / antfu.go /
+// openalex_s2.go / ask_search.go / pico_grade.go.
+// (anno2ppt, enrich, index, query stay as Phase 2-3 placeholders.)
 
 var enrichCmd = stubCmd(
 	"enrich <refs.json>",

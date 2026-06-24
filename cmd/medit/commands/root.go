@@ -65,6 +65,12 @@ func registerAll() {
 	// --- Render (1) ---
 	rootCmd.AddCommand(anno2pptCmd) // anno2ppt <package>
 
+	// --- Phase 3 additions (pico_grade.go) ---
+	rootCmd.AddCommand(picoCmd)       // pico <query>
+	rootCmd.AddCommand(systematicCmd) // systematic <query>
+	rootCmd.AddCommand(gradeCmd)      // grade <conv_id>
+	rootCmd.AddCommand(listCmd)       // list (saved conversations)
+
 	// --- Meta (1, already in root.Version) ---
 	// rootCmd.AddCommand(versionCmd) is implicit via root.Version
 }
