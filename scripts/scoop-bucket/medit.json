@@ -1,0 +1,39 @@
+{
+    "version": "0.1.0",
+    "description": "Multi-Source Medical Literature Router for Evidence-Based Medicine",
+    "homepage": "https://github.com/veawho/via54Medit",
+    "license": {
+        "identifier": "AGPL-3.0",
+        "url": "https://github.com/veawho/via54Medit/blob/main/LICENSE-AGPL-3.0"
+    },
+    "suggest": {
+        "git": "needed for full git history access (medit uses git for version stamping in some commands)"
+    },
+    "notes": [
+        "via54Medit is an evidence-based medicine tool that queries PubMed, OpenAlex, Semantic Scholar, and 蚂蚁阿福 (antfu).",
+        "",
+        "To use the antfu source, you need Chrome running with --remote-debugging-port=9223 and a logged-in chat.antafu.com session. Use --no-antfu to skip.",
+        "",
+        "Configuration lives in %APPDATA%\\medit\\config.yaml (or ~/.medit/config.yaml). Run `medit init` to generate a default config."
+    ],
+    "bin": [
+        "medit.exe",
+        "medit-mcp.exe"
+    ],
+    "checkver": {
+        "url": "https://api.github.com/repos/veawho/via54Medit/releases/latest",
+        "regex": "\"tag_name\":\\s*\"v([\\d.]+)\""
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/veawho/via54Medit/releases/download/v$version/medit-$version-windows-amd64.zip",
+                "bin": [
+                    "medit.exe",
+                    "medit-mcp.exe"
+                ],
+                "extract_dir": "medit-$version-windows-amd64"
+            }
+        }
+    }
+}

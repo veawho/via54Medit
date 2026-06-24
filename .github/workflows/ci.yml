@@ -1,0 +1,120 @@
+# .github/workflows/ci.yml — Continuous Integration for via54Medit.
+#
+# Runs on every push and PR. Tests against the latest 3 Go versions
+# (matching go.mod), runs gofmt + vet + race tests, and on main branch
+# also runs a 5-platform goreleaser build (no publish).
+#
+# See https://docs.github.com/en/actions for workflow syntax.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch on new pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.22', '1.23', '1.24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Show Go env
+        run: |
+          go version
+          go env GOPATH
+
+      - name: gofmt
+        run: |
+          if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
+            echo "::error::gofmt found unformatted files:"
+            gofmt -l .
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (race + cover)
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        if: matrix.go == '1.24' && github.event_name == 'push'
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  build:
+    name: build (Go 1.24)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build (current platform)
+        run: |
+          make build
+          ls -la bin/
+
+      - name: Cross-compile (5 platforms via Makefile)
+        run: |
+          make release-local
+          du -sh bin/release/
+
+  mcp-smoke:
+    name: MCP stdio smoke test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build medit-mcp
+        run: go build -o bin/medit-mcp ./cmd/medit-mcp
+
+      - name: Initialize handshake
+        run: |
+          (printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0.0.1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            ; sleep 2) | timeout 10 ./bin/medit-mcp 2>/dev/null > /tmp/mcp_out
+          # Verify we got responses.
+          grep -c '"jsonrpc"' /tmp/mcp_out  # should be ≥2 (initialize + tools/list)
+          grep -c '"medit_ask"' /tmp/mcp_out
+          grep -c '"medit_pico"' /tmp/mcp_out
+          grep -c '"medit_grade"' /tmp/mcp_out
+          grep -c '"medit_anno2ppt"' /tmp/mcp_out

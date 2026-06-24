@@ -1,0 +1,154 @@
+# .goreleaser.yaml - automated cross-platform release for via54Medit.
+#
+# This file is for goreleaser (https://goreleaser.com). It automates
+# building, packaging, and publishing the 5-platform release archives.
+#
+# Local alternative: bash scripts/release.sh (no upload).
+#
+# Usage:
+#   git tag v0.1.0
+#   export GITHUB_TOKEN=...
+#   goreleaser release --clean
+#
+# Schema reference: https://goreleaser.com/quick-start/
+
+version: 2
+
+project_name: medit
+
+before:
+  hooks:
+    - go mod tidy
+    - gofmt -w .
+    - go vet ./...
+
+builds:
+  - id: medit
+    main: ./cmd/medit
+    binary: medit
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+      - -ldflags=-s -w -X 'github.com/veawho/via54Medit/internal/version.Version={{.Version}}' -X 'github.com/veawho/via54Medit/internal/version.Commit={{.ShortCommit}}' -X 'github.com/veawho/via54Medit/internal/version.BuildDate={{.Date}}'
+
+  - id: medit-mcp
+    main: ./cmd/medit-mcp
+    binary: medit-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+      - -ldflags=-s -w -X 'github.com/veawho/via54Medit/internal/version.Version={{.Version}}' -X 'github.com/veawho/via54Medit/internal/version.Commit={{.ShortCommit}}'
+
+archives:
+  - id: medit
+    builds:
+      - medit
+      - medit-mcp
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    replacements:
+      darwin: macos
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - configs/**/*
+      - LICENSE-AGPL-3.0
+      - LICENSE-MIT
+      - README.md
+      - README.zh-CN.md
+
+nfpms:
+  - id: packages
+    package_name: medit
+    ids:
+      - medit
+    formats:
+      - deb
+      - rpm
+      - apk
+    maintainer: 巫师叔叔 <via54@example.com>
+    description: Multi-Source Medical Literature Router for Evidence-Based Medicine
+    license: AGPL-3.0
+    section: science
+    priority: optional
+    dependencies:
+      - git
+
+brews:
+  - name: medit
+    repository:
+      owner: veawho
+      name: homebrew-tap
+    ids:
+      - medit
+
+scoop:
+  name: medit
+  bucket:
+    owner: veawho
+    name: scoop-bucket
+  ids:
+    - medit
+
+release:
+  github:
+    owner: veawho
+    name: via54Medit
+  prerelease: auto
+  draft: false
+  header: |
+    # via54Medit {{ .Tag }}
+  footer: |
+    ## Install
+
+    ```bash
+    # macOS / Linux
+    brew install veawho/tap/medit
+
+    # Windows
+    scoop install medit
+    ```
+
+    ## What's next
+
+    See [ROADMAP.md](https://github.com/veawho/via54Medit/blob/main/docs/ROADMAP.md) for the full plan.
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+  groups:
+    - title: Features
+      regexp: '^.*feat[(\w)]*:'
+    - title: 'Bug fixes'
+      regexp: '^.*fix[(\w)]*:'
+    - title: Others
+      regexp: '^.*'
+
+# No signing in Phase 4.0 (out of scope). See v0.5 for cosign.
+snapshot:
+  version_template: "{{ .ShortCommit }}"
