@@ -718,17 +718,100 @@ via54Medit/
 
 ---
 
-## 19. 开放问题（请拍板再继续）
+## 19. 开放问题（**2026-06-24 全部拍板**）
 
-1. **命名空间冲突**：`via54Medit` 和 `medit` 二进制关系——CLI 叫 `medit` 但 Go 包叫 `via54Medit`，会让人困惑吗？备选：`medit`（CLI）/ `via54-medit`（包名）
-2. **MCP 工具数**：4 个够吗？要不要加 `medit_search_local`（只查本地知识库）和 `medit_migrate_antfu`（从 v1.11 迁移）
-3. **GRADE 是否真做**：GRADE 评级是医学专用方法学，做了能加分但会拖 1 周。**先做简化版（基于引文数+研究类型+多源印证）**，还是直接做完整版（Cochrane RoB 2 + GRADEpro）？
-4. **是否需要 Web UI**：FastAPI + 简易前端（搜索框 + 结果列表）？还是纯 CLI/MCP 就够？
-5. **是否做 Windows 安装包**：MSI / NSIS？还是只发 zip？
-6. **是否先不发 GitHub**：先在 G 盘内部迭代到 v0.5，再发公开？
+> **拍板结论**: 6 条全部按推荐方案落档。**原"开放问题"标题保留作历史**;本节为定稿版。
+>
+> 拍板人: 巫师叔叔 via Hermes Agent
+> 时间: 2026-06-24
+
+### 拍板总表
+
+| # | 问题 | 选项 | 拍板 | 一句话理由 |
+|---|---|---|---|---|
+| 1 | 命名空间 via54Medit / medit | **A** 维持现状 | ✅ **A** | Go module = repo name 是生态硬约定;CLI 短/库长业界先例 (gh/cli, kubectl/k8s) |
+| 2 | MCP 工具数 (4 够吗?) | **A** 维持 4 个 + 长尾走 CLI | ✅ **A** | ≤5 是 Anthropic 推荐上限;CLI 路径更适合本地查询 + 迁移工具 |
+| 3 | GRADE 真做 vs 简化版 | **A** 完整 / **B** 简化 | ✅ **B** | 完整 = 1 周 + 需医学专家持续维护;简化版 = 2-3 天可跑,后续 v0.5 渐进升级 |
+| 4 | Web UI FastAPI + 前端 | **A** 做 / **B** 不做 | ✅ **B** | Hermes + Claude Desktop + Cursor MCP = 天然 UI;3 周工时 ROI 低,Phase 5 评估 |
+| 5 | Windows 安装包 MSI/NSIS | **A** MSI / **B** zip + scoop | ✅ **B** | scoop + winget 是 2024+ 主流;MSI 是 2010 年代方案;zip 资产跨平台一致 |
+| 6 | GitHub 公开时机 | **A** 不公开 (内部 v0.5) / **B** 立即 | ✅ **A** | 维持 private;Phase 5 社区化时再开 `--public` |
+
+### 拍板详情
+
+#### 1. 命名空间 — 维持 via54Medit (module) / medit (CLI) ✅
+
+- **Go module** = `github.com/veawho/via54Medit` (不改,Go 生态硬约定)
+- **CLI 二进制** = `medit` (单数,简短好打)
+- **包名 = module 名** 是 `cmd/medit/main.go` 等文件 `import "github.com/veawho/via54Medit/..."` 必需
+- **业界先例**: `gh` (CLI) / `github.com/cli/cli` (module) ;`kubectl` (CLI) / `k8s.io/kubernetes` (module) ;`docker` (CLI) / `github.com/docker/docker` (module)
+- **未来切换成本**: 0 (无)
+
+#### 2. MCP 工具数 — 维持 4 个 ✅
+
+- **MCP 工具** = `medit_ask` / `medit_pico` / `medit_grade` / `medit_anno2ppt` (Phase 0 已定,Phase 4 实装)
+- **本地知识库查询** = 走 CLI `medit query` (已存在 stub,Phase 2 落)
+- **antfu v1.11 数据迁移** = 单独 CLI `medit-migrate-antfu` 子命令,不放 MCP (避免工具 schema 膨胀)
+- **Anthropic 推荐上限** = MCP server ≤5 工具,超出会显著拖慢 LLM 决策
+- **未来扩展触发**: 临床医生朋友反复要求本地查询 UI → 加 `medit_search_local`
+
+#### 3. GRADE 评级 — 简化版先行 ✅
+
+- **Phase 3 落地版本** = 简化 GRADE
+  - **算法**: `score = (n_citations ≥ 5 ? +2 : +1) + (multi_source_count ≥ 3 ? +2 : 0) + (RCT_ratio ≥ 0.5 ? +2 : 0) + (recency ≥ 3yr ? +1 : 0)`
+  - **等级映射**: score 6-7=A, 4-5=B, 2-3=C, 0-1=D
+  - **不依赖**: Cochrane RoB 2 偏倚风险评估工具 / GRADEpro 配套软件
+  - **依赖**: 引用数 + 源数 + 研究类型 (RCT vs 观察) + 时新性
+- **完整版延后评估**: 需 1 名医学方法学专家 + 1 周工时,**v0.5 之后**评估 ROI
+- **第一性铁律** (AGENTS.md): 先有可跑示例,再迭代精度
+
+#### 4. Web UI — 不做 ✅
+
+- **理由 1**: 你日常用 Hermes / Claude Desktop / Cursor,MCP 工具 = 对话即查询,天然 UI
+- **理由 2**: FastAPI + HTMX + DaisyUI 单页 ≈ 300 行,**3 周工时**
+- **理由 3**: 维护成本双倍 (前端 + 后端) 违反"单二进制 + MCP+CLI"哲学
+- **延后触发**: Phase 5 社区化时,若需要 demo 站 / 临床医生非技术用户,做 1 个静态站
+- **替代方案**: CLI 输出支持 `--format html` (单文件,可邮件分享) 已在 ROADMAP 中
+
+#### 5. Windows 安装包 — zip + scoop manifest ✅
+
+- **Phase 4 跨平台交付物**:
+  - `bin/medit-windows-amd64.zip` (含 medit.exe + medit-mcp.exe + 默认配置 + LICENSE)
+  - `bin/medit-darwin-amd64.tar.gz` (macOS Intel)
+  - `bin/medit-darwin-arm64.tar.gz` (M1/M2)
+  - `bin/medit-linux-amd64.tar.gz`
+  - `bin/medit-linux-arm64.tar.gz` (树莓派/OpenWrt)
+  - `SHA256SUMS` (签名)
+- **包管理器**:
+  - Windows: `scoop bucket add veawho https://github.com/veawho/scoop-bucket && scoop install medit`
+  - macOS: `brew install veawho/tap/medit` (v0.5 之后)
+  - Linux: `apt install medit` (v0.5 之后,需打包仓库)
+- **不做 MSI/NSIS 理由**: scoop + winget 是 2024+ 主流,MSI 是 2010 旧方案,且需 .NET Framework 运行时
+- **企业用户 MSI 需求**: v0.5 之后用 NSIS 单脚本补(只为它,不为它牺牲架构)
+
+#### 6. GitHub 公开 — 维持 private,Phase 5 再开 ✅
+
+- **当前**: `origin/main` 配 `https://github.com/veawho/via54Medit.git`,**仓库 private**
+- **公开触发条件** (任一):
+  - Phase 5 社区化启动
+  - 累计 ≥ 50 个 GitHub star (内部 + 朋友同事)
+  - v0.5 stable release
+- **提前公开风险**: 外部 PR 压力 + 文档 commit 频率被迫提高 + 4A 快速迭代节奏被破坏
+- **替代方案**: 内部 mirror 到 Gitee (国内可访问性) 同步,等 v0.5 后再开 GitHub public
+- **决策回滚点**: 若 v0.3 之前发现社区有强烈需求(知乎/微博/V2EX 有人问),提前到 v0.4 公开
+
+### 拍板后的影响清单
+
+| Phase | 受影响项 | 状态 |
+|---|---|---|
+| Phase 1 | MCP 工具数量维持 4,迁移工具做 CLI 不进 MCP | 无变化 |
+| Phase 1 | GRADE 走简化版,接口预留 Cochrane 升级空间 | 已在 ARCHITECTURE §5.3 设计 |
+| Phase 3 | Web UI 不写,CLI `--format html` 可替代 | 减 1 项交付 |
+| Phase 4 | zip 资产 + scoop manifest,不做 MSI | 5 平台 zip 改 4 平台(去掉 NSIS) |
+| Phase 5 | GitHub 公开 + brew/apt/Docker | 维持计划 |
+
+---
 
 ## 19.1 Phase 0 实际状态注脚（2026-06-24 深度验证后补，**同日修订**）
-
 > **2026-06-24 二次修订**: 本节原写"Phase 1 入口前必须拍板 via54Design"。**已修订** — 用户拍板走 §17.3 方式 ②(hand-roll),via54Medit **0 外部业务依赖**。本节作为**历史记录保留**。
 
 ### A. via54Design 实际接入状态：未接入（已降级为可选借鉴）
