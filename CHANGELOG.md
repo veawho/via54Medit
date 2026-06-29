@@ -5,6 +5,24 @@ All notable changes to via54Medit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [4.5.0] - 2026-06-29
+
+### Added
+- integrations/ 目录: 6 个高星医学文献项目 (local-deep-research, paper-search-mcp, MetaScreener, asreview, pubmed_parser, pyalex)
+- integrations/paper-search-mcp.md: 集成计划 (3 个新 MCP tools)
+- REFERENCES.md: 6 个高星项目
+
+### Changed
+- 升级 v4.0 -> v4.5
+- 从 "4 MCP tools" -> "7 MCP tools planned"
+## [4.0 -> 4.5] - 2026-06-29
+
+- Upgrade to v4.5 - integrate local-deep-research 8.6K patterns
+- Plan: paper-search-mcp 2K integration (we have MCP, they have search)
+- Plan: MetaScreener 1.3K PDF full-text screening
+- Plan: asreview 937 active learning
+
 ## [Unreleased]
 
 ### Phase 0 (2026-06-09)

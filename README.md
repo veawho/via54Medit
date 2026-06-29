@@ -22,6 +22,22 @@
 - ⚡ **CLI + 双二进制** — `medit` (13 子命令) + `medit-mcp` (4 工具, Phase 0 stub)
 - 🌐 **跨平台** — Windows / macOS / Linux
 
+
+## 🔗 集成 (v4.5.0 新增)
+
+via54Medit v4.5.0 整合 6 个高星医学文献项目, 计划 Phase 5.0 加 3 个 MCP tools (search_arxiv, search_pubmed, download_paper):
+
+- [LearningCircuit/local-deep-research](https://github.com/LearningCircuit/local-deep-research) (8.6K) - Local LLM 95% SimpleQA
+- [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp) (1.9K) - MCP for arXiv/PubMed
+- [ChaokunHong/MetaScreener](https://github.com/ChaokunHong/MetaScreener) (1.3K) - AI systematic review screening
+- [asreview/asreview](https://github.com/asreview/asreview) (937) - Active learning for systematic review
+- [titipata/pubmed_parser](https://github.com/titipata/pubmed_parser) (734) - PubMed XML parser
+- [J535D165/pyalex](https://github.com/J535D165/pyalex) (391) - OpenAlex Python library
+
+详见 [integrations/README.md](integrations/README.md) 和 [REFERENCES.md](REFERENCES.md).
+
+---
+
 ## 快速开始
 
 ```bash

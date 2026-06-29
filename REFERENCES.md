@@ -33,6 +33,22 @@
 
 ---
 
+
+## Top 高星项目 (2026-06-29 audit, by stars)
+
+| Project | ★ Stars | 描述 | Link |
+|---------|---------|------|------|
+| LearningCircuit/local-deep-research | 8,616 | Local LLM deep research 95% SimpleQA | [GitHub](https://github.com/LearningCircuit/local-deep-research) |
+| openags/paper-search-mcp | 1,981 | MCP for arXiv/PubMed paper search | [GitHub](https://github.com/openags/paper-search-mcp) |
+| ChaokunHong/MetaScreener | 1,319 | AI systematic review abstract screening | [GitHub](https://github.com/ChaokunHong/MetaScreener) |
+| asreview/asreview | 937 | Active learning for systematic reviews | [GitHub](https://github.com/asreview/asreview) |
+| titipata/pubmed_parser | 734 | PubMed Open-Access XML parser | [GitHub](https://github.com/titipata/pubmed_parser) |
+| J535D165/pyalex | 391 | Python library for OpenAlex | [GitHub](https://github.com/J535D165/pyalex) |
+
+_Inspired by these projects, see CHANGELOG for integration plans._
+
+---
+
 ## English
 
 This project is part of the via54 series. Explore the via54 ecosystem:
