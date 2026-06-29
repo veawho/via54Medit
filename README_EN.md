@@ -1,5 +1,9 @@
 # via54Medit
 
+
+> **🌐 Language**: [🇨🇳 中文](./README.md) | [🇺🇸 English](#) (current)
+>
+> _This document is in English. For Chinese, click above._
 > Multi-Source Medical Literature Router for Evidence-Based Medicine. Phase 4.0 real MCP transport + 4 tools.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
