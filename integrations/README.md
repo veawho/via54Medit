@@ -1,35 +1,60 @@
-# Medical Literature Integrations
+# via54Medit 数据源集成索引
 
-整合医学文献高星项目.
+> **v5.0 升级 (2026-06-30)**: 项目从单模式 EBM 学术路由器升级为**双模式医药决策平台** (EBM 学术 + 商业情报)。本目录现含 **115+ 数据源候选** + **10 个 P0 集成计划**。
 
-## Currently tracked
+## 索引
 
-### 1. LearningCircuit/local-deep-research (8.6K stars)
-- **Repo**: https://github.com/LearningCircuit/local-deep-research
-- **Why**: Local LLM deep research 95% SimpleQA
-- **Plan**: 集成 local LLM 推理, 减少 OpenAI 依赖
+| 类别 | 文件 |
+|---|---|
+| **总目录** | [CATALOG.md](./CATALOG.md) — 115+ 源全景目录 (EBM 55+ + 商业 60+) |
+| **架构升级草案** | [../docs/ARCHITECTURE-V5-DRAFT.md](../docs/ARCHITECTURE-V5-DRAFT.md) — v5.0 双模式架构 |
+| **集成计划 (10 P0 + 1 P1)** | 见下表 |
 
-### 2. openags/paper-search-mcp (1.9K stars)
-- **Repo**: https://github.com/openags/paper-search-mcp
-- **Why**: 我们已有 MCP transport, 它是 paper search MCP
-- **Plan**: fork + 整合 (Phase 4.5)
+## 10 个集成计划 (按 P0 优先级)
 
-### 3. ChaokunHong/MetaScreener (1.3K stars)
-- **Repo**: https://github.com/ChaokunHong/MetaScreener
-- **Why**: AI systematic review PDF 全文筛选 (vs 我们只 abstract)
-- **Plan**: 加 PDF 全文提取 + AI 筛选
+### EBM 学术 P0 (6 个)
 
-### 4. asreview/asreview (937 stars)
-- **Repo**: https://github.com/asreview/asreview
-- **Why**: Active learning for systematic review
-- **Plan**: 减少人工标注 (大幅加速 review)
+| 源 | 文件 | GitHub MCP / SDK |
+|---|---|---|
+| ClinicalTrials.gov v2 | [clinicaltrials_v2.md](./clinicaltrials_v2.md) | genomoncology/biomcp / cyanheads/clinicaltrialsgov-mcp-server |
+| Europe PMC | [europe_pmc.md](./europe_pmc.md) | 自写 (REST 简单) |
+| medRxiv + bioRxiv | [medrxiv_biorxiv.md](./medrxiv_biorxiv.md) | pipeworx-io/mcp-biorxiv |
+| OpenFDA (EBM 部分) | [openfda.md](./openfda.md) | cyanheads/openfda-mcp-server (14 tools) |
+| DailyMed | [dailymed.md](./dailymed.md) | 自写 |
+| PubTator 3.0 | [pubtator3.md](./pubtator3.md) | 自写 (NCBI E-utilities) |
 
-### 5. titipata/pubmed_parser (734 stars)
-- **Repo**: https://github.com/titipata/pubmed_parser
-- **Why**: PubMed Open-Access XML parser
-- **Plan**: 集成作为我们 enrich 模块
+### 商业情报 P0 (6 个, 含与 EBM 重叠)
 
-### 6. J535D165/pyalex (391 stars)
-- **Repo**: https://github.com/J535D165/pyalex
-- **Why**: OpenAlex Python library
-- **Plan**: 替换我们自写的 openalex 客户端
+| 源 | 文件 | GitHub MCP / SDK |
+|---|---|---|
+| OpenFDA (商业部分) | [openfda.md](./openfda.md) | 同上 |
+| FDA Orange Book | [fda_orange_book.md](./fda_orange_book.md) | m-nolan/fda_orange |
+| SEC EDGAR | [sec_edgar.md](./sec_edgar.md) | **dgunning/edgartools ⭐2.4k** |
+| ChEMBL + PubChem | [chembl_pubchem.md](./chembl_pubchem.md) | chembl_webresource_client (官方) / cyanheads/pubchem-mcp-server |
+| (CDE / PDB 中国商业) | 待写 | 暂无现成 SDK |
+| (ClinicalTrials.gov 商业维度) | [clinicaltrials_v2.md](./clinicaltrials_v2.md) | 同上 |
+
+### P1 (1 个)
+
+| 源 | 文件 | 备注 |
+|---|---|---|
+| AHA / ACC / EAS 会议摘要 | [aha_acc_eas.md](./aha_acc_eas.md) | TalkMED §4 直接相关 (降脂领域) |
+
+### 历史 (v4.5)
+
+- [paper-search-mcp.md](./paper-search-mcp.md) — v4.5 计划集成, v5.0 已通过 clinicaltrials_v2.md 升级
+- [README.md](./README.md) — 原 6 GitHub 集成清单 (保留供 v4.5 历史参考)
+
+## 关键决策点 (v5.0 待用户拍板)
+
+参见 [../docs/ARCHITECTURE-V5-DRAFT.md §8 待用户拍板](../docs/ARCHITECTURE-V5-DRAFT.md):
+
+1. P0 源列表是否需要调整 (12 个)?
+2. 是否需要新增 layer 5B (商业 CLI) 还是并入现有 CLI?
+3. TalkMED 7 页 PDF 是 v5.0 必交付还是 v6.0?
+4. 商业付费源 (药智/医药魔方/Citeline) 预算?
+5. 是否真要 fork genomoncology/biomcp 进 via54Medit 还是 MCP 协议调用?
+
+## TalkMED AgentPilot 对照
+
+via54Medit v5.0 升级触发来自 TalkMED AgentPilot (https://agent-pilot.talkmed.com) 生成的 7 页 PDF 报告 (用户提交的 123.pdf)。TalkMED 是 DXY 旗下医药商业情报 AI 平台, via54Medit v5.0 的"商业情报模式"将参照其报告结构。

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+
+## [4.5.1] - 2026-06-30 (decision lock)
+
+### Decision Lock (用户 15:42 TG 决策)
+- **1. 暂不调整** = 接受现状, 双模式 EBM 学术 + 商业情报架构保留
+- **4. 不适用付费源** = 排除所有付费源 (Frost/Grand View/Citeline/GlobalData/AdisInsight/BioCentury/Endpoints/STAT/PharmCube 交易库/Bloomberg/WiseGuy/Statista/Huaon/Menet/PharnexCloud 等)
+- **2/3/5/6. 决策需更多细节** = 暂搁, 等用户补决策
+
+### Changed
+- CATALOG.md P3 商业授权表 + 商业情报 P1/P2 表格标 ~~删除线~~ (排除付费)
+- CHANGELOG 锁决策: 不接付费源
+- ARCHITECTURE-V5-DRAFT.md §8 决策点 4 (商业付费源预算) 锁: 不接付费
+
+### Total
+- EBM 学术: 52+ 免费源 (保留)
+- 商业情报: 16+ P0 全部免费/开源 (保留)
+- 商业付费源: **0** (排除, 决策 4)
 ## [4.5.0] - 2026-06-29
 
 ### Added
@@ -24,6 +41,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plan: asreview 937 active learning
 
 ## [Unreleased]
+
+### Phase 5.0 升级 (2026-06-30) — 双模式医药决策平台
+> **触发**: 用户提交 TalkMED AgentPilot 7 页 PDF 报告 (123.pdf), 要求融合 EBM 学术 + 商业医药情报 + TalkMED 类报告生成 3 个方向
+> **状态**: 架构升级草稿完成, 等用户拍板
+
+#### Added
+- `integrations/CATALOG.md` — **115+ 数据源全景目录** (EBM 55+ + 商业 60+)
+- `integrations/clinicaltrials_v2.md` — ClinicalTrials.gov v2 P0 集成计划
+- `integrations/openfda.md` — OpenFDA P0 集成计划 (14 tools MCP)
+- `integrations/sec_edgar.md` — SEC EDGAR P0 集成计划 (TalkMED 财报核心)
+- `integrations/europe_pmc.md` — Europe PMC P0 集成计划
+- `integrations/medrxiv_biorxiv.md` — 预印本 P0 集成计划
+- `integrations/fda_orange_book.md` — Orange Book P0 集成计划 (专利+独占期)
+- `integrations/chembl_pubchem.md` — ChEMBL/PubChem P0 集成计划 (化学实体)
+- `integrations/dailymed.md` — DailyMed P0 集成计划 (药物标签)
+- `integrations/pubtator3.md` — PubTator 3.0 P0 集成计划 (NLP 实体)
+- `integrations/aha_acc_eas.md` — AHA/ACC/EAS 会议摘要 P1 集成计划 (TalkMED §4 直接相关)
+- `docs/ARCHITECTURE-V5-DRAFT.md` — v5.0 双模式架构升级草案 (6 层 + 双模式路由)
+
+#### Changed
+- 项目定位: 单模式 EBM 路由器 → **双模式医药决策平台** (EBM 学术 + 商业情报)
+- 架构: 5 层 → **6 层 + 双模式路由** (Layer 4A EBM / Layer 4B 商业)
+- CLI: 13 子命令 → **18 子命令** (+5 商业: intel/market/pipeline/patent/trial)
+- MCP: 4 tools → **7 tools** (+3 商业: medit_intel/medit_market/medit_pipeline)
+- 数据源: 4 现存 → **16 P0** (10 学术 + 12 商业 - 6 重复)
+
+#### Methodology
+- **Subagent #1 (EBM 方向)**: 扫描 GitHub biocontext-ai/registry (60+ MCP) + awesome-evidence-synthesis, 找到 55+ 学术源 + genomoncology/biomcp 超级 MCP (MIT, 12+ 实体类别, 应当借鉴)
+- **Subagent #2 (商业方向)**: 扫描 9 类商业源 (销售/管线/专利/财报/报告/会议/BD), 找到 60+ 商业源 + TalkMED PDF 反推 7 页报告需哪些源
+- **整合**: CATALOG.md + 10 个 P0 集成计划 .md (1-3 天工作量/源)
+
+#### Reference
+- TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
 ### Phase 0 (2026-06-09)
 
