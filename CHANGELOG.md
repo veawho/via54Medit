@@ -10,6 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [4.5.5] - 2026-06-30 (可重放性文档 + 3 个规则)
+
+### Added
+- **docs/PROCESS.md** (8.5KB): 商业市场报告生成流程 5 步, 80-150min/报告, 100% 可重放
+- **docs/SOLUTION.md** (10.8KB): v5.0 商业报告生成解决方案 5 层架构 + 8 核心组件 + 5 技术决策
+- **docs/REPRODUCIBILITY.md** (5.5KB): 8 条铁律 (文档先行 / 自包含 / 可重放 / Git 规范 / 设备记录 / 模板验证 / 不增付费 / 旧设备兼容)
+
+### 铁律 (8 条)
+- 文档先行 → 改代码前先改文档
+- 自包含测试 → 跨 OS / Python 验证
+- 可重放 → 任何设备 ≤ 2 小时
+- Git 提交含 `[reproducibility-test]` tag
+- 模板改动需 validate_report.py + 用户验收
+- 数据源不增付费 (锁决策 4)
+- 旧设备兼容 (Python 3.9+)
+
+### 测试设备
+- WTG Windows 11 (Python 3.11.4, Edge 126)
+- MacBook M2 / Ubuntu 24.04 (待测)
 ## [4.5.4] - 2026-06-30 (v5.0 商业情报第 1 份样本报告)
 
 ### Added
