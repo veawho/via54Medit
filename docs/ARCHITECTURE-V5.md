@@ -300,3 +300,25 @@ type MarketInsight struct {
 ---
 
 **待补决策展开**: 详见 [DECISIONS-PENDING.md](DECISIONS-PENDING.md) (10 大白话问题 + 默认值, 用户 6/30 15:50 TG 决策触发)
+
+
+---
+
+## FINAL DECISION LOCK (2026-06-30 v4.5.3)
+
+10 决策全确认 (用户 TG "全默认"):
+
+| 决策 | 选项 | 影响 |
+|------|------|------|
+| 3.1 CLI 形态 | A 新 binary `medit-intel` | 隔离干净, 跟 medit 平级 |
+| 3.2 代码组织 | B 共享 core, 2 binary | 1 仓, 复用 Layer 1-3 |
+| 3.3 MCP server | A 1 个 medit-mcp 双模式 | 简化部署 |
+| 3.4 配置 | A 1 个 config.yaml | 简单 |
+| 3.5 上线 | B v5.0 学术 + v5.5 商业 | 稳 |
+| 6.1 biomcp 集成 | B MCP 协议调用 | 解耦, 升级互不影响 |
+| 6.2 biomcp 同步 | B 每月自动 git sync | 不过时 |
+| 6.3 biomcp 覆盖 | B 60/40 混合 | 关键源自己控 |
+| 6.4 License | A MIT+AGPL 兼容 | 加 attribution |
+| 6.5 biomcp 部署 | A 独立 server | 隔离 |
+
+详见 [DECISIONS-PENDING.md](DECISIONS-PENDING.md) (历史快照).

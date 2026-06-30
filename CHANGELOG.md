@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [4.5.3] - 2026-06-30 (final v5.0 spec lock - 用户确认全默认)
+
+### Decision Lock (用户 ~16:00 TG "全默认")
+10 个默认决策全部确认:
+- **1.1 (3.1)**: A - 新程序 medit-intel (跟学术分开)
+- **1.2 (3.2)**: B - 共用核心代码 (1 仓 2 binary)
+- **1.3 (3.3)**: A - 1 个 medit-mcp (双模式)
+- **1.4 (3.4)**: A - 1 个 config.yaml (双 mode)
+- **1.5 (3.5)**: B - v5.0 学术 + v5.5 商业 (稳)
+- **2.1 (6.1)**: B - MCP 协议调用 (via54Medit 作 client)
+- **2.2 (6.2)**: B - 每月自动 git sync
+- **2.3 (6.3)**: B - 60% biomcp + 40% 自写
+- **2.4 (6.4)**: A - MIT + AGPL 兼容
+- **2.5 (6.5)**: A - biomcp 独立 server
+
+### 状态
+- **5 决策点全锁** (1+2+3+4+5+6 = 6 个用户决策, 4+5 重复, 实际 5 决策点)
+- **v5.0 spec complete**: ARCHITECTURE-V5-DRAFT.md 升为 ARCHITECTURE-V5.md
+- **CATALOG.md 109+ 源** (115 - 16 付费 = 99, 加 subagent #2 找到的额外)
+- **DECISIONS-PENDING.md 关闭** (所有决策已答)
+
+### Todo for v5.0 → v5.5
+1. v5.0: 学术模式 (EBM) 完整发布
+   - 加 6 P0 EBM 源 (clinicaltrials_v2, europe_pmc, medrxiv, openfda, dailymed, pubtator3)
+   - biomcp MCP client 集成 (60% 覆盖)
+   - 保持 medit ask 兼容
+2. v5.5: 商业模式 (intel) 完整发布
+   - 加 6 P0 商业源 (药智/医药魔方/OpenFDA/PDB/CDE/PharnexCloud)
+   - TalkMED 7 页 PDF 生成器
+   - medit-intel 新 binary
+3. v6.0: 双模式融合 + biomcp 100% 覆盖
 ## [4.5.2.1] - 2026-06-30 (重写通俗版)
 
 ### Changed
