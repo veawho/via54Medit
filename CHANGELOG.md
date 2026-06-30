@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [4.5.2.1] - 2026-06-30 (重写通俗版)
+
+### Changed
+- DECISIONS-PENDING.md 重写为通俗版 (大白话 + 表格, 不用技术术语)
+- 之前版本太技术 (binary/MCP/layer 等), 用户看不懂, 现重写
+
 ## [4.5.2] - 2026-06-30 (decision lock round 2)
 
 ### Decision Lock (用户 ~15:50 TG 决策)

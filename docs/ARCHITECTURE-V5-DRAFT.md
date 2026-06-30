@@ -299,4 +299,4 @@ type MarketInsight struct {
 
 ---
 
-**待补决策展开**: 详见 [DECISIONS-PENDING.md](DECISIONS-PENDING.md) (10 明确问题 + 默认值, 用户 6/30 15:50 TG 决策触发)
+**待补决策展开**: 详见 [DECISIONS-PENDING.md](DECISIONS-PENDING.md) (10 大白话问题 + 默认值, 用户 6/30 15:50 TG 决策触发)
