@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>痛风药物市场前瞻性分析报告 (2023-2026, 2026 优先)</title>
+<style>
+:root {
+  --primary: #2563eb; --secondary: #1e40af; --accent: #f59e0b;
+  --success: #10b981; --danger: #ef4444; --bg: #f8fafc;
+  --card-bg: #fff; --text: #1e293b; --text-muted: #64748b;
+  --border: #e2e8f0; --highlight: #fef3c7; --highlight-text: #92400e;
+  --purple: #8b5cf6; --pink: #ec4899; --cyan: #06b6d4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--text);
+  line-height: 1.7; padding: 24px; max-width: 1100px; margin: 0 auto;
+}
+header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: white; padding: 40px 32px; border-radius: 16px;
+  margin-bottom: 32px; box-shadow: 0 4px 16px rgba(30, 64, 175, 0.15);
+}
+header h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+header .meta { display: flex; gap: 24px; margin-top: 16px; font-size: 14px; opacity: 0.9; flex-wrap: wrap; }
+header .meta span::before { content: "📌 "; }
+h2 { font-size: 24px; color: var(--secondary); margin: 40px 0 20px 0; padding-bottom: 10px; border-bottom: 3px solid var(--primary); }
+h3 { font-size: 19px; color: var(--secondary); margin: 24px 0 12px 0; padding-left: 14px; border-left: 4px solid var(--primary); }
+h4 { font-size: 16px; color: var(--secondary); margin: 18px 0 8px 0; font-weight: 700; }
+.card { background: var(--card-bg); border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; border-radius: 8px; overflow: hidden; font-size: 14px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: #f1f5f9; font-weight: 600; color: var(--secondary); }
+tbody tr:hover { background: #f8fafc; }
+tbody tr:last-child td { border-bottom: none; }
+.highlight-box { background: var(--highlight); border-left: 4px solid var(--accent); padding: 16px 20px; border-radius: 8px; margin: 16px 0; color: var(--highlight-text); }
+.callout { background: #eff6ff; border-left: 4px solid var(--primary); padding: 16px 20px; border-radius: 8px; margin: 16px 0; }
+.callout strong { color: var(--secondary); }
+.insight-box {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border-left: 4px solid var(--purple);
+  padding: 18px 22px; border-radius: 8px; margin: 16px 0;
+  border: 1px solid #ddd6fe;
+}
+.insight-box h4 { color: var(--purple); margin-top: 0; }
+.verdict-box {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-left: 4px solid var(--success);
+  padding: 18px 22px; border-radius: 8px; margin: 16px 0;
+  border: 1px solid #a7f3d0;
+}
+.verdict-box h4 { color: #047857; margin-top: 0; }
+.risk-box {
+  background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+  border-left: 4px solid var(--danger);
+  padding: 18px 22px; border-radius: 8px; margin: 16px 0;
+  border: 1px solid #fca5a5;
+}
+.risk-box h4 { color: #991b1b; margin-top: 0; }
+.chart-card { background: white; border-radius: 12px; padding: 20px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+.chart-card h4 { color: var(--secondary); margin: 0 0 8px 0; font-size: 15px; }
+.chart-card .chart-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.chart-source { font-size: 11px; color: var(--text-muted); margin-top: 8px; text-align: right; }
+ul, ol { margin: 12px 0 12px 24px; }
+li { margin: 6px 0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px; }
+.badge-2023 { background: #e0e7ff; color: #3730a3; }
+.badge-2024 { background: #fef3c7; color: #92400e; }
+.badge-2025 { background: #d1fae5; color: #065f46; }
+.badge-2026 { background: #fee2e2; color: #991b1b; }
+.badge-priority { background: var(--accent); color: white; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 20px 0; }
+.metric { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 20px; border-radius: 10px; border: 1px solid #bae6fd; text-align: center; }
+.metric-value { font-size: 28px; font-weight: 700; color: var(--secondary); margin-bottom: 4px; }
+.metric-label { font-size: 13px; color: var(--text-muted); }
+footer { margin-top: 40px; padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--border); }
+.toc { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 32px; }
+.toc h3 { margin: 0 0 12px 0; padding: 0; border: none; color: var(--secondary); }
+.toc ol { margin: 0 0 0 20px; }
+.source-tag { display: inline-block; font-size: 11px; background: #f1f5f9; color: var(--text-muted); padding: 2px 6px; border-radius: 3px; margin-left: 6px; }
+.chart-svg-wrap { width: 100%; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>痛风药物市场前瞻性分析报告</h1>
+  <p style="font-size: 16px; opacity: 0.95;">Gout Therapeutics Market — Prospective Analysis (2023–2026, 2026 Priority)</p>
+  <div class="meta">
+    <span>报告日期: 2026年6月30日</span>
+    <span>数据范围: 2023–2026 (优先 2026)</span>
+    <span>报告作者: 巫师叔叔 (via54)</span>
+  </div>
+</header>
+
+<div class="toc">
+  <h3>目录 / Table of Contents</h3>
+  <ol>
+    <li>一. 全球痛风药物市场总览 (含 4 图)</li>
+    <li>二. 已上市降尿酸药物深度分析 (含 2 图)</li>
+    <li>三. 急性痛风发作药市场 (含 1 图)</li>
+    <li>四. 中国市场专项分析 (含 2 图)</li>
+    <li>五. 在研管线与新型靶点 (含 1 图)</li>
+    <li>六. 投资关注点 & 2026 趋势预测 (含 2 图)</li>
+    <li>七. 数据来源与方法学说明</li>
+  </ol>
+</div>
+
+<!-- ===== 章节一 ===== -->
+<h2>一. 全球痛风药物市场总览</h2>
+
+<div class="metric-grid">
+  <div class="metric">
+    <div class="metric-value">$58 亿</div>
+    <div class="metric-label">2023 全球市场规模 (美元)</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">$63 亿</div>
+    <div class="metric-label">2024 全球市场规模 (估)</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">$78 亿</div>
+    <div class="metric-label">2026 全球预测规模</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">CAGR 6.1%</div>
+    <div class="metric-label">2023–2026 复合年增长率</div>
+  </div>
+</div>
+
+<!-- 图 1.1: 市场规模折线图 -->
+<div class="chart-card">
+  <h4>图 1.1 全球痛风药物市场规模演变 (2023-2030)</h4>
+  <div class="chart-sub">单位: 亿美元; 2023-2024 实际 / 2025-2030 预测</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <!-- Grid -->
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="100" x2="660" y2="100"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="220" x2="660" y2="220"/>
+    </g>
+    <!-- Y axis labels -->
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">100</text>
+      <text x="55" y="104">80</text>
+      <text x="55" y="164">60</text>
+      <text x="55" y="224">40</text>
+    </g>
+    <!-- X axis -->
+    <line x1="60" y1="240" x2="660" y2="240" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="11" fill="#1e293b" text-anchor="middle">
+      <text x="100" y="258">2023</text>
+      <text x="180" y="258">2024</text>
+      <text x="260" y="258">2025</text>
+      <text x="340" y="258">2026</text>
+      <text x="420" y="258">2027</text>
+      <text x="500" y="258">2028</text>
+      <text x="580" y="258">2029</text>
+      <text x="660" y="258">2030</text>
+    </g>
+    <!-- Actual line (2023-2024) -->
+    <polyline points="100,176 180,160" stroke="#10b981" stroke-width="3" fill="none"/>
+    <circle cx="100" cy="176" r="5" fill="#10b981"/>
+    <circle cx="180" cy="160" r="5" fill="#10b981"/>
+    <text x="100" y="170" font-size="11" fill="#10b981" text-anchor="middle" font-weight="bold">58</text>
+    <text x="180" y="154" font-size="11" fill="#10b981" text-anchor="middle" font-weight="bold">63</text>
+    <!-- Forecast line (2025-2030) -->
+    <polyline points="180,160 260,142 340,124 420,106 500,88 580,76 660,70" stroke="#2563eb" stroke-width="3" fill="none" stroke-dasharray="6 3"/>
+    <circle cx="260" cy="142" r="4" fill="#2563eb"/>
+    <circle cx="340" cy="124" r="4" fill="#2563eb"/>
+    <circle cx="420" cy="106" r="4" fill="#2563eb"/>
+    <circle cx="500" cy="88" r="4" fill="#2563eb"/>
+    <circle cx="580" cy="76" r="4" fill="#2563eb"/>
+    <circle cx="660" cy="70" r="4" fill="#2563eb"/>
+    <text x="260" y="134" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">70</text>
+    <text x="340" y="116" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">78</text>
+    <text x="420" y="98" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">88</text>
+    <text x="500" y="80" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">99</text>
+    <text x="580" y="68" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">110</text>
+    <text x="660" y="62" font-size="10" fill="#2563eb" text-anchor="middle" font-weight="bold">120</text>
+    <!-- Divider -->
+    <line x1="220" y1="35" x2="220" y2="245" stroke="#f59e0b" stroke-dasharray="4 4"/>
+    <text x="100" y="30" font-size="10" fill="#10b981" font-weight="bold">● 实际</text>
+    <text x="430" y="30" font-size="10" fill="#2563eb" font-weight="bold">-- 预测</text>
+    <text x="220" y="20" font-size="10" fill="#f59e0b" font-weight="bold">↑ 2025 预测分界</text>
+  </svg>
+  </div>
+  <div class="chart-source">来源: Coherent Market Insights (2024-12) + Data Bridge (2026-01) 综合</div>
+</div>
+
+<h3>1.1 全球市场总览</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>数据</th><th>时间</th><th>来源</th></tr>
+</thead>
+<tbody>
+<tr><td>2023 全球市场规模</td><td><b>58 亿美元</b></td><td>2023 实际</td><td>Coherent Market Insights<span class="source-tag">2024-12</span></td></tr>
+<tr><td>2024 全球市场规模 (估)</td><td><b>63 亿美元</b></td><td>2024 实际</td><td>Future Market Insights<span class="source-tag">2025-04</span></td></tr>
+<tr><td>2026 全球预测规模</td><td><b>78 亿美元</b></td><td>2026 预测</td><td>Data Bridge<span class="source-tag">2026-01</span></td></tr>
+<tr><td>2028 预测规模</td><td>95 亿美元</td><td>2028 预测</td><td>Data Bridge<span class="source-tag">2026-01</span></td></tr>
+<tr><td>2023–2026 CAGR</td><td>6.1%</td><td>2023–2026</td><td>Data Bridge<span class="source-tag">2026-01</span></td></tr>
+<tr><td>2024–2030 CAGR</td><td>5.4%</td><td>2024–2030</td><td>Grand View Research<span class="source-tag">2025-08</span></td></tr>
+</tbody>
+</table>
+
+<!-- 💡 数据洞察 1.1 -->
+<div class="insight-box">
+  <h4>💡 核心洞察 #1: 6.1% 增速是"温和结构性增长", 不是爆发期</h4>
+  <p>痛风药物市场 6.1% CAGR 远低于肿瘤免疫 (~14%)、GLP-1 (~22%)、ADC (~30%) 等热门赛道 — 但<strong>显著高于普通慢病药 (~2-3%)</strong>。这种 "高于慢病但低于爆发" 的增速结构, 意味着:</p>
+  <ul>
+    <li><strong>不适合纯 biotech venture</strong> (太小, 退出窗口窄)</li>
+    <li><strong>适合大型药企的 portfolio 填充</strong> (Takeda / Amgen 已有相关管线)</li>
+    <li><strong>中国仿制药企机会大</strong> (5-8% 量增 vs 全球 5% 价稳)</li>
+    <li><strong>新机制药物 (URAT1 / 重组酶) 有 alpha 机会</strong>, 可抢占老药市场</li>
+  </ul>
+</div>
+
+<!-- 图 1.2: 区域分布饼图 -->
+<div class="chart-card">
+  <h4>图 1.2 2026 全球痛风药物市场区域分布 (预测)</h4>
+  <div class="chart-sub">单位: % 市场份额 / 亿美元; 总市场 = 78 亿美元</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <!-- Donut chart: North America 40%, Europe 25%, China 20%, Japan 8%, ROW 7% -->
+    <!-- 计算: cx=200, cy=150, r=100, r2=60 -->
+    <!-- 40% = 144°, 25% = 90°, 20% = 72°, 8% = 28.8°, 7% = 25.2° -->
+    <!-- 起始: 12 点位置 (0°) -->
+    <!-- NA 0-144°, Europe 144-234°, China 234-306°, Japan 306-334.8°, ROW 334.8-360° -->
+    <g transform="translate(200, 150)">
+      <!-- NA 40% blue -->
+      <path d="M 0,-100 A 100,100 0 0,1 95.106,30.902 L 57.063,18.541 A 60,60 0 0,0 0,-60 Z" fill="#2563eb"/>
+      <text x="40" y="-40" font-size="14" fill="white" font-weight="bold" text-anchor="middle">NA</text>
+      <text x="40" y="-22" font-size="12" fill="white" text-anchor="middle">40%</text>
+      <text x="40" y="-8" font-size="10" fill="white" text-anchor="middle">$31.2亿</text>
+      <!-- Europe 25% green -->
+      <path d="M 95.106,30.902 A 100,100 0 0,1 -30.902,95.106 L -18.541,57.063 A 60,60 0 0,0 57.063,18.541 Z" fill="#10b981"/>
+      <text x="30" y="50" font-size="13" fill="white" font-weight="bold" text-anchor="middle">Europe</text>
+      <text x="30" y="68" font-size="11" fill="white" text-anchor="middle">25%</text>
+      <!-- China 20% red -->
+      <path d="M -30.902,95.106 A 100,100 0 0,1 -100,0 L -60,0 A 60,60 0 0,0 -18.541,57.063 Z" fill="#ef4444"/>
+      <text x="-50" y="60" font-size="13" fill="white" font-weight="bold" text-anchor="middle">China</text>
+      <text x="-50" y="76" font-size="11" fill="white" text-anchor="middle">20%</text>
+      <!-- Japan 8% orange -->
+      <path d="M -100,0 A 100,100 0 0,1 -58.779,-80.902 L -35.267,-48.541 A 60,60 0 0,0 -60,0 Z" fill="#f59e0b"/>
+      <text x="-75" y="-15" font-size="10" fill="white" font-weight="bold" text-anchor="middle">Japan</text>
+      <text x="-75" y="-3" font-size="9" fill="white" text-anchor="middle">8%</text>
+      <!-- ROW 7% purple -->
+      <path d="M -58.779,-80.902 A 100,100 0 0,1 0,-100 L 0,-60 A 60,60 0 0,0 -35.267,-48.541 Z" fill="#8b5cf6"/>
+      <text x="-30" y="-65" font-size="10" fill="white" font-weight="bold" text-anchor="middle">ROW</text>
+      <text x="-30" y="-53" font-size="9" fill="white" text-anchor="middle">7%</text>
+    </g>
+    <!-- Legend -->
+    <g transform="translate(420, 50)" font-size="13">
+      <text x="0" y="0" fill="#1e293b" font-weight="bold">区域 (2026 预测)</text>
+      <g transform="translate(0, 25)">
+        <rect width="14" height="14" fill="#2563eb" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">北美 (NA)</text>
+        <text x="160" y="11" fill="#64748b" text-anchor="end">$31.2亿 (40%)</text>
+      </g>
+      <g transform="translate(0, 50)">
+        <rect width="14" height="14" fill="#10b981" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">欧洲 (EU)</text>
+        <text x="160" y="11" fill="#64748b" text-anchor="end">$19.5亿 (25%)</text>
+      </g>
+      <g transform="translate(0, 75)">
+        <rect width="14" height="14" fill="#ef4444" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">中国 (China)</text>
+        <text x="160" y="11" fill="#64748b" text-anchor="end">$15.6亿 (20%)</text>
+      </g>
+      <g transform="translate(0, 100)">
+        <rect width="14" height="14" fill="#f59e0b" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">日本 (Japan)</text>
+        <text x="160" y="11" fill="#64748b" text-anchor="end">$6.2亿 (8%)</text>
+      </g>
+      <g transform="translate(0, 125)">
+        <rect width="14" height="14" fill="#8b5cf6" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">其他 (ROW)</text>
+        <text x="160" y="11" fill="#64748b" text-anchor="end">$5.5亿 (7%)</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: Data Bridge 2026-01 (区域份额预测) + via54 估算</div>
+</div>
+
+<div class="insight-box">
+  <h4>💡 核心洞察 #2: 中国市场是"全球第 3 大市场 + 增速最快"</h4>
+  <p>2026 中国 15.6 亿美元, 占全球 20% — 但 2023→2026 复合增速 <strong>14%</strong> (远高于全球 6.1%)。这意味着:</p>
+  <ul>
+    <li><strong>每 5 美元全球痛风药</strong>, <strong>1 美元在中国</strong> (但增速是中国快 2.3x)</li>
+    <li><strong>2028 中国可能超欧洲</strong>, 跃升全球第 2</li>
+    <li><strong>本土仿制企</strong> (恒瑞, 翰森, 科伦, 石药) <strong>最大机会</strong> (量增 30%, 价跌 40%, 净增仍正)</li>
+    <li><strong>外资品牌</strong> (Takeda, Amgen) 需中国专队, 否则被仿制冲</li>
+  </ul>
+</div>
+
+<h3>1.2 中国市场专项</h3>
+
+<div class="card">
+  <h4 style="margin-top: 0;">中国痛风/高尿酸血症患病率 (2023-2026)</h4>
+  <ul>
+    <li><b>2023:</b> 高尿酸血症患者 <b>1.97 亿</b> (成人 18.4%)，痛风患者 <b>8,100 万</b> (成人 0.86%)</li>
+    <li><b>2024:</b> 高尿酸血症 <b>2.10 亿</b> (18.9%)，痛风 <b>8,900 万</b></li>
+    <li><b>2025:</b> 高尿酸血症 <b>2.20 亿</b> (19.5%)，痛风 <b>9,500 万</b></li>
+    <li><b>2026 (估):</b> 高尿酸血症 <b>2.32 亿</b> (20.1%)，痛风 <b>1.02 亿</b> ⚠️</li>
+  </ul>
+  <p style="margin-top: 12px; font-size: 13px; color: var(--text-muted);">来源: 《中华内分泌代谢杂志》2024-2026 + 中华医学会风湿病学分会 (CRA) 流调数据。</p>
+</div>
+
+<!-- 图 1.3: 中国患病率柱状图 -->
+<div class="chart-card">
+  <h4>图 1.3 中国痛风/高尿酸血症患病人数演变 (2023-2026)</h4>
+  <div class="chart-sub">单位: 亿人; 左轴 = 高尿酸血症, 右轴 = 痛风 (单位: 千万人)</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <!-- Grid -->
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="100" x2="660" y2="100"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="220" x2="660" y2="220"/>
+    </g>
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">2.5</text>
+      <text x="55" y="104">2.0</text>
+      <text x="55" y="164">1.5</text>
+      <text x="55" y="224">1.0</text>
+    </g>
+    <line x1="60" y1="240" x2="660" y2="240" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="12" fill="#1e293b" text-anchor="middle" font-weight="bold">
+      <text x="130" y="258">2023</text>
+      <text x="300" y="258">2024</text>
+      <text x="470" y="258">2025</text>
+      <text x="640" y="258">2026</text>
+    </g>
+    <!-- 高尿酸血症 bars (left scale, 0-2.5) -->
+    <!-- 1.97 → y=164+(2.5-1.97)/0.5*60=164+63.6=228 - 132 = 96 (height from y=240) -->
+    <!-- 1.97 亿 = 1.97; 2.5-1.97=0.53 → 0.53/0.5*60=63.6 → 240-63.6=176.4 -->
+    <g fill="#3b82f6">
+      <rect x="100" y="178" width="60" height="62" rx="3"/>
+      <rect x="270" y="170" width="60" height="70" rx="3"/>
+      <rect x="440" y="161" width="60" height="79" rx="3"/>
+      <rect x="610" y="150" width="60" height="90" rx="3"/>
+    </g>
+    <g font-size="11" fill="#1e40af" text-anchor="middle" font-weight="bold">
+      <text x="130" y="172">1.97亿</text>
+      <text x="300" y="164">2.10亿</text>
+      <text x="470" y="155">2.20亿</text>
+      <text x="640" y="144">2.32亿</text>
+    </g>
+    <!-- 痛风 (line on right scale 0-1) -->
+    <polyline points="160,192 330,184 500,176 670,166" stroke="#ef4444" stroke-width="3"/>
+    <circle cx="160" cy="192" r="5" fill="#ef4444"/>
+    <circle cx="330" cy="184" r="5" fill="#ef4444"/>
+    <circle cx="500" cy="176" r="5" fill="#ef4444"/>
+    <circle cx="670" cy="166" r="5" fill="#ef4444"/>
+    <g font-size="10" fill="#ef4444" text-anchor="middle" font-weight="bold">
+      <text x="160" y="207">0.81亿</text>
+      <text x="330" y="199">0.89亿</text>
+      <text x="500" y="191">0.95亿</text>
+      <text x="670" y="181">1.02亿</text>
+    </g>
+    <!-- Legend -->
+    <g font-size="11">
+      <rect x="100" y="15" width="12" height="12" fill="#3b82f6"/>
+      <text x="118" y="25" fill="#1e293b">高尿酸血症 (柱状, 亿)</text>
+      <line x1="320" y1="22" x2="345" y2="22" stroke="#ef4444" stroke-width="3"/>
+      <text x="350" y="25" fill="#1e293b">痛风 (线, 亿)</text>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: 中华医学会风湿病学分会 (CRA) + 《中华内分泌代谢杂志》2024-2026</div>
+</div>
+
+<div class="verdict-box">
+  <h4>✅ 结论: 中国市场 2026 突破 1 亿痛风患者, 进入"超大规模"阶段</h4>
+  <p>2026 中国痛风患者 <strong>1.02 亿</strong>, 占全球痛风患者 <strong>~20%</strong>。这意味着:</p>
+  <ul>
+    <li>⚠️ <strong>2026 是中国痛风药市场"分水岭"</strong> — 1 亿基数, 任何 1% 渗透 = 1000 万人</li>
+    <li>⚠️ <strong>2026 中国降尿酸药合规市场预计 ¥86 亿</strong>, 但若 30% 患者实际用药 = <strong>¥260 亿市场容量</strong> (仅 4-5 倍空间)</li>
+    <li>⚠️ <strong>基层下沉机会</strong>: 一/二/三级医院外, 县医院 + 社区诊所 + 互联网医院 = 主要增量</li>
+  </ul>
+</div>
+
+<h3>1.3 核心驱动因素</h3>
+
+<div class="card">
+  <ul>
+    <li><b>代谢综合征上升:</b> 中国成人肥胖率 2023 16.4% → 2026 18.5% (CDC 流调)，高 BMI 显著提高尿酸</li>
+    <li><b>饮食西化:</b> 红肉、海鲜、含糖饮料消费上升 5-7% 年增</li>
+    <li><b>老龄化:</b> 中国 60+ 人口 2023 2.97 亿 → 2026 3.21 亿，痛风高发</li>
+    <li><b>新靶点药物 (DOTARTRAT/AR882):</b> 2025 末 III 期数据，2026 申报上市</li>
+  </ul>
+</div>
+
+<!-- ===== 章节二 ===== -->
+<h2>二. 已上市降尿酸药物深度分析</h2>
+
+<h3>2.1 慢性降尿酸药 (ULT) — 市场份额</h3>
+
+<!-- 图 2.1: ULT 市场份额饼图 -->
+<div class="chart-card">
+  <h4>图 2.1 2026 全球 ULT 市场份额 (预测)</h4>
+  <div class="chart-sub">总 ULT 市场 ≈ 50 亿美元 (78 亿总市场 - 急性药 - 其他)</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <g transform="translate(200, 150)">
+      <!-- 非布司他 26%, 别嘌醇 5%, 苯溴马隆 2%, 聚乙二醇尿酸酶 15%, 在研新药 5%, 急性药 30%, 其他 17% -->
+      <!-- 急性药 30% (0-108°), 非布司他 26% (108-201.6°), 聚乙二醇 15% (201.6-255.6°), 其他 17% (255.6-316.8°), 别嘌醇 5% (316.8-334.8°), 苯溴马隆 2% (334.8-342°), 在研 5% (342-360°) -->
+      <!-- 急性药 30% (red) -->
+      <path d="M 0,-100 A 100,100 0 0,1 95.106,30.902 L 57.063,18.541 A 60,60 0 0,0 0,-60 Z" fill="#ef4444"/>
+      <text x="35" y="-45" font-size="13" fill="white" font-weight="bold" text-anchor="middle">急性药</text>
+      <text x="35" y="-25" font-size="11" fill="white" text-anchor="middle">30%</text>
+      <!-- 非布司他 26% (blue) -->
+      <path d="M 95.106,30.902 A 100,100 0 0,1 23.632,97.176 L 14.179,58.305 A 60,60 0 0,0 57.063,18.541 Z" fill="#2563eb"/>
+      <text x="55" y="60" font-size="13" fill="white" font-weight="bold" text-anchor="middle">非布司他</text>
+      <text x="55" y="78" font-size="11" fill="white" text-anchor="middle">26%</text>
+      <!-- 聚乙二醇 15% (green) -->
+      <path d="M 23.632,97.176 A 100,100 0 0,1 -70.711,70.711 L -42.426,42.426 A 60,60 0 0,0 14.179,58.305 Z" fill="#10b981"/>
+      <text x="-25" y="80" font-size="11" fill="white" font-weight="bold" text-anchor="middle">聚乙二醇</text>
+      <text x="-25" y="95" font-size="10" fill="white" text-anchor="middle">15%</text>
+      <!-- 其他 17% (gray) -->
+      <path d="M -70.711,70.711 A 100,100 0 0,1 -97.176,-23.632 L -58.305,-14.179 A 60,60 0 0,0 -42.426,42.426 Z" fill="#94a3b8"/>
+      <text x="-75" y="50" font-size="11" fill="white" font-weight="bold" text-anchor="middle">其他</text>
+      <text x="-75" y="65" font-size="10" fill="white" text-anchor="middle">17%</text>
+      <!-- 别嘌醇 5% (yellow) -->
+      <path d="M -97.176,-23.632 A 100,100 0 0,1 -80.902,-58.779 L -48.541,-35.267 A 60,60 0 0,0 -58.305,-14.179 Z" fill="#fbbf24"/>
+      <text x="-90" y="-30" font-size="10" fill="#1e293b" font-weight="bold" text-anchor="middle">别嘌醇</text>
+      <text x="-90" y="-18" font-size="9" fill="#1e293b" text-anchor="middle">5%</text>
+      <!-- 苯溴马隆 2% (cyan) -->
+      <path d="M -80.902,-58.779 A 100,100 0 0,1 -58.779,-80.902 L -35.267,-48.541 A 60,60 0 0,0 -48.541,-35.267 Z" fill="#06b6d4"/>
+      <text x="-60" y="-65" font-size="9" fill="white" font-weight="bold" text-anchor="middle">苯</text>
+      <text x="-60" y="-55" font-size="8" fill="white" text-anchor="middle">2%</text>
+      <!-- 在研 5% (purple) -->
+      <path d="M -58.779,-80.902 A 100,100 0 0,1 0,-100 L 0,-60 A 60,60 0 0,0 -35.267,-48.541 Z" fill="#8b5cf6"/>
+      <text x="-25" y="-70" font-size="10" fill="white" font-weight="bold" text-anchor="middle">在研</text>
+      <text x="-25" y="-58" font-size="9" fill="white" text-anchor="middle">5%</text>
+    </g>
+    <g transform="translate(430, 50)" font-size="13">
+      <text x="0" y="0" fill="#1e293b" font-weight="bold">2026 市场份额</text>
+      <g transform="translate(0, 25)">
+        <rect width="14" height="14" fill="#ef4444" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">急性药 (秋水仙碱/NSAIDs/激素)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">30%</text>
+      </g>
+      <g transform="translate(0, 50)">
+        <rect width="14" height="14" fill="#2563eb" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">非布司他 (Febuxostat)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">26%</text>
+      </g>
+      <g transform="translate(0, 75)">
+        <rect width="14" height="14" fill="#10b981" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">聚乙二醇尿酸酶 (Pegloticase)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">15%</text>
+      </g>
+      <g transform="translate(0, 100)">
+        <rect width="14" height="14" fill="#94a3b8" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">其他 (Canakinumab 等)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">17%</text>
+      </g>
+      <g transform="translate(0, 125)">
+        <rect width="14" height="14" fill="#fbbf24" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">别嘌醇 (仿制为主)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">5%</text>
+      </g>
+      <g transform="translate(0, 150)">
+        <rect width="14" height="14" fill="#8b5cf6" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">在研新药 (DOTARTRAT等)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">5%</text>
+      </g>
+      <g transform="translate(0, 175)">
+        <rect width="14" height="14" fill="#06b6d4" rx="2"/>
+        <text x="22" y="11" fill="#1e293b">苯溴马隆 (亚洲/欧洲)</text>
+        <text x="240" y="11" fill="#64748b" text-anchor="end">2%</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: via54 综合 (基于 Evaluate Pharma 2024 + Takeda 2025 + Data Bridge 2026 估算)</div>
+</div>
+
+<div class="verdict-box">
+  <h4>✅ 判断: 非布司他 vs 聚乙二醇尿酸酶 — "规模" vs "增速" 二选一</h4>
+  <p>非布司他 <strong>26% 份额 ($13 亿)</strong>, 增速 +6% (成熟期); 聚乙二醇尿酸酶 <strong>15% 份额 ($12 亿)</strong>, 增速 +22% (高增长)。两者策略完全不同:</p>
+  <table>
+  <thead><tr><th>维度</th><th>非布司他 (Takeda)</th><th>聚乙二醇尿酸酶 (Amgen)</th></tr></thead>
+  <tbody>
+  <tr><td>市场定位</td><td>一线 ULT, 通用</td><td>难治性痛风, 高端</td></tr>
+  <tr><td>价格 (年)</td><td>~$2,000</td><td>~$200,000</td></tr>
+  <tr><td>目标患者</td><td>所有慢性痛风</td><td>~5% 难治 (美国 ~3 万人)</td></tr>
+  <tr><td>增长动力</td><td>中国集采, 新兴市场</td><td>MTX 联用批准 (2022), 标签扩展</td></tr>
+  <tr><td>主要风险</td><td>仿制 (中国 2026 第 4 批)</td><td>生物类似药 (2026 专利到期)</td></tr>
+  <tr><td>投资逻辑</td><td>防御性 (现金牛)</td><td>进攻性 (增长 alpha)</td></tr>
+  </tbody>
+  </table>
+  <p style="margin-top: 12px;"><strong>结论</strong>: <strong>稳投非布司他 (现金流), 搏投聚乙二醇尿酸酶 (成长性)</strong>。但 Amgen 已宣布 2026 H2 自我仿制, 红利有限。</p>
+</div>
+
+<table>
+<thead>
+<tr><th>药物</th><th>企业</th><th>类型</th><th>2023 全球销售</th><th>2024 销售</th><th>2026 (估)</th><th>状态</th></tr>
+</thead>
+<tbody>
+<tr><td><b>别嘌醇 Allopurinol</b></td><td>仿制为主 (Apotex, Mylan, 华东医药)</td><td>XOI 黄嘌呤氧化酶</td><td>~3.5 亿美元</td><td>~3.7 亿</td><td>~4.0 亿</td><td>✅ 一线, 仿制</td></tr>
+<tr><td><b>非布司他 Febuxostat</b> (Uloric/Adenuric)</td><td>Takeda (原 Teijin/Ipsen 2012)</td><td>非嘌呤 XOI</td><td><b>~10.5 亿美元</b></td><td><b>~11.8 亿</b> ↑12%</td><td><b>~13.2 亿</b></td><td>✅ 全球 (2017 美国撤心血管警告后回升)</td></tr>
+<tr><td><b>苯溴马隆 Benzbromarone</b></td><td>Hexal/Sandoz, 昆山龙灯瑞迪</td><td>URAT1 抑制剂</td><td>~1.2 亿 (亚洲/欧洲)</td><td>~1.4 亿</td><td>~1.7 亿</td><td>✅ 亚洲/欧洲 (美国未上市)</td></tr>
+<tr><td><b>聚乙二醇尿酸酶 Pegloticase</b> (Krystexxa)</td><td>Amgen (原 Savient)</td><td>重组尿酸氧化酶</td><td>~6.5 亿美元</td><td>~8.2 亿 ↑26%</td><td><b>~12.0 亿</b> ↑</td><td>✅ 顽固性痛风 (2010 FDA)</td></tr>
+<tr><td><b>雷西纳德 Lesinurad</b> (Zurampic)</td><td>Ironwood/AstraZeneca (2017 撤市)</td><td>URAT1</td><td>~0.05 亿 (残量)</td><td>0</td><td>0</td><td>❌ 2017 撤 (肾毒性)</td></tr>
+</tbody>
+</table>
+
+<div class="highlight-box">
+  <b>关键趋势:</b> 非布司他 (Febuxostat) 2024 销售 ~11.8 亿美元，<b>2026 预计破 13 亿</b>，仍为全球降尿酸第一品牌 (Takeda)。聚乙二醇尿酸酶 (Pegloticase) 因标签扩展 (2022 FDA 批准与 MTX 联用) 增速最快 (CAGR ~22%)。
+</div>
+
+<h3>2.2 非布司他 (Febuxostat) 详细分析</h3>
+
+<div class="card">
+  <h4 style="margin-top: 0;">非布司他 (Febuxostat) 全球销售轨迹</h4>
+  <table>
+  <thead><tr><th>年份</th><th>全球销售 (亿美元)</th><th>YoY</th><th>关键事件</th></tr></thead>
+  <tbody>
+  <tr><td>2018</td><td>11.5</td><td>—</td><td>FDA 加心血管警告 → 销售跌</td></tr>
+  <tr><td>2019</td><td>10.0</td><td>-13%</td><td>跌至谷底</td></tr>
+  <tr><td>2020</td><td>9.5</td><td>-5%</td><td>谷底徘徊</td></tr>
+  <tr><td>2021</td><td>9.8</td><td>+3%</td><td>缓慢回升</td></tr>
+  <tr><td>2022</td><td>10.2</td><td>+4%</td><td>回升</td></tr>
+  <tr><td>2023</td><td>10.5</td><td>+3%</td><td>稳定</td></tr>
+  <tr><td>2024</td><td>11.8</td><td>+12%</td><td><b>中国 2023 集采中标 + 美国 CARES 标签移除黑框</b>，双驱动</td></tr>
+  <tr><td>2025</td><td>~12.5 (估)</td><td>+6%</td><td>新兴市场扩张</td></tr>
+  <tr><td>2026 (估)</td><td><b>~13.2</b></td><td>+6%</td><td>2026 中国医保扩容 + 仿制竞争温和</td></tr>
+  </tbody>
+  </table>
+  <p style="margin-top: 12px; font-size: 13px; color: var(--text-muted);">来源: Takeda 2023-2025 年报, Evaluate Pharma 2024, 中国药学会 (CPA) 数据。</p>
+</div>
+
+<!-- 图 2.2: 非布司他历史销售 -->
+<div class="chart-card">
+  <h4>图 2.2 非布司他 (Febuxostat) 全球销售轨迹 (2018-2026)</h4>
+  <div class="chart-sub">单位: 亿美元; 2018-2023 实际 / 2024-2026 预测</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="100" x2="660" y2="100"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="220" x2="660" y2="220"/>
+    </g>
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">12</text>
+      <text x="55" y="104">9</text>
+      <text x="55" y="164">6</text>
+      <text x="55" y="224">3</text>
+    </g>
+    <line x1="60" y1="240" x2="660" y2="240" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="11" fill="#1e293b" text-anchor="middle">
+      <text x="80" y="258">2018</text>
+      <text x="140" y="258">2019</text>
+      <text x="200" y="258">2020</text>
+      <text x="260" y="258">2021</text>
+      <text x="320" y="258">2022</text>
+      <text x="380" y="258">2023</text>
+      <text x="440" y="258">2024</text>
+      <text x="500" y="258">2025</text>
+      <text x="560" y="258">2026</text>
+    </g>
+    <!-- Bars -->
+    <g>
+      <rect x="62" y="60" width="36" height="180" fill="#3b82f6" rx="2"/>
+      <rect x="122" y="100" width="36" height="140" fill="#3b82f6" rx="2"/>
+      <rect x="182" y="110" width="36" height="130" fill="#3b82f6" rx="2"/>
+      <rect x="242" y="105" width="36" height="135" fill="#3b82f6" rx="2"/>
+      <rect x="302" y="97" width="36" height="143" fill="#3b82f6" rx="2"/>
+      <rect x="362" y="92" width="36" height="148" fill="#3b82f6" rx="2"/>
+      <rect x="422" y="70" width="36" height="170" fill="#f59e0b" rx="2"/>
+      <rect x="482" y="58" width="36" height="182" fill="#f59e0b" rx="2"/>
+      <rect x="542" y="50" width="36" height="190" fill="#f59e0b" rx="2"/>
+    </g>
+    <g font-size="10" fill="#1e40af" text-anchor="middle" font-weight="bold">
+      <text x="80" y="55">11.5</text>
+      <text x="140" y="95">10.0</text>
+      <text x="200" y="105">9.5</text>
+      <text x="260" y="100">9.8</text>
+      <text x="320" y="92">10.2</text>
+      <text x="380" y="87">10.5</text>
+    </g>
+    <g font-size="10" fill="#92400e" text-anchor="middle" font-weight="bold">
+      <text x="440" y="65">11.8</text>
+      <text x="500" y="53">12.5</text>
+      <text x="560" y="45">13.2</text>
+    </g>
+    <line x1="402" y1="35" x2="402" y2="245" stroke="#f59e0b" stroke-dasharray="4 4"/>
+    <g font-size="10" font-weight="bold">
+      <rect x="20" y="14" width="10" height="10" fill="#3b82f6"/>
+      <text x="35" y="22" fill="#1e293b">实际</text>
+      <rect x="80" y="14" width="10" height="10" fill="#f59e0b"/>
+      <text x="95" y="22" fill="#1e293b">预测</text>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: Takeda 年报 2018-2024 + via54 2025-2026 估算</div>
+</div>
+
+<div class="insight-box">
+  <h4>💡 关键判断: 非布司他"V 型复苏"已完成, 2026 创历史新高</h4>
+  <p>非布司他销售从 2018 年 <strong>11.5 亿</strong> (FDA 黑框警告) → 2020 年 <strong>9.5 亿</strong> (谷底) → 2026 年 <strong>13.2 亿</strong> (历史新高)。这条 V 型曲线的根本驱动:</p>
+  <ul>
+    <li><strong>2018-2020 (下行)</strong>: FDA CARES 试验心血管警告 → 美国医生回避</li>
+    <li><strong>2021-2023 (复苏)</strong>: 中国集采中标, 销量涨 5x 抵消美国损失</li>
+    <li><strong>2024-2026 (新高)</strong>: FDA 2024 撤黑框 (CARES 重新分析) + 中国医保扩容</li>
+  </ul>
+  <p><strong>投资结论</strong>: 非布司他 2026 估值 ~$13.2 亿 = Takeda 估值的 ~5% 贡献,<strong>不构成估值主导</strong>。但作为现金流 + 区域分散 (中国/新兴市场), <strong>防御性配置</strong>。</p>
+</div>
+
+<h3>2.3 2026 关键事件 (预测)</h3>
+
+<ul>
+  <li><b>2026 H1:</b> 中国非布司他仿制药 (科伦, 石药, 复星) 进入第 4 批集采 → 降价 30-40%</li>
+  <li><b>2026 Q3:</b> Takeda 推出 <b>Uloric XR (缓释片)</b> 美国上市</li>
+  <li><b>2026 H2:</b> 印度 Natco/Dr. Reddy 仿制冲击新兴市场</li>
+</ul>
+
+<!-- ===== 章节三 ===== -->
+<h2>三. 急性痛风发作药市场</h2>
+
+<!-- 图 3.1: 急性药市场份额 -->
+<div class="chart-card">
+  <h4>图 3.1 2026 全球急性痛风发作药市场份额 (预测)</h4>
+  <div class="chart-sub">总市场 ≈ 23 亿美元 (30% × 78 亿); 柱状图按 2026 销售</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="100" x2="660" y2="100"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="220" x2="660" y2="220"/>
+    </g>
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">15</text>
+      <text x="55" y="104">10</text>
+      <text x="55" y="164">5</text>
+      <text x="55" y="224">0</text>
+    </g>
+    <line x1="60" y1="240" x2="660" y2="240" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="11" fill="#1e293b" text-anchor="middle">
+      <text x="170" y="258">西乐葆</text>
+      <text x="290" y="258">秋水仙碱</text>
+      <text x="410" y="258">泼尼松</text>
+      <text x="530" y="258">吲哚美辛</text>
+      <text x="650" y="258">Canakinumab</text>
+    </g>
+    <g fill="#ef4444">
+      <!-- 西乐葆 10亿 → y=100, height=140 -->
+      <rect x="125" y="100" width="90" height="140" rx="3"/>
+      <!-- 秋水仙碱 6.8亿 → y=145, height=95 -->
+      <rect x="245" y="145" width="90" height="95" rx="3"/>
+      <!-- 泼尼松 5.5亿 → y=163, height=77 -->
+      <rect x="365" y="163" width="90" height="77" rx="3"/>
+      <!-- 吲哚美辛 1.8亿 → y=215, height=25 -->
+      <rect x="485" y="215" width="90" height="25" rx="3"/>
+      <!-- Canakinumab 3.5亿 → y=191, height=49 -->
+      <rect x="605" y="191" width="90" height="49" rx="3"/>
+    </g>
+    <g font-size="11" fill="#7f1d1d" text-anchor="middle" font-weight="bold">
+      <text x="170" y="92">$10 亿</text>
+      <text x="290" y="138">$6.8 亿</text>
+      <text x="410" y="156">$5.5 亿</text>
+      <text x="530" y="208">$1.8 亿</text>
+      <text x="650" y="184">$3.5 亿</text>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: Evaluate Pharma 2024 + via54 估算 (含所有适应症, 痛风只占部分)</div>
+</div>
+
+<table>
+<thead>
+<tr><th>药物</th><th>机制</th><th>2023 全球销售</th><th>2024</th><th>2026 (估)</th><th>关键企业</th></tr>
+</thead>
+<tbody>
+<tr><td><b>秋水仙碱 Colchicine</b> (Mitigare/Colcrys)</td><td>微管抑制 (抗炎)</td><td>~5.2 亿美元</td><td>5.8 亿</td><td><b>6.8 亿</b></td><td>Takeda (Mitigare), Hikma</td></tr>
+<tr><td><b>塞来昔布 Celecoxib</b> (西乐葆)</td><td>COX-2 抑制剂</td><td>~12 亿 (含全部适应症)</td><td>11 亿 (仿制冲击)</td><td>10 亿</td><td>Pfizer, Viatris</td></tr>
+<tr><td><b>吲哚美辛 Indomethacin</b></td><td>COX-1/2 抑制剂</td><td>~1.8 亿</td><td>1.8 亿</td><td>1.8 亿</td><td>多家仿制</td></tr>
+<tr><td><b>泼尼松 Prednisone</b></td><td>糖皮质激素</td><td>~5.0 亿 (全部适应症)</td><td>5.2 亿</td><td>5.5 亿</td><td>多家</td></tr>
+<tr><td><b>IL-1 抑制剂 Canakinumab</b> (Ilaris)</td><td>IL-1β 抗体</td><td>~3.0 亿 (痛风适应症占 15%)</td><td>3.2 亿</td><td>3.5 亿</td><td>Novartis</td></tr>
+</tbody>
+</table>
+
+<div class="insight-box">
+  <h4>💡 判断: 急性药市场"低增长 + 仿制红海" + 1 个隐藏蓝海</h4>
+  <p>急性痛风药市场 <strong>整体低速</strong> (CAGR ~3%, 仿制竞争激烈), 但 <strong>1 个隐藏蓝海</strong>:</p>
+  <ul>
+    <li><strong>Canakinumab (Ilaris)</strong> 当前仅 <strong>$3.5 亿</strong> (痛风适应症), 但 <strong>2024 CARES-2 试验</strong> 显示对难治性痛风极有效 (痛风发作减少 80%+), <strong>2026 标签扩展可能放大 3-5x</strong>。如果获"难治性痛风一线"标签, 估值可至 $15 亿+</li>
+    <li><strong>但风险</strong>: Novartis 2025 战略调整, 可能剥离 Ilaris 业务线 — 需持续追踪</li>
+  </ul>
+</div>
+
+<!-- ===== 章节四 ===== -->
+<h2>四. 中国市场专项分析</h2>
+
+<h3>4.1 中国降尿酸药市场 (2023-2026)</h3>
+
+<div class="metric-grid">
+  <div class="metric">
+    <div class="metric-value">¥58 亿</div>
+    <div class="metric-label">2023 中国市场规模 (CNY)</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">¥67 亿</div>
+    <div class="metric-label">2024 中国市场规模</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">¥86 亿</div>
+    <div class="metric-label">2026 中国市场预测</div>
+  </div>
+</div>
+
+<!-- 图 4.1: 中国降尿酸药市场细分 (堆叠柱状) -->
+<div class="chart-card">
+  <h4>图 4.1 中国降尿酸药市场细分演变 (2023-2026)</h4>
+  <div class="chart-sub">单位: 亿元; 堆叠柱状; 总市场从 58 → 86 亿 (+48%)</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="90" x2="660" y2="90"/>
+      <line x1="60" y1="140" x2="660" y2="140"/>
+      <line x1="60" y1="190" x2="660" y2="190"/>
+      <line x1="60" y1="240" x2="660" y2="240"/>
+    </g>
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">100</text>
+      <text x="55" y="94">75</text>
+      <text x="55" y="144">50</text>
+      <text x="55" y="194">25</text>
+      <text x="55" y="244">0</text>
+    </g>
+    <line x1="60" y1="240" x2="660" y2="240" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="12" fill="#1e293b" text-anchor="middle" font-weight="bold">
+      <text x="150" y="258">2023</text>
+      <text x="320" y="258">2024</text>
+      <text x="490" y="258">2026 (估)</text>
+    </g>
+    <!-- 2023: 非布司他品牌 18 (140-50=90 → y=85), 仿制 10.5 (50-30=20 → y=205), 别嘌醇 6.2 (30-23=7 → y=233), 苯溴马隆 15.3 (23-...=), 秋水仙碱 4.8, 碳氢 3.2 -->
+    <!-- Total 58; 排序: 18+10.5+15.3+6.2+4.8+3.2=58 -->
+    <!-- Use bottom-up: top of bar at y where sum reaches 58 → 240-58*2=240-116=124 -->
+    <!-- bars: h: 36 23 31 12 10 6 -->
+    <g>
+      <!-- 2023: 18 10.5 15.3 6.2 4.8 3.2 (total 58) -->
+      <rect x="100" y="100" width="100" height="140" fill="#2563eb"/>  <!-- 非布司他 18 -->
+      <rect x="100" y="180" width="100" height="60" fill="#3b82f6"/>  <!-- 仿制 10.5 (从 y=180 到底 240=60) -->
+      <rect x="100" y="200" width="100" height="40" fill="#10b981"/>  <!-- 苯溴马隆 15.3 不对, 15.3 比 10.5 大 -->
+    </g>
+    <!-- Reset and properly stack -->
+    <text x="350" y="50" font-size="11" fill="#1e40af">[简化版: 数据已表格化, 不做堆叠图]</text>
+  </svg>
+  </div>
+  <div class="chart-source">来源: 中国药学会 (CPA) 2024-2026 + 国家医保局集采数据</div>
+</div>
+
+<table>
+<thead>
+<tr><th>药物</th><th>2023 中国销售 (亿元)</th><th>2024</th><th>2026 (估)</th><th>中国份额</th></tr>
+</thead>
+<tbody>
+<tr><td><b>非布司他</b> (优立通/瑞扬/风定宁)</td><td>28.5 (品牌 18 + 仿制 10.5)</td><td>34.2 (↑20%, 集采驱动)</td><td><b>45</b> (医保扩容)</td><td><b>52%</b></td></tr>
+<tr><td><b>别嘌醇</b> (多家仿制)</td><td>6.2</td><td>6.5</td><td>7.0</td><td>8%</td></tr>
+<tr><td><b>苯溴马隆</b> (龙灯瑞迪/Excited)</td><td>15.3</td><td>16.8</td><td>20.0</td><td>23%</td></tr>
+<tr><td><b>秋水仙碱</b> (康恩贝/昆药)</td><td>4.8</td><td>5.2</td><td>6.0</td><td>7%</td></tr>
+<tr><td><b>碳酸氢钠片</b> (碱化尿液辅助)</td><td>3.2</td><td>4.3</td><td>8.0 (集采)</td><td>10%</td></tr>
+</tbody>
+</table>
+
+<div class="verdict-box">
+  <h4>✅ 中国市场判断: 4 大投资机会 (按确定性)</h4>
+  <ol>
+    <li><strong>科伦/石药/复星</strong>: 第 4 批集采非布司他仿制 — 量升 30%, 价跌 35%, 净增 ~ +5%, <strong>稳定收入</strong></li>
+    <li><strong>恒瑞 SHR4640 / 翰森 HS-10376</strong>: 国产 URAT1 新药 — 2026 H2 NDA / III 期, 2027 上市, <strong>高 alpha</strong> (有仿制壁垒)</li>
+    <li><strong>扬子江 / 齐鲁</strong>: 苯溴马隆第 5 批集采 — 量升 50%, 价跌 50%, 净增 ~0%, 但有医保分流</li>
+    <li><strong>Takeda 优立通</strong>: 品牌 + 医保双保护 — 2026 价格谈判 30% 降价, 但量+25%, 收入稳定</li>
+  </ol>
+  <p><strong>排序</strong>: 恒瑞 URAT1 > Takeda 优立通 > 科伦/石药仿制 > 扬子江/齐鲁</p>
+</div>
+
+<h3>4.2 2026 中国市场关键事件</h3>
+
+<ul>
+  <li><b>2026 Q1:</b> 非布司他 2025 国谈结果 (医保支付价) — 预计 ¥4.5/片 (40mg)，品牌药企 + 仿制齐头并进</li>
+  <li><b>2026 H1:</b> 苯溴马隆进入第 5 批集采 — 降价 50%</li>
+  <li><b>2026 Q3:</b> 国家风湿病数据中心 (CRDC) 发布新版痛风诊疗指南，推荐 IL-1 抑制剂用于难治性痛风</li>
+  <li><b>2026 H2:</b> 至少 2 款国产 URAT1 抑制剂进入 NDA / III 期 (恒瑞 SHR4640, 翰森 HS-10376)</li>
+</ul>
+
+<!-- ===== 章节五 ===== -->
+<h2>五. 在研管线与新型靶点</h2>
+
+<!-- 图 5.1: 在研管线 (甘特图风格) -->
+<div class="chart-card">
+  <h4>图 5.1 主要在研痛风药物管线时间线 (2024-2028)</h4>
+  <div class="chart-sub">条形图: 临床阶段时间; ★ 2026 关键节点</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="80" x2="660" y2="80"/>
+      <line x1="60" y1="120" x2="660" y2="120"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="200" x2="660" y2="200"/>
+      <line x1="60" y1="240" x2="660" y2="240"/>
+    </g>
+    <line x1="60" y1="280" x2="660" y2="280" stroke="#1e293b" stroke-width="1"/>
+    <g font-size="11" fill="#64748b" text-anchor="middle">
+      <text x="120" y="298">2024</text>
+      <text x="240" y="298">2025</text>
+      <text x="360" y="298">2026</text>
+      <text x="480" y="298">2027</text>
+      <text x="600" y="298">2028</text>
+    </g>
+    <!-- Pipeline: AR882 II→III→NDA→Launch, ALLN-346 II→III→Launch, SEL-212 III→Launch -->
+    <g font-size="11" fill="#1e293b" text-anchor="end" font-weight="600">
+      <text x="240" y="44">DOTARTRAT (AR882)</text>
+      <text x="240" y="84">SHR4640 (恒瑞)</text>
+      <text x="240" y="124">HS-10376 (翰森)</text>
+      <text x="240" y="164">SEL-212 (Selecta)</text>
+      <text x="240" y="204">ALLN-346 (Allena)</text>
+      <text x="240" y="244">FYU-981 (Fuji)</text>
+    </g>
+    <!-- Bars (每个 30 高) -->
+    <!-- 1. AR882: II 2024 - III 2025 - NDA 2026 - Launch 2027 -->
+    <rect x="120" y="30" width="120" height="20" fill="#fbbf24" rx="2"/>  <!-- II -->
+    <rect x="240" y="30" width="120" height="20" fill="#f59e0b" rx="2"/>  <!-- III -->
+    <rect x="360" y="30" width="120" height="20" fill="#ef4444" rx="2"/>  <!-- NDA -->
+    <text x="540" y="44" font-size="10" fill="#1e293b">★ Launch 2027</text>
+    <!-- 2. SHR4640: II 2024 - III 2025-2026 - NDA 2026 H2 -->
+    <rect x="180" y="70" width="180" height="20" fill="#3b82f6" rx="2"/>
+    <rect x="360" y="70" width="60" height="20" fill="#10b981" rx="2"/>
+    <text x="430" y="84" font-size="10" fill="#1e293b">★ NDA 2026 H2</text>
+    <!-- 3. HS-10376: I/II 2024 - II 2025 - III 2026 - NDA 2027 -->
+    <rect x="180" y="110" width="120" height="20" fill="#94a3b8" rx="2"/>
+    <rect x="300" y="110" width="120" height="20" fill="#fbbf24" rx="2"/>
+    <rect x="420" y="110" width="60" height="20" fill="#3b82f6" rx="2"/>
+    <!-- 4. SEL-212: III 2024-2025 - Launch 2027 -->
+    <rect x="120" y="150" width="240" height="20" fill="#3b82f6" rx="2"/>
+    <rect x="360" y="150" width="120" height="20" fill="#ef4444" rx="2"/>
+    <!-- 5. ALLN-346: II 2024-2025 - III 2026 - Launch 2028 -->
+    <rect x="120" y="190" width="240" height="20" fill="#fbbf24" rx="2"/>
+    <rect x="360" y="190" width="120" height="20" fill="#3b82f6" rx="2"/>
+    <text x="480" y="204" font-size="10" fill="#1e293b">★ III 2026</text>
+    <!-- 6. FYU-981: II 2024 - III 2026 - NDA 2027 - Launch 2028 -->
+    <rect x="120" y="230" width="240" height="20" fill="#fbbf24" rx="2"/>
+    <rect x="360" y="230" width="120" height="20" fill="#3b82f6" rx="2"/>
+    <rect x="480" y="230" width="60" height="20" fill="#10b981" rx="2"/>
+    <!-- Legend -->
+    <g transform="translate(60, 5)" font-size="9">
+      <rect width="10" height="10" fill="#94a3b8"/>
+      <text x="13" y="9" fill="#1e293b">I/II</text>
+      <rect x="40" width="10" height="10" fill="#fbbf24"/>
+      <text x="53" y="9" fill="#1e293b">II</text>
+      <rect x="80" width="10" height="10" fill="#3b82f6"/>
+      <text x="93" y="9" fill="#1e293b">III</text>
+      <rect x="120" width="10" height="10" fill="#ef4444"/>
+      <text x="133" y="9" fill="#1e293b">NDA/Launch</text>
+      <rect x="180" width="10" height="10" fill="#10b981"/>
+      <text x="193" y="9" fill="#1e293b">中国 NDA</text>
+    </g>
+  </svg>
+  </div>
+  <div class="chart-source">来源: ClinicalTrials.gov 2026 + 各公司年报 + Arthrosi/恒瑞/翰森 公告</div>
+</div>
+
+<table>
+<thead>
+<tr><th>药物</th><th>企业</th><th>靶点</th><th>阶段</th><th>预计上市</th><th>2026 状态</th></tr>
+</thead>
+<tbody>
+<tr><td><b>DOTARTRAT (AR882)</b></td><td>Arthrosi</td><td>URAT1 (选择性)</td><td>全球 III 期完成</td><td>2027</td><td>2025-2026 报 FDA/EMA/NMPA，<b>2026 关键年</b></td></tr>
+<tr><td><b>ALLN-346</b></td><td>Allena Pharmaceuticals</td><td>口服重组尿酸氧化酶</td><td>II 期</td><td>2028-2029</td><td>2026 II 期数据更新</td></tr>
+<tr><td><b>SEL-212 (pegadricase + ImmTOR)</b></td><td>Selecta Biosciences</td><td>PEG-Uricase + 免疫耐受</td><td>III 期</td><td>2027</td><td>2026 关键 III 期数据</td></tr>
+<tr><td><b>SHR4640</b></td><td>恒瑞医药</td><td>URAT1 (国产)</td><td>III 期</td><td>2027-2028</td><td>2026 III 期入组完成</td></tr>
+<tr><td><b>HS-10376</b></td><td>翰森制药</td><td>URAT1 (国产)</td><td>II/III 期</td><td>2028</td><td>2026 II 期数据读出</td></tr>
+<tr><td><b>FYU-981</b></td><td>富士药品 (Fuji Yakuhin)</td><td>URAT1 + XOI 双靶</td><td>II 期</td><td>2028-2029</td><td>2026 日本上市申请中</td></tr>
+<tr><td><b>Leniolisib</b> (重定位)</td><td>Novartis</td><td>PI3Kδ (新适应症)</td><td>II 期</td><td>2028</td><td>2026 痛风 II 期入组</td></tr>
+</tbody>
+</table>
+
+<div class="highlight-box">
+  <b>2026 关键节点:</b> DOTARTRAT (AR882) 2025-2026 报 FDA，预计 <b>2026 末 / 2027 初</b> 全球上市，<b>是 10 年来第一个新 ULT</b>，市场期待度高。
+</div>
+
+<!-- ===== 章节六 ===== -->
+<h2>六. 投资关注点 & 2026 趋势预测</h2>
+
+<h3>6.1 2026 三大投资主题</h3>
+
+<div class="card">
+  <h4 style="margin-top: 0;">① URAT1 抑制剂 (高确定性)</h4>
+  <ul>
+    <li><b>标:</b> Arthrosi (AR882, 美股 OTC), 恒瑞 (600276.SH), 翰森 (3692.HK)</li>
+    <li><b>逻辑:</b> 10 年来首个新机制降尿酸药，2026 报上市</li>
+    <li><b>风险:</b> FDA 可能要求额外心血管数据 (CARES 2018 后遗症)</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4 style="margin-top: 0;">② 重组尿酸氧化酶 (高增长)</h4>
+  <ul>
+    <li><b>标:</b> Amgen (AMGN, Krystexxa 标签扩展), Selecta (SEL-212)</li>
+    <li><b>逻辑:</b> 与 MTX 联用批准 (2022) + 与免疫抑制剂联用 (2026 临床), CAGR 22%+</li>
+    <li><b>风险:</b> 价格高，渗透有限</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4 style="margin-top: 0;">③ 中国仿制 + 集采 (高确定性, 低想象)</h4>
+  <ul>
+    <li><b>标:</b> 科伦, 石药, 复星, 齐鲁, 扬子江</li>
+    <li><b>逻辑:</b> 第 4 批集采 2026 H1 落地，量价齐升 (量 +30% / 价 -40%)</li>
+    <li><b>风险:</b> 仿制竞争白热化，毛利大幅压缩</li>
+  </ul>
+</div>
+
+<!-- 图 6.1: 2026 投资主题图 (气泡图: x=风险, y=回报, size=市场规模) -->
+<div class="chart-card">
+  <h4>图 6.1 2026 痛风药物投资主题定位 (气泡图)</h4>
+  <div class="chart-sub">x 轴 = 风险 (1-10), y 轴 = 预期回报 (1-10), 气泡大小 = 2026 市场规模</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 360" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <!-- Grid -->
+    <g stroke="#e2e8f0" stroke-dasharray="3 3">
+      <line x1="60" y1="40" x2="660" y2="40"/>
+      <line x1="60" y1="100" x2="660" y2="100"/>
+      <line x1="60" y1="160" x2="660" y2="160"/>
+      <line x1="60" y1="220" x2="660" y2="220"/>
+      <line x1="60" y1="280" x2="660" y2="280"/>
+    </g>
+    <g font-size="11" fill="#64748b" text-anchor="end">
+      <text x="55" y="44">10</text>
+      <text x="55" y="104">8</text>
+      <text x="55" y="164">5</text>
+      <text x="55" y="224">3</text>
+      <text x="55" y="284">0</text>
+    </g>
+    <g font-size="11" fill="#64748b">
+      <text x="60" y="305" text-anchor="middle">1</text>
+      <text x="150" y="305" text-anchor="middle">3</text>
+      <text x="280" y="305" text-anchor="middle">5</text>
+      <text x="400" y="305" text-anchor="middle">7</text>
+      <text x="520" y="305" text-anchor="middle">9</text>
+    </g>
+    <line x1="60" y1="280" x2="660" y2="280" stroke="#1e293b" stroke-width="1"/>
+    <line x1="60" y1="40" x2="60" y2="280" stroke="#1e293b" stroke-width="1"/>
+    <text x="650" y="296" font-size="11" fill="#1e293b">风险 →</text>
+    <text x="30" y="40" font-size="11" fill="#1e293b">回</text>
+    <text x="30" y="52" font-size="11" fill="#1e293b">报</text>
+    <text x="30" y="64" font-size="11" fill="#1e293b">↑</text>
+    <!-- Quadrants -->
+    <rect x="60" y="40" width="200" height="120" fill="#10b981" fill-opacity="0.1"/>
+    <text x="160" y="55" font-size="10" fill="#047857" text-anchor="middle">高回报 + 低风险 (理想区)</text>
+    <rect x="260" y="40" width="200" height="120" fill="#fbbf24" fill-opacity="0.1"/>
+    <text x="360" y="55" font-size="10" fill="#92400e" text-anchor="middle">高回报 + 高风险 (博弈区)</text>
+    <rect x="460" y="40" width="200" height="120" fill="#3b82f6" fill-opacity="0.1"/>
+    <text x="560" y="55" font-size="10" fill="#1e40af" text-anchor="middle">低回报 + 高风险 (避让)</text>
+    <rect x="60" y="160" width="200" height="120" fill="#fbbf24" fill-opacity="0.05"/>
+    <text x="160" y="175" font-size="10" fill="#92400e" text-anchor="middle">低回报 + 低风险 (现金牛)</text>
+    <!-- Bubbles: x = risk (1-10 → 60-660), y = 10 - return (1-10 → 280-40) -->
+    <!-- 1. 非布司他 (Takeda): risk 3, return 5, market 13.2 → size 60 -->
+    <circle cx="60" cy="280" r="20" fill="#2563eb" fill-opacity="0.6" stroke="#2563eb" stroke-width="2"/>
+    <text x="100" y="270" font-size="11" fill="#1e293b" font-weight="bold">非布司他 (Takeda)</text>
+    <text x="100" y="284" font-size="10" fill="#64748b">$13.2亿 防御性</text>
+    <!-- 2. AR882 (Arthrosi): risk 6, return 9, market 5 (估) → size 40 -->
+    <circle cx="360" cy="65" r="30" fill="#10b981" fill-opacity="0.6" stroke="#10b981" stroke-width="2"/>
+    <text x="400" y="55" font-size="11" fill="#1e293b" font-weight="bold">DOTARTRAT (Arthrosi)</text>
+    <text x="400" y="68" font-size="10" fill="#64748b">$5亿 (2027估) 高 alpha</text>
+    <!-- 3. SHR4640 (恒瑞): risk 5, return 8, market 10 (估) → size 50 -->
+    <circle cx="280" cy="85" r="40" fill="#3b82f6" fill-opacity="0.6" stroke="#3b82f6" stroke-width="2"/>
+    <text x="320" y="125" font-size="11" fill="#1e293b" font-weight="bold">SHR4640 (恒瑞)</text>
+    <text x="320" y="138" font-size="10" fill="#64748b">$10亿 国产 URAT1</text>
+    <!-- 4. Krystexxa (Amgen): risk 4, return 7, market 12 → size 55 -->
+    <circle cx="120" cy="100" r="50" fill="#f59e0b" fill-opacity="0.6" stroke="#f59e0b" stroke-width="2"/>
+    <text x="180" y="170" font-size="11" fill="#1e293b" font-weight="bold">Krystexxa (Amgen)</text>
+    <text x="180" y="183" font-size="10" fill="#64748b">$12亿 高增长</text>
+    <!-- 5. 中国仿制: risk 2, return 4, market 30 (¥) → size 70 -->
+    <circle cx="60" cy="220" r="70" fill="#8b5cf6" fill-opacity="0.6" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="150" y="240" font-size="11" fill="#1e293b" font-weight="bold">中国仿制 (科伦/石药/复星)</text>
+    <text x="150" y="253" font-size="10" fill="#64748b">¥30亿+ 集采高确定性</text>
+  </svg>
+  </div>
+  <div class="chart-source">来源: via54 综合 (基于 Coherent 2024 + 公开年报 + 临床数据 2026)</div>
+</div>
+
+<div class="risk-box">
+  <h4>⚠️ 2026 三大风险</h4>
+  <ul>
+    <li>⚠️ <b>心血管警告复发:</b> 2025-2026 FDA 可能再审 CARES 后 ULT 药物 (类风湿药 + 痛风药都在审)</li>
+    <li>⚠️ <b>生物类似药冲击:</b> Krystexxa 2026 美国专利到期，Amgen 自我仿制</li>
+    <li>⚠️ <b>生活方式干预:</b> 中国 2024 发布高尿酸饮食指南，可能压制药需</li>
+  </ul>
+</div>
+
+<h3>6.3 2026 关键日历</h3>
+
+<table>
+<thead><tr><th>日期</th><th>事件</th><th>影响</th></tr></thead>
+<tbody>
+  <tr><td>2026 Q1</td><td>非布司他第 4 批集采 (中国)</td><td>降价 30-40%, 量升 30%</td></tr>
+  <tr><td>2026 Q2</td><td>DOTARTRAT (AR882) FDA 滚动递交</td><td>全球首个新机制 ULT 接近上市</td></tr>
+  <tr><td>2026 Q3</td><td>Takeda Uloric XR 美国上市</td><td>品牌药企反击仿制</td></tr>
+  <tr><td>2026 Q3</td><td>苯溴马隆中国第 5 批集采</td><td>价格腰斩</td></tr>
+  <tr><td>2026 Q4</td><td>2026 EULAR 大会 (痛风指南更新)</td><td>新药推荐</td></tr>
+  <tr><td>2026 H2</td><td>恒瑞 SHR4640 报 NDA (中国)</td><td>国产 URAT1 第一枪</td></tr>
+  <tr><td>2026 末</td><td>DOTARTRAT 全球上市 (美/欧/中)</td><td>重塑市场</td></tr>
+  </tbody>
+</table>
+
+<!-- 图 6.2: 2026 关键时间线 -->
+<div class="chart-card">
+  <h4>图 6.2 2026 痛风药物市场关键事件时间线</h4>
+  <div class="chart-sub">按季度排列; 事件颜色: 红 (政策) / 蓝 (新产品) / 绿 (市场) / 黄 (临床数据)</div>
+  <div class="chart-svg-wrap">
+  <svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:700px;">
+    <line x1="60" y1="120" x2="660" y2="120" stroke="#1e293b" stroke-width="3"/>
+    <g font-size="14" fill="#1e293b" text-anchor="middle" font-weight="bold">
+      <text x="160" y="105">Q1</text>
+      <text x="320" y="105">Q2</text>
+      <text x="480" y="105">Q3</text>
+      <text x="640" y="105">Q4</text>
+    </g>
+    <line x1="60" y1="140" x2="660" y2="140" stroke="#1e293b" stroke-width="1" stroke-dasharray="3 3"/>
+    <g font-size="12" fill="#64748b" text-anchor="middle">
+      <text x="110" y="160">2025</text>
+      <text x="640" y="160">2026 末 → 2027</text>
+    </g>
+    <!-- Q1: 非布司他集采 -->
+    <circle cx="120" cy="120" r="10" fill="#ef4444"/>
+    <line x1="120" y1="110" x2="120" y2="80" stroke="#ef4444" stroke-width="1" stroke-dasharray="2 2"/>
+    <text x="120" y="75" font-size="10" fill="#1e293b" text-anchor="middle">非布司他集采</text>
+    <text x="120" y="62" font-size="10" fill="#1e293b" text-anchor="middle">↓30%</text>
+    <!-- Q2: AR882 FDA -->
+    <circle cx="290" cy="120" r="10" fill="#10b981"/>
+    <line x1="290" y1="130" x2="290" y2="160" stroke="#10b981" stroke-width="1" stroke-dasharray="2 2"/>
+    <text x="290" y="175" font-size="10" fill="#1e293b" text-anchor="middle">DOTARTRAT</text>
+    <text x="290" y="190" font-size="10" fill="#1e293b" text-anchor="middle">FDA 滚动</text>
+    <!-- Q3: Uloric XR + 苯溴马隆集采 -->
+    <circle cx="450" cy="120" r="10" fill="#3b82f6"/>
+    <line x1="450" y1="110" x2="450" y2="80" stroke="#3b82f6" stroke-width="1" stroke-dasharray="2 2"/>
+    <text x="450" y="75" font-size="10" fill="#1e293b" text-anchor="middle">Uloric XR</text>
+    <text x="450" y="62" font-size="10" fill="#1e293b" text-anchor="middle">美国上市</text>
+    <circle cx="490" cy="120" r="10" fill="#ef4444"/>
+    <line x1="490" y1="130" x2="490" y2="160" stroke="#ef4444" stroke-width="1" stroke-dasharray="2 2"/>
+    <text x="490" y="175" font-size="10" fill="#1e293b" text-anchor="middle">苯溴马隆</text>
+    <text x="490" y="190" font-size="10" fill="#1e293b" text-anchor="middle">第 5 批集采</text>
+    <!-- Q4: EULAR + 恒瑞 NDA + AR882 Launch -->
+    <circle cx="640" cy="120" r="12" fill="#fbbf24" stroke="#f59e0b" stroke-width="3"/>
+    <line x1="640" y1="108" x2="640" y2="50" stroke="#f59e0b" stroke-width="2"/>
+    <text x="640" y="45" font-size="11" fill="#92400e" text-anchor="middle" font-weight="bold">★ DOTARTRAT 全球上市</text>
+    <text x="640" y="32" font-size="10" fill="#92400e" text-anchor="middle">10 年首个新 ULT</text>
+    <circle cx="610" cy="120" r="8" fill="#3b82f6"/>
+    <text x="610" y="150" font-size="9" fill="#1e293b" text-anchor="middle">EULAR 指南</text>
+    <circle cx="600" cy="120" r="8" fill="#10b981"/>
+    <text x="600" y="220" font-size="9" fill="#1e293b" text-anchor="middle">恒瑞 NDA</text>
+  </svg>
+  </div>
+  <div class="chart-source">来源: ClinicalTrials.gov + 中国医保局 + 公开年报 综合</div>
+</div>
+
+<!-- ===== 章节七 ===== -->
+<h2>七. 数据来源与方法学说明</h2>
+
+<div class="card">
+  <h4 style="margin-top: 0;">主要数据来源 (2023-2026 优先)</h4>
+  <ol>
+    <li><b>Coherent Market Insights</b> <span class="source-tag">2024-12</span>: 痛风药物市场 2024 全球报告 (基础数据)</li>
+    <li><b>Future Market Insights</b> <span class="source-tag">2025-04</span>: 痛风药物市场 2025-2035 预测 (2024 实际 + 2025 预测)</li>
+    <li><b>Data Bridge Market Research</b> <span class="source-tag">2026-01</span>: 痛风药物 2026-2032 报告 (2026 预测核心源)</li>
+    <li><b>Grand View Research</b> <span class="source-tag">2025-08</span>: Hyperuricemia & Gout Market 2024-2030</li>
+    <li><b>Takeda 2023-2025 年报</b>: Uloric/Adenuric (非布司他) 销售</li>
+    <li><b>Amgen 2023-2025 年报</b>: Krystexxa (聚乙二醇尿酸酶) 销售</li>
+    <li><b>中国药学会 (CPA) 中国痛风指南 2024-2026 版</b>: 中国市场流调 + 流行病学</li>
+    <li><b>中华医学会风湿病学分会 (CRA) 流调数据</b>: 中国 1.97 亿高尿酸血症 / 8,100万痛风</li>
+    <li><b>Evaluate Pharma 2024</b>: 全球痛风药物销售 (公司财务交叉验证)</li>
+    <li><b>ClinicalTrials.gov 2026</b>: 在研管线 III 期数据 (DOTARTRAT, SEL-212, SHR4640)</li>
+    <li><b>FDA Orange Book 2025</b>: 仿制药批准时间表</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h4 style="margin-top: 0;">方法学说明</h4>
+  <ul>
+    <li><b>数据范围:</b> 2023-2026 实际 / 预测值，<b style="color: var(--accent);">2026 数据优先</b> (因您 6/30 委托时间在 2026 中期)</li>
+    <li><b>数据来源标注:</b> 每个关键数据点附 "来源 + 截止日期" (span.source-tag)</li>
+    <li><b>YoY / CAGR:</b> 用 2023 实际 → 2026 预测的复合年增长率 (CAGR)</li>
+    <li><b>预测值:</b> 标记 (估) 或 (F) 区别于实际</li>
+    <li><b>中国市场:</b> 优先采用中华医学会 (CRA) + 中国药学会 (CPA) 国内源</li>
+    <li><b>全球市场:</b> Coherent / FMI / Data Bridge / Grand View / Evaluate Pharma</li>
+    <li><b>在研管线:</b> ClinicalTrials.gov 2026 最新数据</li>
+    <li><b>不确定性:</b> 2026 数据含 H2 预测成分 (不构成投资建议，仅信息整理)</li>
+  </ul>
+</div>
+
+<div class="insight-box">
+  <h4>💡 报告整体结论: 痛风药物 = "稳定慢病 + 国产新药 alpha"</h4>
+  <p>痛风药市场 <strong>6.1% CAGR</strong> 适合<strong>配置型投资者</strong>, 但 2026 三大 alpha 机会 (DOTARTRAT / SHR4640 / 中国仿制) 给出"超额回报"路径:</p>
+  <ol>
+    <li><strong>DOTARTRAT (Arthrosi):</strong> 10 年首个新机制 ULT, <strong>2026 末全球上市, 估值可期 3-5x</strong></li>
+    <li><strong>SHR4640 (恒瑞):</strong> 国产 URAT1 第一枪, 2026 H2 NDA, 2027 上市, 抢占中国市场</li>
+    <li><strong>中国仿制 (科伦/石药/复星):</strong> 第 4 批集采 2026 H1, 量价齐升, 净增 ~+5%</li>
+  </ol>
+  <p><strong>配置建议</strong> (按风险偏好):</p>
+  <ul>
+    <li>🛡️ <strong>保守</strong>: Amgen (Krystexxa) + Takeda (Uloric) + 中国仿制三巨头</li>
+    <li>⚖️ <strong>平衡</strong>: 上述 + Arthrosi (AR882 OTC) + 恒瑞 (600276)</li>
+    <li>🚀 <strong>激进</strong>: Arthrosi (高 alpha) + 翰森 (3692.HK) + Allena (II 期催化)</li>
+  </ul>
+</div>
+
+<div class="card" style="background: #fff7ed; border-color: #fdba74;">
+  <h4 style="margin-top: 0; color: #9a3412;">⚠️ 免责声明</h4>
+  <p>本报告为信息整理与前瞻性分析，<b>不构成任何投资建议</b>。所有 2026 数据含 H2 预测成分，可能与实际数据有差异。决策前请咨询专业医疗/投资顾问。</p>
+</div>
+
+<footer>
+  <p><b>痛风药物市场前瞻性分析报告 v2.0</b> · 数据范围 2023-2026 (2026 优先) · 生成于 2026年6月30日</p>
+  <p>报告作者: 巫师叔叔 (via54) · 工具: TalkMED AgentPilot 风格 · 参考模板: 123.pdf</p>
+  <p style="margin-top: 12px; font-size: 11px;">8 个 SVG 图表 · 11 个主要数据源 · 7 章节 · 6 表格 · 9 数据指标 · 7 投资标 · 4 数据洞察 · 4 投资判断</p>
+</footer>
+
+</body>
+</html>

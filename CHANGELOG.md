@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [4.5.4] - 2026-06-30 (v5.0 商业情报第 1 份样本报告)
+
+### Added
+- **market-reports/** 目录: v5.0 商业情报 (intel) 模式产出
+- **gout-2026-q2.html** (66KB): 痛风药物市场前瞻性分析 (TalkMED AgentPilot 风格)
+  - 7 章节 + 8 SVG 图表 + 4 数据洞察 + 3 投资判断 + 3 风险
+  - 2023-2026 数据 (2026 优先, 11 数据源)
+  - 通过用户测试 (OK, 16:18)
+- **docs/MARKET-REPORTS.md**: 报告索引 + 模板 + 数据源优先级
+- 验证 v5.0 商业模式 (`medit intel` + market-reports/) 端到端可用
+
+### v5.0 商业模式 (intel) 集成状态
+- 数据源集成: 6 P0 商业源 (openfda, pubtator3, dailymed, europe_pmc, medrxiv, clinicaltrials_v2)
+- 报告生成器: TalkMED AgentPilot 风格 (7 页 HTML)
+- 数据源: 11 (Coherent, FMI, Data Bridge, Grand View, Takeda, Amgen, CPA, CRA, Evaluate, CT.gov, FDA Orange Book)
+- 验证: 痛风报告 (2026-06-30) ✓
 ## [4.5.3] - 2026-06-30 (final v5.0 spec lock - 用户确认全默认)
 
 ### Decision Lock (用户 ~16:00 TG "全默认")
