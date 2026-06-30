@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [4.5.2] - 2026-06-30 (decision lock round 2)
+
+### Decision Lock (用户 ~15:50 TG 决策)
+- **2. 暂时不变** = 12 P0 源列表保留 (EBM 6 + 商业 6, TalkMED 7 页 PDF 需求)
+- **3. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
+- **6. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
+
+### Total
+- 已锁: 决策 1 (架构), 2 (P0 源), 4 (付费源 = 0)
+- 待补: 决策 3 (CLI 隔离), 5 (锁定 ✅), 6 (biomcp 集成)
+- 实际 5 个决策点 (§8) 中 2/3/5/6 待补, 5 已锁=4 一致
 ## [4.5.1] - 2026-06-30 (decision lock)
 
 ### Decision Lock (用户 15:42 TG 决策)

@@ -296,3 +296,7 @@ type MarketInsight struct {
 4. ❓ TalkMED 7 页 PDF 是 v5.0 必交付, 还是 v6.0?
 5. ❓ 商业付费源 (药智/医药魔方/Citeline) 预算?
 6. ❓ 是否真要 fork genomoncology/biomcp (MIT) 进 via54Medit,还是 MCP 协议调用?
+
+---
+
+**待补决策展开**: 详见 [DECISIONS-PENDING.md](DECISIONS-PENDING.md) (10 明确问题 + 默认值, 用户 6/30 15:50 TG 决策触发)
