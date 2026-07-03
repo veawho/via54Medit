@@ -80,7 +80,7 @@ medit pubmed search "SGLT2 heart failure" --max 20
 medit systematic "GLP-1 受体激动剂减重"
 
 # 启动 MCP Server (可通过 stdio 被 Claude Desktop 或 Cursor 调用集成)
-/Users/david/Desktop/developments/via54Medit/bin/medit-mcp
+./bin/medit-mcp
 ```
 
 
@@ -100,9 +100,10 @@ medit systematic "GLP-1 受体激动剂减重"
 {
   "mcpServers": {
     "medit": {
-      "command": "/Users/david/Desktop/developments/via54Medit/bin/medit-mcp",
+      "command": "/path/to/via54Medit/bin/medit-mcp",
       "args": []
     }
+
   }
 }
 ```

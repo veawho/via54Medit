@@ -97,7 +97,7 @@ medit version               # 版本信息
 {
   "mcpServers": {
     "medit": {
-      "command": "/Users/david/Desktop/developments/via54Medit/bin/medit-mcp",
+      "command": "/path/to/via54Medit/bin/medit-mcp",
       "args": []
     }
   }
