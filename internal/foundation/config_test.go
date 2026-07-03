@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -142,7 +143,7 @@ func contains(ss []string, s string) bool {
 }
 
 func normalize(p string) string {
-	return filepath.ToSlash(p)
+	return strings.ReplaceAll(filepath.ToSlash(p), "\\", "/")
 }
 
 func writeFile(path, content string) error {

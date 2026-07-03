@@ -107,7 +107,7 @@ func init() {
 
 func newHermes(cfg map[string]any) (LLMProvider, error) {
 	h := &HermesProvider{
-		endpoint: "http://localhost:8642",
+		endpoint: "http://localhost:8765",
 		model:    "MiniMax-M3",
 		client:   &http.Client{Timeout: 60 * time.Second},
 	}

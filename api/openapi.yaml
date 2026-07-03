@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  title: via54Medit API
+  description: 提供了基于并发多源检索（PubMed、OpenAlex、蚂蚁阿福爬虫等）、去重融合、智能总结以及 GRADE/PICO 评估的循证医学 API。
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api/v1
+    description: 本地开发服务器
+paths:
+  /ask:
+    post:
+      summary: 循证文献联合检索与问答
+      description: 并发检索 PubMed, OpenAlex, 蚂蚁阿福 等源，对文献进行去重合并，并生成大模型总结与证据列表。
+      operationId: askEvidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: 临床问题或循证对比语句。例如 "Dapagliflozin vs placebo in patients with heart failure"
+                max_results:
+                  type: integer
+                  description: 每个文献源获取的最大结果数
+                  default: 20
+                no_antfu:
+                  type: boolean
+                  description: 是否跳过蚂蚁阿福（Chrome 浏览器爬虫）检索
+                  default: false
+                no_llm:
+                  type: boolean
+                  description: 是否跳过最终的大语言模型证据归纳生成
+                  default: false
+      responses:
+        '200':
+          description: 成功获取证据包
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conv_id:
+                    type: string
+                    description: 唯一会话 ID
+                  question:
+                    type: string
+                  summary:
+                    type: string
+                    description: 循证证据总结
+                  citations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Citation'
+        '500':
+          description: 服务器内部错误
+  /pico:
+    post:
+      summary: PICO 临床要素提取
+      description: 从用户输入的自然语言问题中提取研究人群 (P)、干预措施 (I)、对照组 (C) 和结局指标 (O)。
+      operationId: extractPICO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: 临床问题
+      responses:
+        '200':
+          description: 成功提取 PICO
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  population:
+                    type: string
+                  intervention:
+                    type: string
+                  comparator:
+                    type: string
+                  outcome:
+                    type: string
+  /grade:
+    post:
+      summary: GRADE 证据等级评分
+      description: 根据文献的研究类型、偏倚风险、一致性、精确性等维度，对证据包或特定的会话包进行 GRADE 质量评级。
+      operationId: evaluateGRADE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - conv_id
+              properties:
+                conv_id:
+                  type: string
+                  description: 需评级的会话 ID
+      responses:
+        '200':
+          description: 评分完成
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grade:
+                    type: string
+                    description: 最终级别 (A/B/C/D)
+                  score:
+                    type: integer
+                  reasoning:
+                    type: string
+                    description: GRADE 评分原因推导步骤
+components:
+  schemas:
+    Citation:
+      type: object
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        journal:
+          type: string
+        year:
+          type: integer
+        pmid:
+          type: string
+        doi:
+          type: string
+        source:
+          type: string
+        abstract:
+          type: string

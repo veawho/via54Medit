@@ -36,7 +36,7 @@ sources:
     enabled: true
     cdp_url: "http://localhost:9223"   # Chrome DevTools Protocol
     deep_search: true              # true=48s高质量 false=8s快速
-    timeout: 60s
+    timeout: 120s
 
 # ===========================
 # Embedder (插件式, 默认 bge-m3)
@@ -82,7 +82,7 @@ llm:
   default: hermes
   providers:
     hermes:
-      endpoint: "http://localhost:8642"
+      endpoint: "http://localhost:8765"
       model: "MiniMax-M3"
       api_key: ""
 

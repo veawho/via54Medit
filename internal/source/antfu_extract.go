@@ -50,11 +50,11 @@ type ExtractConfig struct {
 func DefaultExtractConfig() ExtractConfig {
 	return ExtractConfig{
 		AnswerSelector:         ".markdown-body, .answer-content, [class*=answer-body], [class*=markdown]",
-		QuoteContainerSelector: ".quotedMaterials, .reference-list, [class*=reference], [class*=citation]",
-		QuoteItemSelector:      ".reference-item, .ref-item, [class*=ReferenceItem], li[class*=reference]",
-		TitleSelector:          "a, .title, h3, h4",
+		QuoteContainerSelector: ".quotedMaterials, .reference-list, [class*=quotedMaterialsBox], [class*=quotedMaterials]",
+		QuoteItemSelector:      ".reference-item, .ref-item, [class*=ReferenceItem], li[class*=reference], [class*=quotedMaterialsItem]",
+		TitleSelector:          "a, .title, h3, h4, [class*=quotedMaterialsItemTitle]",
 		URLAttr:                "href",
-		SnippetSelector:        ".snippet, p, .abstract, [class*=snippet]",
+		SnippetSelector:        ".snippet, p, .abstract, [class*=snippet], [class*=quotedMaterialsJournalText]",
 	}
 }
 

@@ -18,6 +18,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"time"
@@ -110,19 +111,70 @@ func (s *AntfuSource) Search(ctx context.Context, q types.EBMQuestion, limit int
 		return nil, fmt.Errorf("antfu: navigate: %w", err)
 	}
 
+	// [2.5] Verify login status.
+	verifyCtx, verifyCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer verifyCancel()
+
+	if err := cdp.WaitForSelector(verifyCtx, "body", 5*time.Second); err != nil {
+		return nil, fmt.Errorf("antfu: verify page load: %w", err)
+	}
+
+	loginCheckExpr := `
+		(async function() {
+			const sleep = ms => new Promise(r => setTimeout(r, ms));
+			const deadline = Date.now() + 10000;
+			while (Date.now() < deadline) {
+				const userSec = document.querySelector('div[class*=userSection]');
+				if (userSec) {
+					const text = userSec.textContent || "";
+					if (text.includes("点击登录") || text.includes("登录/注册") || text.includes("登录")) {
+						return "NOT_LOGGED_IN";
+					}
+					return "OK";
+				}
+				await sleep(200);
+			}
+			return "TIMEOUT";
+		})()
+	`
+	loginStatus, err := cdp.Evaluate(verifyCtx, loginCheckExpr)
+	if err != nil {
+		return nil, fmt.Errorf("antfu: check login status: %w", err)
+	}
+	
+	// Debug logging
+	debugURL, _ := cdp.Evaluate(verifyCtx, "window.location.href")
+	debugTitle, _ := cdp.Evaluate(verifyCtx, "document.title")
+	log.Printf("DEBUG: Target URL = %q, Title = %q, loginStatus = %q", debugURL, debugTitle, loginStatus)
+
+	if loginStatus == "NOT_LOGGED_IN" {
+		return nil, fmt.Errorf("您尚未登录蚂蚁阿福 (chat.antafu.com) 或登录已失效，请在已连通的浏览器窗口中登录后再试")
+	}
+	if loginStatus == "TIMEOUT" {
+		return nil, fmt.Errorf("登录校验超时：无法检测到登录状态，请确保您已在浏览器中打开并登录 chat.antafu.com")
+	}
+
 	// [3] Inject the query into the input box.
 	// The selector below targets the common antfu input element. If antfu
 	// changes their DOM, the user can override via extractCfg (Phase 2).
-	injectCtx, injectCancel := context.WithTimeout(ctx, 10*time.Second)
+	injectCtx, injectCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer injectCancel()
+
 	expr := fmt.Sprintf(`
-		(function() {
-			const ta = document.querySelector('textarea.ant-input, textarea[class*=ant-input]');
-			if (!ta) { return 'NO_INPUT'; }
-			const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-			setter.call(ta, %q);
-			ta.dispatchEvent(new Event('input', { bubbles: true }));
-			return 'OK';
+		(async function() {
+			const sleep = ms => new Promise(r => setTimeout(r, ms));
+			const deadline = Date.now() + 10000;
+			while (Date.now() < deadline) {
+				const ta = document.querySelector('textarea.ant-input, textarea[class*=ant-input]');
+				if (ta) {
+					const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+					setter.call(ta, %q);
+					ta.dispatchEvent(new Event('input', { bubbles: true }));
+					return 'OK';
+				}
+				await sleep(200);
+			}
+			return 'NO_INPUT';
 		})()
 	`, q.Query)
 	jsResult, err := cdp.Evaluate(injectCtx, expr)
@@ -133,15 +185,26 @@ func (s *AntfuSource) Search(ctx context.Context, q types.EBMQuestion, limit int
 		return nil, fmt.Errorf("antfu: input box not found (page may have changed)")
 	}
 
+	// Wait 1 second for React to process state updates and enable the button
+	time.Sleep(1 * time.Second)
+
 	// [4] Click the send button. The selector targets antfu's send icon.
-	sendCtx, sendCancel := context.WithTimeout(ctx, 5*time.Second)
+	sendCtx, sendCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer sendCancel()
 	clickExpr := `
-		(function() {
-			const btn = document.querySelector('button[class*=ant-btn-primary], [class*=send-button], button[type=submit]');
-			if (!btn) { return 'NO_BUTTON'; }
-			btn.click();
-			return 'OK';
+		(async function() {
+			const sleep = ms => new Promise(r => setTimeout(r, ms));
+			const deadline = Date.now() + 5000;
+			while (Date.now() < deadline) {
+				const btn = document.querySelector('button[class*=ant-btn-primary], [class*=sendButton], button[type=submit], button[class*=send-button]');
+				if (btn) {
+					btn.click();
+					btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+					return 'OK';
+				}
+				await sleep(200);
+			}
+			return 'NO_BUTTON';
 		})()
 	`
 	if jsResult, err := cdp.Evaluate(sendCtx, clickExpr); err != nil {

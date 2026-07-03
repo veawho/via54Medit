@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,43 +84,79 @@ type CDPVersion struct {
 //
 // Caller must call Close() when done. ctx controls the dial deadline.
 func NewCDPClient(ctx context.Context, baseURL string) (*CDPClient, error) {
-	// [1] HTTP discovery
-	discoveryURL := strings.TrimRight(baseURL, "/") + "/json/version"
-	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("cdp: build discovery request: %w", err)
+	var wsURL string
+
+	// Try PUT /json/new first to create a new page target (supporting Page domain)
+	newTabURL := strings.TrimRight(baseURL, "/") + "/json/new"
+	req, err := http.NewRequestWithContext(ctx, "PUT", newTabURL, nil)
+	if err == nil {
+		httpClient := &http.Client{Timeout: 5 * time.Second}
+		resp, err := httpClient.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode/100 == 2 {
+				var tab map[string]any
+				if err := json.NewDecoder(resp.Body).Decode(&tab); err == nil {
+					if id, ok := tab["id"].(string); ok && id != "" {
+						// Activate the tab to bring it to foreground (prevents background throttle)
+						activateURL := strings.TrimRight(baseURL, "/") + "/json/activate/" + id
+						reqAct, errAct := http.NewRequestWithContext(ctx, "GET", activateURL, nil)
+						if errAct == nil {
+							if respAct, errAct2 := httpClient.Do(reqAct); errAct2 == nil {
+								respAct.Body.Close()
+							}
+						}
+					}
+					if urlStr, ok := tab["webSocketDebuggerUrl"].(string); ok && urlStr != "" {
+						wsURL = urlStr
+					}
+				}
+			}
+		}
 	}
-	httpClient := &http.Client{Timeout: 5 * time.Second}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("cdp: GET %s: %w", discoveryURL, err)
+
+	// Fallback to GET /json/version (e.g. for mock servers or old versions)
+	if wsURL == "" {
+		discoveryURL := strings.TrimRight(baseURL, "/") + "/json/version"
+		req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("cdp: build discovery request: %w", err)
+		}
+		httpClient := &http.Client{Timeout: 5 * time.Second}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("cdp: GET %s: %w", discoveryURL, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("cdp: discovery returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+		}
+		var ver CDPVersion
+		if err := json.NewDecoder(resp.Body).Decode(&ver); err != nil {
+			return nil, fmt.Errorf("cdp: decode version: %w", err)
+		}
+		wsURL = ver.WebSocketDebuggerURL
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("cdp: discovery returned %d: %s", resp.StatusCode, truncate(string(body), 200))
-	}
-	var ver CDPVersion
-	if err := json.NewDecoder(resp.Body).Decode(&ver); err != nil {
-		return nil, fmt.Errorf("cdp: decode version: %w", err)
-	}
-	if ver.WebSocketDebuggerURL == "" {
-		return nil, errors.New("cdp: server returned empty webSocketDebuggerUrl (Chrome too old?)")
+
+	if wsURL == "" {
+		return nil, errors.New("cdp: server returned empty webSocketDebuggerUrl")
 	}
 
 	// [2] WebSocket dial
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	conn, _, err := websocket.DefaultDialer.DialContext(dialCtx, ver.WebSocketDebuggerURL, nil)
+	conn, _, err := websocket.DefaultDialer.DialContext(dialCtx, wsURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("cdp: dial %s: %w", ver.WebSocketDebuggerURL, err)
+		return nil, fmt.Errorf("cdp: dial %s: %w", wsURL, err)
 	}
 
 	c := &CDPClient{
-		wsURL:   ver.WebSocketDebuggerURL,
+		wsURL:   wsURL,
 		conn:    conn,
 		pending: make(map[int64]chan cdpResponse),
 		events:  make(chan cdpEvent, 32),
+		// closed will be initialized to false automatically
 	}
 	go c.readPump()
 	return c, nil
@@ -261,13 +298,18 @@ func (c *CDPClient) Evaluate(ctx context.Context, expression string) (string, er
 	res, err := c.send(ctx, "Runtime.evaluate", map[string]any{
 		"expression":    expression,
 		"returnByValue": true,
-		"awaitPromise":  false,
+		"awaitPromise":  true,
 	})
 	if err != nil {
 		return "", fmt.Errorf("cdp: Runtime.evaluate: %w", err)
 	}
+	log.Printf("DEBUG CDP Evaluate raw res: %s", string(res))
 	var got struct {
 		Result struct {
+			Result struct {
+				Type  string          `json:"type"`
+				Value json.RawMessage `json:"value"`
+			} `json:"result"`
 			Type             string          `json:"type"`
 			Value            json.RawMessage `json:"value"`
 			ExceptionDetails *struct {
@@ -281,19 +323,23 @@ func (c *CDPClient) Evaluate(ctx context.Context, expression string) (string, er
 	if got.Result.ExceptionDetails != nil {
 		return "", fmt.Errorf("cdp: JS exception: %s", got.Result.ExceptionDetails.Text)
 	}
-	// value is JSON-encoded: a string comes back as "\"hello\"", a number
-	// as "42", a bool as "true". For Phase 1, we unquote strings and
-	// return numbers/bools as their Go string form. Complex objects are
-	// left as their raw JSON.
-	switch got.Result.Type {
+
+	typ := got.Result.Result.Type
+	val := got.Result.Result.Value
+	if typ == "" {
+		typ = got.Result.Type
+		val = got.Result.Value
+	}
+
+	switch typ {
 	case "string":
 		var s string
-		if err := json.Unmarshal(got.Result.Value, &s); err != nil {
+		if err := json.Unmarshal(val, &s); err != nil {
 			return "", fmt.Errorf("cdp: decode string value: %w", err)
 		}
 		return s, nil
 	default:
-		return string(got.Result.Value), nil
+		return string(val), nil
 	}
 }
 

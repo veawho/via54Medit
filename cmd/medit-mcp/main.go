@@ -136,7 +136,7 @@ func askTool(ctx context.Context, _ *mcp.CallToolRequest, input AskInput) (*mcp.
 	if !input.NoLLM {
 		// Try hermes (local), fall back to no-LLM.
 		llm, err := foundation.NewLLM("hermes", map[string]any{
-			"endpoint": "http://localhost:8642",
+			"endpoint": "http://localhost:8765",
 			"model":    "MiniMax-M3",
 		})
 		if err == nil {

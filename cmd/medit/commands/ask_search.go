@@ -51,12 +51,8 @@ var (
 	askMax      int
 	askJSON     bool
 	askNoAntfu  bool
-	askNoLLM    bool
 	askAntfuCDP string
 	askAntfuTO  time.Duration
-	askLLMProv  string
-	askLLMEndp  string
-	askLLMKey   string
 	askTimeout  time.Duration
 	askSources  string // comma-separated: pubmed,openalex,s2,antfu
 )
@@ -65,22 +61,18 @@ func init() {
 	askCmd.Flags().IntVar(&askMax, "max", 20, "Max citations per source")
 	askCmd.Flags().BoolVar(&askJSON, "json", false, "Output JSON")
 	askCmd.Flags().BoolVar(&askNoAntfu, "no-antfu", false, "Skip antfu (no Chrome required)")
-	askCmd.Flags().BoolVar(&askNoLLM, "no-llm", false, "Skip LLM summary")
 	askCmd.Flags().StringVar(&askAntfuCDP, "antfu-cdp", "http://localhost:9223", "Chrome DevTools URL for antfu")
-	askCmd.Flags().DurationVar(&askAntfuTO, "antfu-timeout", 60*time.Second, "Antfu RAG timeout")
-	askCmd.Flags().StringVar(&askLLMProv, "llm", "hermes", "LLM provider: hermes | openai")
-	askCmd.Flags().StringVar(&askLLMEndp, "llm-endpoint", "", "Custom LLM endpoint")
-	askCmd.Flags().StringVar(&askLLMKey, "llm-api-key", "", "LLM API key (for openai)")
-	askCmd.Flags().DurationVar(&askTimeout, "timeout", 90*time.Second, "Total wall-clock timeout")
+	askCmd.Flags().DurationVar(&askAntfuTO, "antfu-timeout", 150*time.Second, "Antfu RAG timeout")
+	askCmd.Flags().DurationVar(&askTimeout, "timeout", 180*time.Second, "Total wall-clock timeout")
 	askCmd.Flags().StringVar(&askSources, "sources", "pubmed,openalex,s2,antfu", "Comma-separated sources to query")
 
 	searchCmd.Flags().IntVar(&askMax, "max", 20, "Max citations per source")
 	searchCmd.Flags().BoolVar(&askJSON, "json", false, "Output JSON")
 	searchCmd.Flags().BoolVar(&askNoAntfu, "no-antfu", false, "Skip antfu")
 	searchCmd.Flags().StringVar(&askAntfuCDP, "antfu-cdp", "http://localhost:9223", "Chrome DevTools URL for antfu")
-	searchCmd.Flags().DurationVar(&askAntfuTO, "antfu-timeout", 60*time.Second, "Antfu RAG timeout")
+	searchCmd.Flags().DurationVar(&askAntfuTO, "antfu-timeout", 150*time.Second, "Antfu RAG timeout")
 	searchCmd.Flags().StringVar(&askSources, "sources", "pubmed,openalex,s2,antfu", "Comma-separated sources to query")
-	searchCmd.Flags().DurationVar(&askTimeout, "timeout", 90*time.Second, "Total wall-clock timeout")
+	searchCmd.Flags().DurationVar(&askTimeout, "timeout", 180*time.Second, "Total wall-clock timeout")
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
@@ -115,10 +107,15 @@ func runRouter(cmd *cobra.Command, args []string, useLLM bool) error {
 func buildRouter(useLLM bool) (*router.Router, error) {
 	r := router.NewRouter()
 	r.Concurrency = 4
-	r.TimeoutPerSource = 30 * time.Second
 	r.MaxRetries = 1
 
 	wanted := parseSourceList(askSources)
+	r.TimeoutPerSource = 30 * time.Second
+	for _, name := range wanted {
+		if name == "antfu" && !askNoAntfu {
+			r.TimeoutPerSource = askAntfuTO
+		}
+	}
 	for _, name := range wanted {
 		switch name {
 		case "pubmed":
@@ -171,16 +168,27 @@ func buildLLM() (foundation.LLMProvider, error) {
 	case "hermes", "":
 		endpoint := askLLMEndp
 		if endpoint == "" {
-			endpoint = "http://localhost:8642"
+			endpoint = "http://localhost:8765"
+		}
+		model := askLLMModel
+		if model == "" {
+			model = "MiniMax-M3"
 		}
 		return foundation.NewLLM("hermes", map[string]any{
 			"endpoint": endpoint,
-			"model":    "MiniMax-M3",
+			"model":    model,
 		})
 	case "openai":
-		return foundation.NewLLM("openai", map[string]any{
+		cfg := map[string]any{
 			"api_key": askLLMKey,
-		})
+		}
+		if askLLMEndp != "" {
+			cfg["endpoint"] = askLLMEndp
+		}
+		if askLLMModel != "" {
+			cfg["model"] = askLLMModel
+		}
+		return foundation.NewLLM("openai", cfg)
 	default:
 		return nil, fmt.Errorf("unknown LLM provider: %s", askLLMProv)
 	}

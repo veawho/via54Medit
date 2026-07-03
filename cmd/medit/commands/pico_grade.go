@@ -42,14 +42,10 @@ nothing matches.`,
 
 var (
 	picoJSON    bool
-	picoNoLLM   bool
-	picoLLMProv string
 )
 
 func init() {
 	picoCmd.Flags().BoolVar(&picoJSON, "json", false, "Output JSON")
-	picoCmd.Flags().BoolVar(&picoNoLLM, "no-llm", false, "Force heuristic mode")
-	picoCmd.Flags().StringVar(&picoLLMProv, "llm", "hermes", "LLM provider: hermes | openai")
 }
 
 // --- systematic ---
@@ -77,9 +73,6 @@ func init() {
 	systematicCmd.Flags().BoolVar(&sysJSON, "json", false, "Output JSON")
 	systematicCmd.Flags().BoolVar(&sysNoSave, "no-save", false, "Don't persist to disk")
 	systematicCmd.Flags().BoolVar(&askNoAntfu, "no-antfu", false, "Skip antfu")
-	systematicCmd.Flags().BoolVar(&askNoLLM, "no-llm", false, "Skip LLM summary")
-	systematicCmd.Flags().StringVar(&askLLMProv, "llm", "hermes", "LLM provider")
-	systematicCmd.Flags().StringVar(&askLLMKey, "llm-api-key", "", "LLM API key")
 	systematicCmd.Flags().IntVar(&askMax, "max", 30, "Max citations per source (higher than ask default)")
 }
 
@@ -109,7 +102,7 @@ var listCmd = &cobra.Command{
 
 func runPico(cmd *cobra.Command, args []string) error {
 	r := router.NewRouter()
-	if !picoNoLLM {
+	if !askNoLLM {
 		if llm, err := buildLLM(); err == nil {
 			r.LLM = llm
 		}
@@ -141,7 +134,7 @@ func emptyOrVal(s string) string {
 }
 
 func runSystematic(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithTimeout(cmd.Context(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Minute)
 	defer cancel()
 
 	// [1] PICO
@@ -193,9 +186,15 @@ func runSystematic(cmd *cobra.Command, args []string) error {
 func buildRouterForSystematic(useLLM bool) *router.Router {
 	r := router.NewRouter()
 	r.Concurrency = 4
-	r.TimeoutPerSource = 30 * time.Second
 	r.MaxRetries = 1
-	for _, name := range parseSourceList(askSources) {
+	wanted := parseSourceList(askSources)
+	r.TimeoutPerSource = 30 * time.Second
+	for _, name := range wanted {
+		if name == "antfu" && !askNoAntfu {
+			r.TimeoutPerSource = askAntfuTO
+		}
+	}
+	for _, name := range wanted {
 		s, err := systemDefaultSource(name)
 		if err != nil {
 			continue

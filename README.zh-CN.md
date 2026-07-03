@@ -81,36 +81,46 @@ medit anno2ppt <package>    # 证据包 → PPT
 medit version               # 版本信息
 ```
 
-## 4 个 MCP 工具
+## 🤖 AI Agent 智能体与 Skill 接入
 
-> **Phase 0 状态**:`medit-mcp` 是 stub —— 启动后打印预期工具名（`medit_ask` / `medit_pico` / `medit_grade` / `medit_anno2ppt`）后退出 0。**真实 MCP transport（stdio）将在 Phase 4 实装**。
+本项目为各类 AI Agent 提供了开箱即用的对接方式：
 
-在 Claude Desktop / Cursor / VS Code Copilot 中:
+### A. MCP (Model Context Protocol) 协议接入
+项目提供了基于 Stdio 的 MCP 服务实现（位于 [cmd/medit-mcp](cmd/medit-mcp)，可编译为 `bin/medit-mcp`），注册并暴露了以下 4 个 Tools：
+* `medit_ask`：一句话循证检索 (4 源并发 + LLM 摘要)。
+* `medit_pico`：临床问题 PICO 要素提取。
+* `medit_grade`：对会话证据包执行 GRADE 证据质量评级。
+* `medit_anno2ppt`：将证据包导出为 PPT 幻灯片。
 
+在 Claude Desktop / Cursor 配置文件中添加以下配置即可调用：
 ```json
 {
   "mcpServers": {
     "medit": {
-      "command": "medit-mcp",
+      "command": "/Users/david/Desktop/developments/via54Medit/bin/medit-mcp",
       "args": []
     }
   }
 }
 ```
 
-工具:
-- `medit_ask` — 一句话循证检索
-- `medit_pico` — PICO 抽取
-- `medit_grade` — GRADE 评级
-- `medit_anno2ppt` — 证据包 → PPT
+### B. 本地 Workspace 技能 (Antigravity/Claude Skill)
+项目已打包好可供本地 Agent 自动扫描与装载的 Workspace Customization Skill：
+* **技能路径**：[.agents/skills/via54medit/SKILL.md](.agents/skills/via54medit/SKILL.md)
+* **作用**：当智能体在此工作区工作时，会自动发现并学会自主调用 `bin/medit` 的各个 CLI 命令（包含 `systematic` 等）来处理您的医学和文献相关任务。
+
+### C. 外部平台自定义技能 (Dify / FastGPT OpenAPI)
+项目在 `api/` 目录下提供了标准的 OpenAPI 3.0 接口规范文档：
+* **规范文件**：[api/openapi.yaml](api/openapi.yaml)
+* **使用方式**：您可以直接在 Dify 或 FastGPT 的“自定义工具 (Tools/Skills)”中粘贴此 OpenAPI yaml 定义，即可为您的云端 AI 助手配置标准的循证医学联合检索与分析能力。
 
 ## 路线图
 
-- **Phase 0** (现在) — 骨架
-- **Phase 1** (1 周) — 蚂蚁阿福 + PubMed 适配器
-- **Phase 2** (1 周) — OpenAlex + S2 + Router + 4 源融合
-- **Phase 3** (1 周) — PICO + GRADE + anno2ppt
-- **Phase 4** (3 天) — MCP Server + 跨平台 + scoop
+- **Phase 0** — 骨架
+- **Phase 1** — 蚂蚁阿福 + PubMed 适配器
+- **Phase 2** — OpenAlex + S2 + Router + 4 源融合
+- **Phase 3** — PICO + GRADE + anno2ppt
+- **Phase 4** — MCP Server + 跨平台 + scoop (当前已实装 stdio 传输)
 - **Phase 5** (持续) — 社区化
 
 详见 [ROADMAP.md](docs/ROADMAP.md)。

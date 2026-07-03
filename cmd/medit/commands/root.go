@@ -23,6 +23,14 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+var (
+	askLLMProv  string
+	askLLMEndp  string
+	askLLMKey   string
+	askLLMModel string
+	askNoLLM    bool
+)
+
 func init() {
 	// Global persistent flags
 	rootCmd.PersistentFlags().String("config", "",
@@ -37,6 +45,18 @@ func init() {
 		"Query language: zh | en | auto")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose logging")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable ANSI colors")
+
+	// Shared LLM configuration persistent flags
+	rootCmd.PersistentFlags().StringVar(&askLLMProv, "llm", "hermes",
+		"LLM provider: hermes | openai")
+	rootCmd.PersistentFlags().StringVar(&askLLMEndp, "llm-endpoint", "",
+		"Custom LLM endpoint")
+	rootCmd.PersistentFlags().StringVar(&askLLMKey, "llm-api-key", "",
+		"LLM API key (for openai)")
+	rootCmd.PersistentFlags().StringVar(&askLLMModel, "llm-model", "",
+		"LLM model name")
+	rootCmd.PersistentFlags().BoolVar(&askNoLLM, "no-llm", false,
+		"Skip LLM summary/extraction")
 
 	// Wire all 13 subcommands (Phase 0: all stubs that print "coming in Phase N")
 	registerAll()
