@@ -25,15 +25,16 @@ import (
 	"github.com/veawho/via54Medit/internal/source"
 )
 
-// CitationVerifier enriches extracted citations against PubMed/Crossref/SemScholar/ClinTrials.
+// CitationVerifier enriches extracted citations against PubMed/Crossref/SemScholar/ClinTrials/Antafu.
 type CitationVerifier struct {
 	pubmed *source.PubMedSource
 	client *http.Client
 
-	// Multi-source search backends (fallback after PubMed)
-	crossref  *client.CrossrefClient
-	semSch    *client.SemSchClient
-	clinTrials *client.ClinTrialsClient
+	// Multi-source search backends (fallback chain)
+	crossref    *client.CrossrefClient
+	semSch      *client.SemSchClient
+	clinTrials  *client.ClinTrialsClient
+	antafu      *client.AntafuClient
 
 	// Mutex for PubMed rate-limiting — serializes all requests to stay under 3 rps NCBI limit
 	mu sync.Mutex
@@ -52,6 +53,7 @@ func NewCitationVerifier() *CitationVerifier {
 		crossref:   client.NewCrossrefClient("via54medit@example.com"),
 		semSch:     client.NewSemSchClient(),
 		clinTrials: client.NewClinTrialsClient(),
+		antafu:     client.NewAntafuClient(),
 		tool:       "via54Medit",
 		email:      "cite@via54.com",
 	}
@@ -563,9 +565,113 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 		}
 	}
 
+	// Strategy 5: Multi-source fallback (Crossref → SemScholar → ClinTrials → Antafu)
+	// Only triggered when all PubMed strategies failed
+	if len(queryParts) > 0 {
+		searchQuery := strings.Join(queryParts, " AND ")
+		if c.TrialName != "" {
+			searchQuery = c.TrialName + " hepatocellular carcinoma"
+		} else {
+			// Use title fragments as search query for external APIs
+			titleTokens := strings.Fields(c.Title)
+			if len(titleTokens) >= 3 {
+				searchQuery = strings.Join(titleTokens[:5], " ")
+			} else if c.Authors != "" && c.Journal != "" {
+				searchQuery = c.Journal + " " + c.Authors
+			}
+		}
+		if searchQuery != "" {
+			hit = v.searchExternalSources(ctx, searchQuery)
+			if hit != nil {
+				v.applyHit(c, hit, "external-fallback")
+				return nil
+			}
+		}
+	}
+
 	c.Status = "unverified"
 	c.Message = fmt.Sprintf("PubMed search found no match for: %s", query)
 	return nil
+}
+
+// searchExternalSources tries Crossref, Semantic Scholar, ClinicalTrials, then Antafu.
+// Returns the first successful hit, or nil if all fail.
+func (v *CitationVerifier) searchExternalSources(ctx context.Context, query string) *EnrichmentHit {
+	// 1. Crossref
+	if result, err := v.crossref.Search(ctx, query); err == nil && result != nil {
+		if result.Title != "" || result.DOI != "" {
+			return &EnrichmentHit{
+				PMID:    result.PMID,
+				DOI:     result.DOI,
+				Title:   result.Title,
+				Journal: result.Journal,
+				Year:    result.Year,
+			}
+		}
+	}
+
+	// 2. Semantic Scholar
+	if result, err := v.semSch.Search(ctx, query); err == nil && result != nil {
+		if result.Title != "" || result.DOI != "" {
+			return &EnrichmentHit{
+				PMID:    result.PMID,
+				DOI:     result.DOI,
+				Title:   result.Title,
+				Journal: result.Journal,
+				Year:    result.Year,
+			}
+		}
+	}
+
+	// 3. ClinicalTrials (use trial name as query)
+	if result, err := v.clinTrials.Search(ctx, query); err == nil && result != nil {
+		if result.Title != "" {
+			return &EnrichmentHit{
+				PMID:    "",
+				DOI:     result.DOI,
+				Title:   result.Title,
+				Journal: result.Journal,
+				Year:    result.Year,
+			}
+		}
+	}
+
+	// 4. Antafu (natural language citation extraction)
+	// Antafu is the last resort — it requires a live browser session.
+	// If session is not available, this is skipped silently.
+	if v.antafu.IsEnabled() {
+		if response, err := v.antafu.Query(ctx, "请搜索并列出与以下医学文献相关的引用信息: "+query); err == nil && response != "" {
+			// Extract citation patterns from Antafu response
+			if text := extractCitationFromText(response); text != "" {
+				return &EnrichmentHit{
+					Title:   text,
+					Journal: "[antafu]",
+					Year:    0,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractCitationFromText pulls DOI/PMID patterns from free-form Antafu text.
+func extractCitationFromText(text string) string {
+	// Look for citation-like patterns
+	doiRe := regexp.MustCompile(`(10\.\d{4,9}/\S+)`)
+	pmidRe := regexp.MustCompile(`PMID\s*[:\-]?\s*(\d{6,9})`)
+	titleRe := regexp.MustCompile(`Title:\s*(.+?)$`)
+
+	for _, m := range doiRe.FindStringSubmatch(text) {
+		return fmt.Sprintf("DOI: %s", m)
+	}
+	for _, m := range pmidRe.FindStringSubmatch(text) {
+		return fmt.Sprintf("PMID: %s", m)
+	}
+	for _, m := range titleRe.FindStringSubmatch(text) {
+		return strings.TrimSpace(string(m[1]))
+	}
+	return ""
 }
 
 func (v *CitationVerifier) searchPubMed(ctx context.Context, query string, maxResults int) (*EnrichmentHit, error) {

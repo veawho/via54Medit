@@ -22,6 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/veawho/via54Medit/internal/cite/client"
 	"github.com/veawho/via54Medit/internal/source"
 	"github.com/veawho/via54Medit/pkg/types"
 )
@@ -66,6 +67,26 @@ var antfuHealthCmd = &cobra.Command{
 	RunE:  runAntfuHealth,
 }
 
+// antfuOpenCmd opens chat.antafu.com in the system default browser.
+var antfuOpenCmd = &cobra.Command{
+	Use:   "open",
+	Short: "Open chat.antafu.com in the system default browser (human login required)",
+	Long: `Launches the system default browser to chat.antafu.com.
+After logging in via QR code or password, run 'medit antfu capture' to extract
+the session tokens from Chrome's DevTools Protocol endpoint.`,
+	RunE: runAntfuOpen,
+}
+
+// antfuCaptureCmd extracts session tokens from a live Chrome browser via CDP.
+var antfuCaptureCmd = &cobra.Command{
+	Use:   "capture",
+	Short: "Capture Antafu session tokens from Chrome via CDP",
+	Long: `Connects to Chrome at cdp_url and extracts Authorization, did-token,
+and consultData from the chat.antafu.com page. Saves to ANTAFU_TOKEN_FILE
+(or ~/.medit/antafu_tokens.json by default).`,
+	RunE: runAntfuCapture,
+}
+
 var (
 	antfuCDP     string
 	antfuJSON    bool
@@ -81,7 +102,7 @@ func init() {
 
 	antfuHealthCmd.Flags().StringVar(&antfuCDP, "cdp-url", "http://localhost:9223", "Chrome DevTools Protocol base URL")
 
-	antfuCmd.AddCommand(antfuAskCmd, antfuExtractCmd, antfuHealthCmd)
+	antfuCmd.AddCommand(antfuAskCmd, antfuExtractCmd, antfuHealthCmd, antfuOpenCmd, antfuCaptureCmd)
 }
 
 func runAntfuAsk(cmd *cobra.Command, args []string) error {
@@ -155,5 +176,34 @@ func runAntfuHealth(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "antfu: Chrome reachable at %s\n", antfuCDP)
+	return nil
+}
+
+func runAntfuOpen(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(cmd.ErrOrStderr(), "[antafu] Opening chat.antafu.com in your default browser...\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "[antafu] Please log in (QR code or password).\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "[antafu] After login, run:  medit antfu capture\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "[antafu] Then:  medit antfu ask \"your medical question\"\n")
+
+	// Launch default browser using client package (cross-platform)
+	client.NewAntafuClient().OpenBrowser(cmd.Context())
+	return nil
+}
+
+func runAntfuCapture(cmd *cobra.Command, args []string) error {
+	fmt.Fprintf(cmd.ErrOrStderr(), "[antafu] Connecting to Chrome at %s...\n", antfuCDP)
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
+	defer cancel()
+
+	// Use client.AntafuClient to capture tokens
+	cl := client.NewAntafuClient()
+	cl.SetCDPURL(antfuCDP)
+	if err := cl.CaptureTokensViaCDP(ctx); err != nil {
+		return fmt.Errorf("capture: %w", err)
+	}
+
+	fmt.Fprintln(cmd.OutOrStdout(), "[antafu] ✓ Tokens captured and saved to ~/.medit/antafu_tokens.json")
+	fmt.Fprintln(cmd.OutOrStdout(), "[antafu] Ready. Run:  medit antfu ask \"your question\"")
 	return nil
 }
