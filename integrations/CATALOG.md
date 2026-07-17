@@ -32,14 +32,18 @@ via54Medit 从 v4.5 的 **单模式 EBM 学术路由器**,升级为 **双模式�
 
 ### 1.2 v5.0 优先级新增 (EBM)
 #### P0 必接 (REST 简单 + 高度互补)
-| ID | 源 | 互补维度 | 难度 | 推荐 MCP/SDK |
+| ID | 源 | 互补维度 | 难度 | 集成状态 |
 |---|---|---|---|---|
-| `clinicaltrials_v2` | ClinicalTrials.gov v2 | 文献+试验 | 低 | genomoncology/biomcp 或 cyanheads |
-| `europe_pmc` | Europe PMC 4000万+ | 全文+预印+专利 | 低 | 自写 (REST 简单) |
-| `medrxiv_biorxiv` | medRxiv/bioRxiv API | 灰色文献 | 低 | pipeworx-io/mcp-biorxiv |
-| `openfda` | OpenFDA 14 tools | 药物安全 | 低 | cyanheads/openfda-mcp-server |
-| `dailymed` | DailyMed SPL 15万+ | 药物标签 | 低 | 自写 |
-| `pubtator3` | PubTator 3.0 | 实体标注/NLP | 低 | 自写 |
+| `clinicaltrials_v2` | ClinicalTrials.gov v2 | 文献+试验 | 低 | 📋 Phase 2.5 |
+| `europe_pmc` | Europe PMC 4000万+ | 全文+预印+专利 | 低 | 📋 Phase 2.5 |
+| `medrxiv_biorxiv` | medRxiv/bioRxiv API | 灰色文献 | 低 | 📋 Phase 2.5 |
+| `openfda` | OpenFDA 14 tools | 药物安全 | 低 | 📋 Phase 2.5 |
+| `dailymed` | DailyMed SPL 15万+ | 药物标签 | 低 | 📋 Phase 2.5 |
+| `pubtator3` | PubTator 3.0 | 实体标注/NLP | 低 | 📋 Phase 2.5 |
+| `sci_hub` | Sci-Hub mirrors | 全文 PDF URL | 低 (HEAD+GET) | ✅ Phase 2 |
+| `gscholar` | Google Scholar (HTML scrape) | 引用聚焦+全文 | 中 | ✅ Phase 2 |
+| `download` | FullTextFinder 5-tier PDF download | 全文 PDF 下载 | 中 (CDP) | ✅ Phase 2 |
+| `docproc` | 临床文档处理流水线 | 实体抽取+SOAP摘要 | 低 (LLM) | ✅ Phase 2 |
 
 #### P1 推荐 (REST 中等 + 高度互补)
 | ID | 源 | 数据 | 难度 |

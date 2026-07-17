@@ -212,6 +212,56 @@ func (e *PubMedEnricher) Enrich(ctx context.Context, c *types.Citation, force bo
 	return []string{"validated"}, nil
 }
 
+// SciHubEnricher resolves a citation to a Sci-Hub PDF URL when the
+// OAPDFURL field is empty (i.e., no open-access PDF was found).
+// It uses DOI first, falling back to PMID.
+type SciHubEnricher struct {
+	source *source.SciHubSource
+}
+
+// NewSciHubEnricher builds a Sci-Hub enricher with the given mirror
+// configuration.
+func NewSciHubEnricher(mirrors string) *SciHubEnricher {
+	cfg := map[string]any{"enabled": true}
+	if mirrors != "" {
+		cfg["mirrors"] = mirrors
+	}
+	s, _ := source.NewSciHubSource(cfg)
+	return &SciHubEnricher{source: s}
+}
+
+func (e *SciHubEnricher) Name() string { return "sci-hub" }
+
+func (e *SciHubEnricher) Enrich(ctx context.Context, c *types.Citation, force bool) ([]string, error) {
+	// Only fill Sci-Hub URL if OAPDFURL is empty (we only use Sci-Hub
+	// when no legitimate OA PDF is available) and the citation has an
+	// identifier we can resolve.
+	if !force && c.SciHubURL != "" {
+		return nil, nil
+	}
+
+	identifier := ""
+	// Prefer DOI over PMID for resolution (DOI is more universally unique)
+	if c.DOI != "" {
+		identifier = c.DOI
+	} else if c.PMID != "" {
+		identifier = c.PMID
+	}
+	if identifier == "" {
+		return nil, nil // nothing to resolve
+	}
+
+	pdfURL, err := e.source.Resolve(ctx, identifier)
+	if err != nil {
+		// Sci-Hub failures are non-fatal: other enrichers may still work.
+		// We return nil (no action) so the pipeline continues.
+		return nil, nil
+	}
+
+	c.SciHubURL = pdfURL
+	return []string{"sci_hub_url"}, nil
+}
+
 // JSON returns the enriched citations as JSON (for piping into medit index).
 // Convenience for `medit enrich refs.json --json`.
 func (p *Pipeline) JSON(citations []types.Citation) (string, error) {

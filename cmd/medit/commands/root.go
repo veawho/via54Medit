@@ -71,11 +71,14 @@ func registerAll() {
 	rootCmd.AddCommand(systematicCmd) // systematic <query>
 	rootCmd.AddCommand(gradeCmd)      // grade <package>
 
-	// --- Source adapters (4) ---
+	// --- Source adapters (6) ---
 	rootCmd.AddCommand(pubmedCmd)   // pubmed <subcmd>
 	rootCmd.AddCommand(openalexCmd) // openalex <subcmd>
 	rootCmd.AddCommand(s2Cmd)       // s2 <subcmd>
 	rootCmd.AddCommand(antfuCmd)    // antfu <subcmd>
+	rootCmd.AddCommand(sciHubCmd)   // sci-hub <doi|pmid>
+	rootCmd.AddCommand(gScholarCmd) // gscholar <query>
+	rootCmd.AddCommand(fullTextCmd) // fulltext <search|download>
 
 	// --- Enrich + persist (3) ---
 	rootCmd.AddCommand(enrichCmd) // enrich <refs.json>
@@ -85,11 +88,22 @@ func registerAll() {
 	// --- Render (1) ---
 	rootCmd.AddCommand(anno2pptCmd) // anno2ppt <package>
 
+	// --- Document processing (2) ---
+	rootCmd.AddCommand(docprocCmd) // docproc <file>
+	rootCmd.AddCommand(pptxCmd)    // pptx verify|extract <file.pptx>
+
+	// --- Citation extraction (1) ---
+	rootCmd.AddCommand(NewCiteCommand()) // cite extract|verify|list <file>
+
 	// --- Phase 3 additions (pico_grade.go) ---
 	rootCmd.AddCommand(picoCmd)       // pico <query>
 	rootCmd.AddCommand(systematicCmd) // systematic <query>
 	rootCmd.AddCommand(gradeCmd)      // grade <conv_id>
 	rootCmd.AddCommand(listCmd)       // list (saved conversations)
+
+	// --- pptx sub-subcommands ---
+	pptxCmd.AddCommand(pptxVerifyCmd)  // pptx verify <file.pptx>
+	pptxCmd.AddCommand(pptxExtractCmd) // pptx extract <file.pptx>
 
 	// --- Meta (1, already in root.Version) ---
 	// rootCmd.AddCommand(versionCmd) is implicit via root.Version

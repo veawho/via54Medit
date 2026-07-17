@@ -93,7 +93,11 @@ type Citation struct {
 	CitedBy  int     `json:"cited_by,omitempty"`   // from S2
 	FWCI     float64 `json:"fwci,omitempty"`       // from OpenAlex
 	TLDR     string  `json:"tldr,omitempty"`       // from S2 AI summary
-	OAPDFURL string  `json:"oa_pdf_url,omitempty"` // Open Access PDF
+	// OAPDFURL is a direct link to the open-access PDF of the article.
+	OAPDFURL string `json:"oa_pdf_url,omitempty"` // Open Access PDF
+
+	// SciHubURL is a resolved Sci-Hub mirror URL when OA PDF is unavailable.
+	SciHubURL string `json:"sci_hub_url,omitempty"` // Sci-Hub PDF URL (when OAPDFURL is empty)
 
 	// Provenance
 	SourceOrigin []string `json:"source_origin"` // which sources returned this

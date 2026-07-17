@@ -52,6 +52,8 @@ func NewDefaultConfig() *Config {
 				"openalex": map[string]any{"enabled": true, "rate_limit": 10},
 				"s2":       map[string]any{"enabled": true, "rate_limit": 1},
 				"antfu":    map[string]any{"enabled": true, "cdp_url": "http://localhost:9223", "deep_search": true, "timeout": "120s"},
+				"sci_hub":  map[string]any{"enabled": false, "mirrors": "sci-hub.se,sci-hub.ru,sci-hub.st", "rate_limit": 1},
+				"gscholar": map[string]any{"enabled": false, "rate_limit": 6},
 			},
 			"embedder":    {"default": "bge-m3", "bge-m3": map[string]any{"device": "auto", "max_length": 8192}},
 			"vectorstore": {"default": "qdrant", "qdrant": map[string]any{"url": "http://localhost:6333", "collection": "medlit"}},
@@ -59,6 +61,14 @@ func NewDefaultConfig() *Config {
 			"router":      {"concurrency": 4, "timeout_per_source": "30s", "max_retries": 3, "fallback_order": []string{"antfu", "pubmed", "openalex", "s2"}},
 			"storage":     {"qa_dir": "~/.medit/qa", "index_db": "~/.medit/fts5.db", "pdf_dir": "~/.medit/pdfs", "audit_log": "~/.medit/audit"},
 			"output":      {"default_format": "json", "pretty": true, "color": "auto", "language": "auto"},
+			"download": map[string]any{
+				"enabled":     false,
+				"chrome_cdp":  "ws://localhost:9223",
+				"cookie_file": "~/.medit/scihub_cookies.txt",
+				"output_dir":  "~/.medit/pdfs",
+				"springer_rps": 0.5,
+				"api_rps":      1.0,
+			},
 		},
 	}
 }

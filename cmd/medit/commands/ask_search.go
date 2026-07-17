@@ -136,6 +136,16 @@ func buildRouter(useLLM bool) (*router.Router, error) {
 				return nil, err
 			}
 			r.AddSource(s)
+		case "gscholar":
+			s, err := source.NewGScholarSource(map[string]any{
+				"enabled": true,
+				"rate_limit": 6, // 6 req/min
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: gscholar: %v\n", err)
+				continue
+			}
+			r.AddSource(s)
 		case "antfu":
 			if askNoAntfu {
 				continue

@@ -9,7 +9,7 @@ import (
 func TestNewDefaultConfigHasAllSections(t *testing.T) {
 	cfg := NewDefaultConfig()
 
-	wantSections := []string{"sources", "embedder", "vectorstore", "llm", "router", "storage", "output"}
+	wantSections := []string{"sources", "embedder", "vectorstore", "llm", "router", "storage", "output", "download"}
 	got := cfg.SectionNames()
 	if len(got) != len(wantSections) {
 		t.Errorf("SectionNames() = %v, want %d sections", got, len(wantSections))
