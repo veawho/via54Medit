@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -103,12 +104,48 @@ func (v *CitationVerifier) Verify(ctx context.Context, c *Citation) error {
 	}
 
 	// 4. PubMed fallback search
-	if err := v.searchPubMedFallback(ctx, c); err != nil {
-		c.Status = "error"
-		c.Message = err.Error()
-		return err
+	v.searchPubMedFallback(ctx, c)
+
+	// 5. Always try external sources if not verified (even after unverified)
+	//    This catches PubMed-failed + 429 + genuinely unmatched cases
+	if c.Status != "verified" {
+		// Only update if external finds a match; otherwise keep existing message
+		prevMsg := c.Message
+		if err := v.fallbackToExternal(ctx, c); err != nil {
+			c.Message = prevMsg
+			return err
+		}
+		// If fallback found a match, status is now "verified" — keep it
+		return nil
 	}
 
+	return nil
+}
+
+// fallbackToExternal attempts to resolve a citation via external sources
+// when PubMed fails (typically HTTP 429 rate limiting).
+func (v *CitationVerifier) fallbackToExternal(ctx context.Context, c *Citation) error {
+	// Build a search query from available fields
+	var query string
+	if c.Title != "" {
+		query = c.Title
+	} else if c.Authors != "" && c.Journal != "" {
+		query = c.Journal + " " + c.Authors
+	} else {
+		c.Status = "unverified"
+		c.Message = "no searchable fields for external fallback"
+		return nil
+	}
+
+	// Try external sources in order
+	hit := v.searchExternalSources(ctx, query, c)
+	if hit != nil {
+		v.applyHit(c, hit, "external-fallback-on-error")
+		return nil
+	}
+
+	c.Status = "unverified"
+	c.Message = "external sources also returned no match"
 	return nil
 }
 
@@ -416,16 +453,40 @@ func hasMajorityChinese(s string) bool {
 	return total > 0 && chinese > total/2
 }
 
+// stripChinesePrefix removes leading Chinese text from an author string,
+// keeping only the Latin/Persian author name portion. This handles cases where
+// the PPTX extraction prepends slide text before the citation.
+func stripChinesePrefix(s string) string {
+	// Find first Latin letter, comma, or dot
+	idx := -1
+	for i, ch := range s {
+		if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == ',' || ch == '.' {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "" // no Latin letters found
+	}
+	return strings.TrimSpace(s[idx:])
+}
+
 func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation) error {
 	// Rate-limit before making any network request
 	v.takeToken(ctx)
 	defer v.releaseToken()
 
-	// Skip if raw citation is mostly Chinese body text — not a real citation
-	if hasMajorityChinese(c.Authors) {
-		c.Status = "unverified"
-		c.Message = "citation contains majority Chinese text, not a searchable citation"
-		return nil
+	// If raw author text is majority Chinese, try stripping the prefix first
+	cleanedAuthors := c.Authors
+	if hasMajorityChinese(cleanedAuthors) {
+		cleanedAuthors = stripChinesePrefix(cleanedAuthors)
+		// If still empty after stripping, skip
+		if cleanedAuthors == "" {
+			c.Status = "unverified"
+			c.Message = "citation contains majority Chinese text, not a searchable citation"
+			return nil
+		}
+		c.Authors = cleanedAuthors
 	}
 
 	// Conference abstracts: flag but try trial-name fallback first
@@ -441,7 +502,7 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 	var queryParts []string
 
 	// Authors: use only first author's surname (no initials/et al./body text)
-	firstAuthor := c.Authors
+	firstAuthor := cleanedAuthors
 	if firstAuthor != "" {
 		// Take only first comma-separated segment, trim spaces/punctuation
 		firstAuthor = strings.Split(firstAuthor, ",")[0]
@@ -491,6 +552,14 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 	}
 
 	if len(queryParts) == 0 {
+		// No structured fields — but try external sources first before giving up
+		if c.Authors != "" && c.Journal != "" {
+			hit := v.searchExternalSources(ctx, c.Authors+" "+c.Journal, c)
+			if hit != nil {
+				v.applyHit(c, hit, "external-no-fields")
+				return nil
+			}
+		}
 		c.Status = "unverified"
 		c.Message = "no searchable fields available"
 		return nil
@@ -581,7 +650,7 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 			}
 		}
 		if searchQuery != "" {
-			hit = v.searchExternalSources(ctx, searchQuery)
+			hit = v.searchExternalSources(ctx, searchQuery, c)
 			if hit != nil {
 				v.applyHit(c, hit, "external-fallback")
 				return nil
@@ -590,40 +659,53 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 	}
 
 	c.Status = "unverified"
-	c.Message = fmt.Sprintf("PubMed search found no match for: %s", query)
+	c.Message = "no match in any source"
 	return nil
 }
 
 // searchExternalSources tries Crossref, Semantic Scholar, ClinicalTrials, then Antafu.
 // Returns the first successful hit, or nil if all fail.
-func (v *CitationVerifier) searchExternalSources(ctx context.Context, query string) *EnrichmentHit {
-	// 1. Crossref
-	if result, err := v.crossref.Search(ctx, query); err == nil && result != nil {
-		if result.Title != "" || result.DOI != "" {
-			return &EnrichmentHit{
-				PMID:    result.PMID,
-				DOI:     result.DOI,
-				Title:   result.Title,
-				Journal: result.Journal,
-				Year:    result.Year,
+func (v *CitationVerifier) searchExternalSources(ctx context.Context, query string, c *Citation) *EnrichmentHit {
+	// Try multiple queries for better match rate
+	queries := []string{query}
+	if c.Volume != "" && c.Issue != "" {
+		queries = append(queries, c.Journal+" volume="+c.Volume+" issue="+c.Issue)
+	}
+	if c.Pages != "" {
+		queries = append(queries, c.Journal+" page="+c.Pages)
+	}
+
+	// 1. Crossref (try multiple queries)
+	for _, q := range queries {
+		if result, err := v.crossref.Search(ctx, q); err == nil && result != nil {
+			if result.Title != "" || result.DOI != "" {
+				return &EnrichmentHit{
+					PMID:    result.PMID,
+					DOI:     result.DOI,
+					Title:   result.Title,
+					Journal: result.Journal,
+					Year:    result.Year,
+				}
 			}
 		}
 	}
 
 	// 2. Semantic Scholar
-	if result, err := v.semSch.Search(ctx, query); err == nil && result != nil {
-		if result.Title != "" || result.DOI != "" {
-			return &EnrichmentHit{
-				PMID:    result.PMID,
-				DOI:     result.DOI,
-				Title:   result.Title,
-				Journal: result.Journal,
-				Year:    result.Year,
+	for _, q := range queries {
+		if result, err := v.semSch.Search(ctx, q); err == nil && result != nil {
+			if result.Title != "" || result.DOI != "" {
+				return &EnrichmentHit{
+					PMID:    result.PMID,
+					DOI:     result.DOI,
+					Title:   result.Title,
+					Journal: result.Journal,
+					Year:    result.Year,
+				}
 			}
 		}
 	}
 
-	// 3. ClinicalTrials (use trial name as query)
+	// 3. ClinicalTrials
 	if result, err := v.clinTrials.Search(ctx, query); err == nil && result != nil {
 		if result.Title != "" {
 			return &EnrichmentHit{
@@ -636,12 +718,9 @@ func (v *CitationVerifier) searchExternalSources(ctx context.Context, query stri
 		}
 	}
 
-	// 4. Antafu (natural language citation extraction)
-	// Antafu is the last resort — it requires a live browser session.
-	// If session is not available, this is skipped silently.
+	// 4. Antafu (last resort — requires live browser session)
 	if v.antafu.IsEnabled() {
 		if response, err := v.antafu.Query(ctx, "请搜索并列出与以下医学文献相关的引用信息: "+query); err == nil && response != "" {
-			// Extract citation patterns from Antafu response
 			if text := extractCitationFromText(response); text != "" {
 				return &EnrichmentHit{
 					Title:   text,
@@ -675,58 +754,78 @@ func extractCitationFromText(text string) string {
 }
 
 func (v *CitationVerifier) searchPubMed(ctx context.Context, query string, maxResults int) (*EnrichmentHit, error) {
-	params := url.Values{
-		"db":      {"pubmed"},
-		"term":    {query},
-		"retmax":  {strconv.Itoa(maxResults)},
-		"retmode": {"json"},
-		"sort":    {"relevance"},
-	}
-	params.Set("tool", v.tool)
+	const maxRetries = 3
 
-	req, err := http.NewRequestWithContext(ctx, "GET",
-		"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"+params.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff on 429: 2s, 4s, 8s
+			backoff := time.Duration(2) * time.Second * time.Duration(1<<uint(attempt-1))
+			time.Sleep(backoff)
+		}
 
-	resp, err := v.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		params := url.Values{
+			"db":      {"pubmed"},
+			"term":    {query},
+			"retmax":  {strconv.Itoa(maxResults)},
+			"retmode": {"json"},
+			"sort":    {"relevance"},
+		}
+		params.Set("tool", v.tool)
 
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("pubmed esearch HTTP %d", resp.StatusCode)
-	}
+		req, err := http.NewRequestWithContext(ctx, "GET",
+			"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"+params.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
 
-	// Parse response — extract PMID list
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	raw := string(data)
+		resp, err := v.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
 
-	// Extract PMID list: "idlist":["pmid1","pmid2",...] (NCBI returns lowercase)
-	var pmids []string
-	if m := regexp.MustCompile(`"idlist":\[([^\]]+)\]`).FindStringSubmatch(raw); len(m) > 1 {
-		// Parse the array
-		parts := strings.Split(m[1], ",")
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			p = strings.Trim(p, `"`)
-			if p != "" {
-				pmids = append(pmids, p)
+		// On 429, retry with backoff
+		if resp.StatusCode == 429 {
+			resp.Body.Close()
+			continue
+		}
+
+		if resp.StatusCode/100 != 2 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("pubmed esearch HTTP %d", resp.StatusCode)
+		}
+
+		// Parse response — extract PMID list
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		raw := string(data)
+
+		// Extract PMID list: "idlist":["pmid1","pmid2",...] (NCBI returns lowercase)
+		var pmids []string
+		if m := regexp.MustCompile(`"idlist":\[([^\]]+)\]`).FindStringSubmatch(raw); len(m) > 1 {
+			// Parse the array (m[1] is the captured group between brackets)
+			for _, p := range strings.Split(m[1], ",") {
+				p = strings.TrimSpace(p)
+				p = strings.Trim(p, `"[ ]`)
+				if p != "" && p != "[" && p != "]" {
+					pmids = append(pmids, p)
+				}
 			}
 		}
+
+		if len(pmids) == 0 {
+			return nil, nil
+		}
+
+		// Get summary for first PMID
+		return v.lookupPubMedByID(ctx, pmids[0])
 	}
 
-	if len(pmids) == 0 {
-		return nil, nil
-	}
-
-	// Get summary for first PMID
-	return v.lookupPubMedByID(ctx, pmids[0])
+	// All retries exhausted — return nil (not error) so fallback chain can try other sources
+	fmt.Fprintf(os.Stderr, "[verifier] PubMed esearch exhausted retries for query: %s\n", query)
+	return nil, nil
 }
 
 // ---------------------------------------------------------------------------
