@@ -344,30 +344,88 @@ func (f *CitationFinder) ParseCitation(raw string) *Citation {
 		cite.DOI = m[1]
 	}
 
+	// Detect trial name from known trials
+	cite.TrialName = f.detectTrialName(raw)
+	cite.IsTrialPaper = cite.TrialName != ""
+
 	return cite
+}
+
+// detectTrialName checks if the citation mentions any known trial name.
+func (f *CitationFinder) detectTrialName(raw string) string {
+	// Build a regex from all known trial names
+	trials := AllTrials()
+	if len(trials) == 0 {
+		return ""
+	}
+	for _, t := range trials {
+		// Look for the trial name (case-insensitive) in the raw text
+		// Use \b for word boundary to avoid false matches like "HIMALAYA-xx"
+		pat := `(?i)\b` + regexp.QuoteMeta(t.Name) + `\b`
+		if regexp.MustCompile(pat).MatchString(raw) {
+			return t.Name
+		}
+	}
+	return ""
 }
 
 // extractAuthors extracts author names from the citation.
 func (f *CitationFinder) extractAuthors(raw string) string {
-	// Find text before first journal name or conference marker or before "; "
-	// Authors typically come before the journal name
-	// Try journal first
-	if m := f.patJournal.FindStringIndex(raw); m != nil {
-		return strings.TrimSpace(raw[:m[0]])
+	// Only process the citation segment (after numbered reference prefix), not body text.
+	// Strip numbered prefix like "1. " or "[1] "
+	s := raw
+	if numPat := regexp.MustCompile(`^\s*\[?\d+\]?\.?\s*`); numPat.MatchString(s) {
+		s = numPat.ReplaceAllString(s, "")
 	}
+	// Strip leading punctuation (*, -, etc.)
+	s = strings.TrimLeft(s, "*-–— ")
+
+	// Authors typically end at "et al." or before first comma/semicolon.
+	// Try "et al." boundary first
+	for _, marker := range []string{"et al.", "et al, ", "et al."} {
+		idx := strings.Index(s, marker)
+		if idx > 0 {
+			// Take everything up to and including the author before "et al."
+			// e.g. "Lau G, et al. 2025..." → "Lau G"
+			s = strings.TrimSpace(s[:idx])
+			// Remove trailing punctuation
+			s = strings.TrimRight(s, ",.;:")
+			return s
+		}
+	}
+
+	// Try comma: "Lau G, et al." → "Lau G"
+	commaIdx := strings.Index(s, ",")
+	if commaIdx > 0 && commaIdx < 20 { // small window = likely first author
+		return strings.TrimSpace(s[:commaIdx])
+	}
+
+	// Try journal name boundary
+	if m := f.patJournal.FindStringIndex(s); m != nil {
+		return strings.TrimSpace(s[:m[0]])
+	}
+
 	// Try conference marker
-	if m := f.patConf.FindStringIndex(raw); m != nil {
-		return strings.TrimSpace(raw[:m[0]])
+	if m := f.patConf.FindStringIndex(s); m != nil {
+		return strings.TrimSpace(s[:m[0]])
 	}
-	// Try "presented at"
-	if idx := strings.Index(raw, "presented at"); idx > 0 {
-		return strings.TrimSpace(raw[:idx])
+
+	// Try year (4-digit) boundary — take text before first year
+	if m := f.patYear.FindStringIndex(s); m != nil {
+		return strings.TrimSpace(s[:m[0]])
 	}
-	// Fallback: take text before first semicolon or first uppercase word that looks like a title
-	if idx := strings.Index(raw, ";"); idx > 0 {
-		return strings.TrimSpace(raw[:idx])
+
+	// Fallback: take first 30 chars (typically first author surname + initials)
+	s = strings.TrimSpace(s)
+	if len(s) > 30 {
+		s = s[:30]
+		// Truncate at word boundary
+		idx := strings.LastIndex(s, " ")
+		if idx > 5 {
+			s = s[:idx]
+		}
 	}
-	return ""
+	return s
 }
 
 // extractJournal extracts the journal name or conference/abstract marker from the citation.
@@ -486,7 +544,7 @@ func (p *Pipeline) Run(ctx interface{}) ([]Citation, error) {
 	return citations, nil
 }
 
-// VerifyAll enriches all citations in the pipeline.
+// VerifyAll enriches all citations sequentially with rate-limiting.
 func (p *Pipeline) VerifyAll(citations []Citation) {
 	ctx := context.Background()
 	for i := range citations {

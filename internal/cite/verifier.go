@@ -29,11 +29,8 @@ type CitationVerifier struct {
 	pubmed *source.PubMedSource
 	client *http.Client
 
-	// Rate-limited PubMed token bucket
-	mu       sync.Mutex
-	tokens   float64
-	lastFill time.Time
-	rps      float64
+	// Mutex for PubMed rate-limiting — serializes all requests to stay under 3 rps NCBI limit
+	mu sync.Mutex
 
 	// User-Agent / contact
 	tool  string
@@ -48,7 +45,6 @@ func NewCitationVerifier() *CitationVerifier {
 		client: &http.Client{Timeout: 15 * time.Second},
 		tool:   "via54Medit",
 		email:  "cite@via54.com",
-		rps:    3, // anonymous NCBI limit
 	}
 }
 
@@ -60,7 +56,9 @@ func NewCitationVerifier() *CitationVerifier {
 func (v *CitationVerifier) Verify(ctx context.Context, c *Citation) error {
 	// 1. Direct PMID lookup
 	if c.PMID != "" {
+		v.takeToken(ctx)
 		hit, err := v.lookupPubMedByID(ctx, c.PMID)
+		v.releaseToken()
 		if err == nil && hit != nil {
 			v.applyHit(c, hit, "pubmed-pmid")
 			return nil
@@ -69,7 +67,9 @@ func (v *CitationVerifier) Verify(ctx context.Context, c *Citation) error {
 
 	// 2. Direct DOI lookup
 	if c.DOI != "" {
+		v.takeToken(ctx)
 		hit, err := v.lookupCrossrefByDOI(ctx, c.DOI)
+		v.releaseToken()
 		if err == nil && hit != nil {
 			v.applyHit(c, hit, "crossref-doi")
 			return nil
@@ -126,7 +126,9 @@ func (v *CitationVerifier) applyHit(c *Citation, hit *EnrichmentHit, source stri
 // ---------------------------------------------------------------------------
 
 func (v *CitationVerifier) lookupPubMedByID(ctx context.Context, pmid string) (*EnrichmentHit, error) {
-	v.takeToken(ctx)
+	// Rate-limiting is handled by the caller (Verify or searchPubMed).
+	// lookupPubMedByID is a leaf function that must NOT acquire its own lock,
+	// because it can be called from within searchPubMed (which already holds the lock).
 	params := url.Values{
 		"db":      {"pubmed"},
 		"id":      {pmid},
@@ -178,10 +180,10 @@ func (v *CitationVerifier) parseESummaryJSON(ctx context.Context, body interface
 		hit.Journal = m[1]
 	}
 
-	// Extract DOI
-	doiRe := regexp.MustCompile(`"elocationid":"(10\.[^"]*)"`)
-	if m := doiRe.FindStringSubmatch(raw); len(m) > 1 {
-		hit.DOI = m[1]
+	// Extract DOI (e.g. "doi: 10.1016/..." or "10.1016/...")
+	doiRe := regexp.MustCompile(`"elocationid":"(doi:\s*)?(10\.[^"]*)"`)
+	if m := doiRe.FindStringSubmatch(raw); len(m) > 2 {
+		hit.DOI = m[2]
 	}
 
 	// Extract year from pubdate
@@ -288,6 +290,10 @@ func (v *CitationVerifier) parseCrossrefRaw(ctx context.Context, body interface{
 // ---------------------------------------------------------------------------
 
 func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation) error {
+	// Rate-limit before making any network request
+	v.takeToken(ctx)
+	defer v.releaseToken()
+
 	// Build search query from available fields
 	var queryParts []string
 
@@ -375,9 +381,9 @@ func (v *CitationVerifier) searchPubMed(ctx context.Context, query string, maxRe
 	}
 	raw := string(data)
 
-	// Extract PMID list: "IdList":["pmid1","pmid2",...]
+	// Extract PMID list: "idlist":["pmid1","pmid2",...] (NCBI returns lowercase)
 	var pmids []string
-	if m := regexp.MustCompile(`"IdList":\[([^\]]+)\]`).FindStringSubmatch(raw); len(m) > 1 {
+	if m := regexp.MustCompile(`"idlist":\[([^\]]+)\]`).FindStringSubmatch(raw); len(m) > 1 {
 		// Parse the array
 		parts := strings.Split(m[1], ",")
 		for _, p := range parts {
@@ -401,30 +407,24 @@ func (v *CitationVerifier) searchPubMed(ctx context.Context, query string, maxRe
 // Token bucket for PubMed rate limiting
 // ---------------------------------------------------------------------------
 
+// takeToken acquires the rate-limit mutex for the duration of the request.
+// NCBI anonymous limit is 3 req/sec; we hold the lock for ~250ms per call.
 func (v *CitationVerifier) takeToken(ctx context.Context) {
-	v.mu.Lock()
-	now := time.Now()
-	elapsed := now.Sub(v.lastFill).Seconds()
-	v.tokens += elapsed * v.rps
-	if v.tokens > v.rps {
-		v.tokens = v.rps
-	}
-	v.lastFill = now
-
-	if v.tokens >= 1 {
-		v.tokens--
-		v.mu.Unlock()
-		return
-	}
-
-	// Wait
-	wait := time.Duration((1-v.tokens)/v.rps*float64(time.Second))
-	v.mu.Unlock()
 	select {
 	case <-ctx.Done():
-		// context cancelled
-	case <-time.After(wait):
+		return
+	default:
+		v.mu.Lock()
 	}
+}
+
+// releaseToken releases the rate-limit mutex and waits to stay under 3 rps.
+// 400ms between requests = 2.5 rps max, safely under NCBI's 3 rps anonymous limit.
+func (v *CitationVerifier) releaseToken() {
+	v.mu.Unlock()
+	// Wait ~400ms between requests to stay under NCBI 3 rps anonymous limit
+	// With request time ~100-200ms, this gives ~2.5 rps average
+	time.Sleep(400 * time.Millisecond)
 }
 
 // ---------------------------------------------------------------------------

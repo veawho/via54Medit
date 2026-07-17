@@ -83,7 +83,7 @@ func citeCmdVerify(file string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[verify] verifying %d citations via PubMed/Crossref...\n", len(citations))
+	fmt.Fprintf(os.Stderr, "[verify] verifying %d citations via PubMed/Crossref...\n", len(citations))
 	pipeline, err := cite.NewPipeline(file)
 	if err != nil {
 		return fmt.Errorf("pipeline: %w", err)
