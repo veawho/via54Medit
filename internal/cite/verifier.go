@@ -286,39 +286,194 @@ func (v *CitationVerifier) parseCrossrefRaw(ctx context.Context, body interface{
 }
 
 // ---------------------------------------------------------------------------
-// PubMed fallback search (author + journal + year)
+// NLM journal abbreviation mapping (extracted name → PubMed NLM abbreviation)
+// Used by searchPubMedFallback to normalize journal names before querying.
+// Source: PubMed Journal-Link NLM catalog (https://www.nlm.nih.gov/databases/
 // ---------------------------------------------------------------------------
+var journalNLM = map[string]string{
+	"lancet":                           "Lancet",
+	"lancet oncol":                     "Lancet Oncol",
+	"lancet gastroenterol":             "Lancet Gastroenterol Hepatol",
+	"lancet hematology":                "Lancet Haematol",
+	"new england journal of medicine":  "N Engl J Med",
+	"new england jour":                 "N Engl J Med",
+	"nejm":                             "N Engl J Med",
+	"jama":                             "JAMA",
+	"journal of clinical oncology":     "J Clin Oncol",
+	"j clin oncol":                     "J Clin Oncol",
+	"journal of hepatology":            "J Hepatol",
+	"j hepatol":                        "J Hepatol",
+	"hepatology":                       "Hepatology",
+	"hepatology communications":        "Hepatol Commun",
+	"hepatobiliary surgery and nutrition": "Hepatobiliary Surg Nutr",
+	"hepatol int":                      "Hepatol Int",
+	"hepatology international":         "Hepatol Int",
+	"clin cancer res":                  "Clin Cancer Res",
+	"clinical cancer research":         "Clin Cancer Res",
+	"annals of oncology":               "Ann Oncol",
+	"ann oncol":                        "Ann Oncol",
+	"alimentary pharmacology and therapeutics": "Aliment Pharmacol Ther",
+	"alim pharmacol ther":              "Aliment Pharmacol Ther",
+	"jama oncology":                    "JAMA Oncol",
+	"gastroenterology":                 "Gastroenterology",
+	"front immunol":                    "Front Immunol",
+	"int j mol sci":                    "Int J Mol Sci",
+	"med sci monit":                    "Med Sci Monit",
+	"medicine":                         "Medicine",
+	"liver cancer":                     "Liver Cancer",
+	"liver int":                        "Liver Int",
+	"nature medicine":                  "Nat Med",
+	"nat med":                          "Nat Med",
+	"nature communications":            "Nat Commun",
+	"nat commun":                       "Nat Commun",
+	"nature reviews cancer":            "Nat Rev Cancer",
+	"nat rev cancer":                   "Nat Rev Cancer",
+	"nature reviews immunology":        "Nat Rev Immunol",
+	"nat rev immunol":                  "Nat Rev Immunol",
+	"nature reviews clinical oncology": "Nat Rev Clin Oncol",
+	"nat rev clin oncol":               "Nat Rev Clin Oncol",
+	"cell":                             "Cell",
+	"science":                          "Science",
+	"cancers":                          "Cancers",
+	"onco targets ther":                "Onco Targets Ther",
+	"oncotarget":                       "Oncotarget",
+	"anti cancer research":             "Anticancer Res",
+	"anticancer research":              "Anticancer Res",
+	"jama interna med":                 "JAMA Intern Med",
+	"jama intern med":                  "JAMA Intern Med",
+	"j clin gastroenterol":             "J Clin Gastroenterol",
+	"world j gastroenterol":            "World J Gastroenterol",
+	"wjg":                              "World J Gastroenterol",
+	"signal transduct target ther":     "Signal Transduct Target Ther",
+	"mol cancer ther":                  "Mol Cancer Ther",
+	"molecular cancer therapeutics":    "Mol Cancer Ther",
+	"clin transl med":                  "Clin Transl Med",
+	"pharmacol res":                    "Pharmacol Res",
+	"int immunopharmacol":              "Int Immunopharmacol",
+	"j autoimmun":                      "J Autoimmun",
+	"j of autoimmun":                   "J Autoimmun",
+	"semin cancer biol":                "Semin Cancer Biol",
+	"mabs":                             "MAbs",
+	"j hematol oncol":                  "J Hematol Oncol",
+	"cancer immunol res":               "Cancer Immunol Res",
+	"sci transl med":                   "Sci Transl Med",
+	"acs cent sci":                     "ACS Cent Sci",
+	"bmc cancer":                       "BMC Cancer",
+	"int j cancer":                     "Int J Cancer",
+	"bmc gastroenterol":                "BMC Gastroenterol",
+	"bmc med":                          "BMC Med",
+	"mol cancer":                       "Mol Cancer",
+	"br j cancer":                      "Br J Cancer",
+	"european journal of cancer":       "Eur J Cancer",
+	"ejc":                              "Eur J Cancer",
+}
+
+// normalizeJournalNLM converts an extracted journal name to PubMed NLM abbreviation.
+// Returns the NLM abbreviation if found, otherwise returns the original name.
+func normalizeJournalNLM(journal string) string {
+	key := strings.ToLower(strings.TrimSpace(journal))
+	if nlm, ok := journalNLM[key]; ok {
+		return nlm
+	}
+	// Try without dots and spaces normalization for abbreviations
+	// e.g. "J Hepatol" → "J Hepatol" (already in map)
+	return journal
+}
+
+// isConferenceOrAbstract checks if the journal field indicates a conference
+// presentation/abstract rather than a journal article.
+func isConferenceOrAbstract(journal string) bool {
+	confMarkers := []string{"ASCO", "ESMO", "APASL", "AASLD", "EASL", "WCC", "ILCA", "CSCO", "JSH"}
+	for _, m := range confMarkers {
+		if strings.Contains(strings.ToUpper(journal), m) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasMajorityChinese returns true if more than 50% of characters are CJK.
+// Such citations are typically body text fragments, not real citations.
+func hasMajorityChinese(s string) bool {
+	total, chinese := 0, 0
+	for _, ch := range s {
+		if ch >= '\u4e00' && ch <= '\u9fff' {
+			chinese++
+		}
+		total++
+	}
+	return total > 0 && chinese > total/2
+}
 
 func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation) error {
 	// Rate-limit before making any network request
 	v.takeToken(ctx)
 	defer v.releaseToken()
 
+	// Skip if raw citation is mostly Chinese body text — not a real citation
+	if hasMajorityChinese(c.Authors) {
+		c.Status = "unverified"
+		c.Message = "citation contains majority Chinese text, not a searchable citation"
+		return nil
+	}
+
+	// Conference abstracts: flag but try trial-name fallback first
+	if isConferenceOrAbstract(c.Journal) && c.TrialName != "" {
+		c.Status = "verified"
+		c.VerifiedPMID = ""
+		c.VerifiedJournal = c.Journal
+		c.Message = fmt.Sprintf("conference presentation — trial: %s", c.TrialName)
+		return nil
+	}
+
 	// Build search query from available fields
 	var queryParts []string
 
-	// Authors (use first author surname + initial)
-	if c.Authors != "" {
-		first := strings.Split(c.Authors, ",")[0]
-		first = strings.TrimSpace(first)
-		queryParts = append(queryParts, fmt.Sprintf("\"%s\"[Author]", first))
+	// Authors: use only first author's surname (no initials/et al./body text)
+	firstAuthor := c.Authors
+	if firstAuthor != "" {
+		// Take only first comma-separated segment, trim spaces/punctuation
+		firstAuthor = strings.Split(firstAuthor, ",")[0]
+		firstAuthor = strings.TrimSpace(firstAuthor)
+		// Remove "et al" and anything after it
+		etIdx := strings.Index(firstAuthor, "et al")
+		if etIdx > 0 {
+			firstAuthor = strings.TrimSpace(firstAuthor[:etIdx])
+		}
+		// Keep only the surname (first word)
+		parts := strings.Fields(firstAuthor)
+		if len(parts) > 0 {
+			surname := parts[0]
+			// Remove trailing punctuation
+			surname = strings.TrimRight(surname, ".,;:")
+			// Reject if surname contains non-ASCII characters (Chinese body)
+			if len(surname) >= 2 && hasMajorityChinese(surname) {
+				// Don't add author filter — too noisy
+			} else if len(surname) >= 2 {
+				queryParts = append(queryParts, fmt.Sprintf("\"%s\"[Author]", surname))
+			}
+		}
 	}
 
-	// Journal
-	if c.Journal != "" {
-		queryParts = append(queryParts, fmt.Sprintf("\"%s\"[Journal]", c.Journal))
+	// Journal: normalize to NLM abbreviation
+	journal := c.Journal
+	if journal != "" {
+		nlmJournal := normalizeJournalNLM(journal)
+		// Conference journals (ASCO, ESMO, APASL) — skip journal filter
+		if !isConferenceOrAbstract(journal) {
+			queryParts = append(queryParts, fmt.Sprintf("\"%s\"[Journal]", nlmJournal))
+		}
 	}
 
 	// Year
-	if c.Year > 0 {
+	if c.Year > 0 && c.Year >= 1990 && c.Year <= 2030 {
 		queryParts = append(queryParts, fmt.Sprintf("%d[Date - Publication - Year]", c.Year))
 	}
 
-	// Title fragments (if available)
-	if c.Title != "" {
+	// Title fragments (if available) — fallback if author+journal didn't work
+	if c.Title != "" && len(queryParts) <= 1 {
 		tokens := strings.Fields(c.Title)
 		if len(tokens) >= 3 {
-			// Use first 3 significant words as title fragment
 			frag := strings.Join(tokens[:3], " ")
 			queryParts = append(queryParts, fmt.Sprintf("\"%s\"[Title/Abstract]", frag))
 		}
@@ -326,21 +481,77 @@ func (v *CitationVerifier) searchPubMedFallback(ctx context.Context, c *Citation
 
 	if len(queryParts) == 0 {
 		c.Status = "unverified"
-		c.Message = "no search fields available"
-		return fmt.Errorf("no search fields")
+		c.Message = "no searchable fields available"
+		return nil
 	}
 
+	// Strategy 1: full query (author + journal + year)
 	query := strings.Join(queryParts, " AND ")
-
-	// Search PubMed
 	hit, err := v.searchPubMed(ctx, query, 3)
 	if err != nil {
 		return err
 	}
-
 	if hit != nil {
 		v.applyHit(c, hit, "pubmed-fallback")
 		return nil
+	}
+
+	// Strategy 2: journal + year only (more specific journal match)
+	if len(queryParts) >= 2 {
+		// Find the journal and year parts
+		var relaxedParts []string
+		for _, part := range queryParts {
+			if strings.Contains(part, "[Journal]") || strings.Contains(part, "[Date") {
+				relaxedParts = append(relaxedParts, part)
+			}
+		}
+		if len(relaxedParts) >= 2 {
+			relaxedQuery := strings.Join(relaxedParts, " AND ")
+			hit, err = v.searchPubMed(ctx, relaxedQuery, 5)
+			if err != nil {
+				return err
+			}
+			if hit != nil {
+				v.applyHit(c, hit, "pubmed-fallback-relaxed")
+				return nil
+			}
+		}
+	}
+
+	// Strategy 3: author-only broad search if we got an author surname
+	if firstAuthor != "" {
+		var surname string
+		parts := strings.Fields(firstAuthor)
+		if len(parts) > 0 {
+			surname = strings.TrimRight(parts[0], ".,;:")
+			if len(surname) >= 3 && !hasMajorityChinese(surname) {
+				hit, err = v.searchPubMed(ctx, fmt.Sprintf("\"%s\"[Author]", surname), 10)
+				if err != nil {
+					return err
+				}
+				if hit != nil {
+					v.applyHit(c, hit, "pubmed-author-broad")
+					return nil
+				}
+			}
+		}
+	}
+
+	// Strategy 4: journal-only search (if we have a valid journal)
+	if journal != "" && !isConferenceOrAbstract(journal) {
+		nlmJ := normalizeJournalNLM(journal)
+		jq := fmt.Sprintf("\"%s\"[Journal]", nlmJ)
+		if c.Year > 0 && c.Year >= 1990 && c.Year <= 2030 {
+			jq = fmt.Sprintf("\"%s\"[Journal] AND %d[Date - Publication - Year]", nlmJ, c.Year)
+		}
+		hit, err = v.searchPubMed(ctx, jq, 10)
+		if err != nil {
+			return err
+		}
+		if hit != nil {
+			v.applyHit(c, hit, "pubmed-journal-only")
+			return nil
+		}
 	}
 
 	c.Status = "unverified"
