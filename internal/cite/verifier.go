@@ -21,13 +21,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/veawho/via54Medit/internal/cite/client"
 	"github.com/veawho/via54Medit/internal/source"
 )
 
-// CitationVerifier enriches extracted citations against PubMed/Crossref.
+// CitationVerifier enriches extracted citations against PubMed/Crossref/SemScholar/ClinTrials.
 type CitationVerifier struct {
 	pubmed *source.PubMedSource
 	client *http.Client
+
+	// Multi-source search backends (fallback after PubMed)
+	crossref  *client.CrossrefClient
+	semSch    *client.SemSchClient
+	clinTrials *client.ClinTrialsClient
 
 	// Mutex for PubMed rate-limiting — serializes all requests to stay under 3 rps NCBI limit
 	mu sync.Mutex
@@ -41,10 +47,13 @@ type CitationVerifier struct {
 func NewCitationVerifier() *CitationVerifier {
 	pubmed, _ := source.NewPubMedSource(map[string]any{})
 	return &CitationVerifier{
-		pubmed: pubmed,
-		client: &http.Client{Timeout: 15 * time.Second},
-		tool:   "via54Medit",
-		email:  "cite@via54.com",
+		pubmed:     pubmed,
+		client:     &http.Client{Timeout: 15 * time.Second},
+		crossref:   client.NewCrossrefClient("via54medit@example.com"),
+		semSch:     client.NewSemSchClient(),
+		clinTrials: client.NewClinTrialsClient(),
+		tool:       "via54Medit",
+		email:      "cite@via54.com",
 	}
 }
 
