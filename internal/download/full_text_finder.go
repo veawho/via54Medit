@@ -215,9 +215,6 @@ func (f *FullTextFinder) Get(ctx context.Context, c *types.Citation) (*FullTextR
 	if mr.pdfURL != "" {
 		c.OAPDFURL = mr.pdfURL
 	}
-	if mr.pmcID != "" {
-		c.PMID = c.PMID // already set; enrich PMCID if absent
-	}
 	r.Used = append(r.Used, mr.used...)
 
 	// --- Tier 2: CDP (PMC HTML + sci-hub cookie) ---
