@@ -27,9 +27,13 @@ import (
 )
 
 var (
-	fullTextCDP     string
-	fullTextCookies string
-	fullTextOutDir  string
+	fullTextCDP      string
+	fullTextCookies  string
+	fullTextOutDir   string
+	fullTextWorkers  int
+	fullTextCheckpoint string
+	fullTextHTML     bool
+	fullTextInput    string
 )
 
 var fullTextCmd = &cobra.Command{
@@ -62,6 +66,18 @@ var fullTextDownloadCmd = &cobra.Command{
 	RunE:  runFullTextDownload,
 }
 
+var fullTextBatchCmd = &cobra.Command{
+	Use:   "batch <citations.json>",
+	Short: "Batch-download full text for a list of citations",
+	Long: `Batch-download full text for citations listed in a JSON file.
+	
+The input file must be a JSON array of objects with at least 'doi' fields.
+Example:
+  medit fulltext batch citations.json --cdp-url http://localhost:9223 --workers 4 --html`,
+	Args: cobra.ExactArgs(1),
+	RunE: runFullTextBatch,
+}
+
 func init() {
 	fullTextSearchCmd.Flags().StringVar(&fullTextCDP, "cdp-url", "", "Chrome CDP websocket (search ignores this)")
 	fullTextSearchCmd.Flags().StringVar(&fullTextCookies, "cookie-file", "", "Sci-Hub cookie file (search ignores this)")
@@ -71,7 +87,14 @@ func init() {
 	fullTextDownloadCmd.Flags().StringVar(&fullTextCookies, "cookie-file", "", "Path to sci-hub cookies")
 	fullTextDownloadCmd.Flags().StringVar(&fullTextOutDir, "output-dir", "", "Output directory")
 
-	fullTextCmd.AddCommand(fullTextSearchCmd, fullTextDownloadCmd)
+	fullTextBatchCmd.Flags().StringVar(&fullTextCDP, "cdp-url", "http://localhost:9223", "Chrome CDP URL")
+	fullTextBatchCmd.Flags().StringVar(&fullTextOutDir, "output-dir", "", "Output directory for PDFs")
+	fullTextBatchCmd.Flags().StringVar(&fullTextCookies, "cookie-file", "", "Path to sci-hub cookies")
+	fullTextBatchCmd.Flags().IntVar(&fullTextWorkers, "workers", 3, "Concurrent download workers")
+	fullTextBatchCmd.Flags().StringVar(&fullTextCheckpoint, "checkpoint", "", "Checkpoint file path for resume")
+	fullTextBatchCmd.Flags().BoolVar(&fullTextHTML, "html", true, "Generate HTML access report")
+
+	fullTextCmd.AddCommand(fullTextSearchCmd, fullTextDownloadCmd, fullTextBatchCmd)
 }
 
 func runFullTextSearch(cmd *cobra.Command, args []string) error {
@@ -154,6 +177,112 @@ func runFullTextDownload(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(out, "  failed: %v\n", err)
 	}
+	return nil
+}
+
+func runFullTextBatch(cmd *cobra.Command, args []string) error {
+	inputFile := args[0]
+
+	// Read input JSON
+	raw, err := os.ReadFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("batch: read %s: %w", inputFile, err)
+	}
+
+	var input []struct {
+		DOI   string `json:"doi"`
+		PMID  string `json:"pmid,omitempty"`
+		Title string `json:"title,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return fmt.Errorf("batch: parse %s: %w", inputFile, err)
+	}
+
+	if len(input) == 0 {
+		return fmt.Errorf("batch: no citations in %s", inputFile)
+	}
+
+	// Convert to types.Citation slice
+	citations := make([]types.Citation, len(input))
+	for i, v := range input {
+		citations[i] = types.Citation{
+			DOI:   v.DOI,
+			PMID:  v.PMID,
+			Title: v.Title,
+		}
+	}
+
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "📄 Batch download: %d citations, %d workers\n", len(citations), fullTextWorkers)
+
+	// Resolve output directory
+	outDir := fullTextOutDir
+	if outDir == "" {
+		home, _ := os.UserHomeDir()
+		if home == "" {
+			home = "/tmp"
+		}
+		outDir = filepath.Join(home, ".medit", "pdfs")
+	}
+	_ = os.MkdirAll(outDir, 0o700)
+
+	// Set up FullTextFinder
+	finder := download.NewFullTextFinder(fullTextCDP)
+	if fullTextCookies != "" {
+		finder.CookieFile = fullTextCookies
+	}
+	if outDir != "" {
+		finder.OutDir = outDir
+	}
+	defer finder.Close()
+
+	// Run batch
+	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Minute)
+	defer cancel()
+
+	cfg := download.BatchConfig{
+		WorkerCount:    fullTextWorkers,
+		CheckpointPath: fullTextCheckpoint,
+		GenerateHTML:   fullTextHTML,
+		SkipDoneCheck:  false,
+	}
+
+	// Set HTML report path inside output dir
+	if fullTextHTML {
+		_ = os.MkdirAll(outDir, 0o700)
+	}
+
+	result, err := finder.BatchDownload(ctx, citations, cfg)
+	if err != nil {
+		return fmt.Errorf("batch: %w", err)
+	}
+
+	// Print report
+	fmt.Fprintf(out, "\n📊 Results:\n")
+	fmt.Fprintf(out, "  ✅ %d success\n", result.Successes)
+	fmt.Fprintf(out, "  ❌ %d failed\n", result.Failures)
+	fmt.Fprintf(out, "  ⏭️ %d skipped\n", result.Skipped)
+	fmt.Fprintf(out, "  ⏱️ %s\n", time.Duration(result.Duration).Round(time.Second).String())
+
+	if fullTextHTML {
+		reportPath := filepath.Join(outDir, "citation_access.html")
+		fmt.Fprintf(out, "  📁 Report: %s\n", reportPath)
+	}
+
+	// Show validations for failed items
+	var failures int
+	for _, item := range result.Items {
+		if item.Err != nil {
+			failures++
+			if failures <= 5 {
+				fmt.Fprintf(out, "  ❌ %s: %v\n", item.DOI, item.Err)
+			}
+		}
+	}
+	if failures > 5 {
+		fmt.Fprintf(out, "  ... and %d more failures\n", failures-5)
+	}
+
 	return nil
 }
 

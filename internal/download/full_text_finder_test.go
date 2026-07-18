@@ -567,3 +567,134 @@ func TestCheckpointBasic(t *testing.T) {
 		t.Errorf("expected 2 items, got %d", len(cp2.data.Items))
 	}
 }
+
+func TestValidatePDF_Valid(t *testing.T) {
+	tmp := t.TempDir()
+	pdfPath := filepath.Join(tmp, "test.pdf")
+	pdfContent := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Root 1 0 R /Size 4 >>\nstartxref\n190\n%%EOF\n")
+	if err := os.WriteFile(pdfPath, pdfContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := ValidatePDF(pdfPath)
+	if !v.Valid {
+		t.Errorf("ValidatePDF should be valid: %s", v.Reason)
+	}
+	if !v.HasHeader {
+		t.Error("HasHeader should be true")
+	}
+	if !v.HasObjects {
+		t.Error("HasObjects should be true")
+	}
+	if !v.HasTrailer {
+		t.Error("HasTrailer should be true")
+	}
+}
+
+func TestValidatePDF_HTMLMasquerade(t *testing.T) {
+	tmp := t.TempDir()
+	pdfPath := filepath.Join(tmp, "fake.pdf")
+	// Must be > 100 bytes to pass min-size check
+	content := []byte("<!DOCTYPE html><html><body>Page not found</body></html>0000000000000000000000000000000000000000000000000000000000000000")
+	if err := os.WriteFile(pdfPath, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := ValidatePDF(pdfPath)
+	if v.Valid {
+		t.Error("HTML masquerade should not be valid")
+	}
+	if !v.IsPlainText {
+		t.Error("IsPlainText should be true for HTML")
+	}
+}
+
+func TestValidatePDF_TooSmall(t *testing.T) {
+	tmp := t.TempDir()
+	pdfPath := filepath.Join(tmp, "empty.pdf")
+	if err := os.WriteFile(pdfPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := ValidatePDF(pdfPath)
+	if v.Valid {
+		t.Error("empty file should not be valid")
+	}
+}
+
+func TestBatchDownload_EmptyInput(t *testing.T) {
+	f := NewFullTextFinder("")
+	defer f.Close()
+
+	ctx := context.Background()
+	cfg := BatchConfig{WorkerCount: 1}
+	result, err := f.BatchDownload(ctx, nil, cfg)
+	if err != nil {
+		t.Fatalf("BatchDownload(nil): %v", err)
+	}
+	if result.Total != 0 {
+		t.Errorf("Total = %d, want 0", result.Total)
+	}
+	// nil citations should not panic
+	result2, err := f.BatchDownload(ctx, []types.Citation{}, cfg)
+	if err != nil {
+		t.Fatalf("BatchDownload([]): %v", err)
+	}
+	if result2.Total != 0 {
+		t.Errorf("Total = %d, want 0", result2.Total)
+	}
+}
+
+func TestBatchDownload_CheckpointCreated(t *testing.T) {
+	tmp := t.TempDir()
+	cpPath := filepath.Join(tmp, "batch.json")
+
+	f := NewFullTextFinder("")
+	defer f.Close()
+
+	citations := []types.Citation{
+		{DOI: "10.1000/test.1", Title: "Test one"},
+		{DOI: "10.1000/test.2", Title: "Test two"},
+	}
+
+	cfg := BatchConfig{
+		WorkerCount:    1,
+		CheckpointPath: cpPath,
+		GenerateHTML:   false,
+	}
+	_, err := f.BatchDownload(context.Background(), citations, cfg)
+	if err != nil {
+		t.Fatalf("BatchDownload: %v", err)
+	}
+
+	// Verify checkpoint file was created
+	if _, err := os.Stat(cpPath); err != nil {
+		t.Errorf("checkpoint file not created: %v", err)
+	}
+}
+
+func TestFullTextFinder_Close_Idempotent(t *testing.T) {
+	f := NewFullTextFinder("")
+	// Close should not panic even without CDP client set
+	f.Close()
+	f.Close() // double close should also be safe
+	t.Log("Close idempotent OK")
+}
+
+func TestSanitizeFilename_SpecialChars(t *testing.T) {
+	tests := []struct {
+		in  string
+		out string
+	}{
+		{"normal paper", "normal_paper"},
+		{"file/with:slashes", "file_with_slashes"},
+		{"no-change", "no-change"},
+		{"Capital Letters 123", "Capital_Letters_123"},
+	}
+	for _, tc := range tests {
+		got := sanitizeFilename(tc.in)
+		if got != tc.out {
+			t.Errorf("sanitizeFilename(%q) = %q, want %q", tc.in, got, tc.out)
+		}
+	}
+}
