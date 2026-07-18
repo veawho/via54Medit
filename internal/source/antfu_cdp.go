@@ -19,6 +19,7 @@ package source
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -390,6 +391,91 @@ func (c *CDPClient) WaitForSelector(ctx context.Context, selector string, timeou
 		case <-time.After(interval):
 		}
 	}
+}
+
+// PrintToPDF navigates to the given URL, waits for the page to load,
+// and uses Page.printToPDF to produce a PDF of the rendered page.
+// Returns the raw PDF bytes.
+// This is the most reliable way to get content from any DOI URL
+// because it uses the user's desktop Chrome (residential IP, institutional cookies).
+// Use sizeHint=0 for default, or set a target minimum size in bytes
+// (e.g., 10240 = 10KB) to wait for content to fully render.
+func (c *CDPClient) PrintToPDF(ctx context.Context, targetURL string, sizeHint int) ([]byte, error) {
+	if _, err := url.Parse(targetURL); err != nil {
+		return nil, fmt.Errorf("cdp: invalid url %q: %w", targetURL, err)
+	}
+
+	// Navigate
+	_, err := c.send(ctx, "Page.navigate", map[string]any{"url": targetURL})
+	if err != nil {
+		return nil, fmt.Errorf("cdp: Page.navigate(%s): %w", targetURL, err)
+	}
+
+	// Wait for page load (best-effort). Wait up to 30s for load event,
+	// but even if it fires early we continue.
+	loadCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	_ = c.waitForEvent(loadCtx, "Page.loadEventFired", 30*time.Second)
+
+	// If sizeHint > 0, wait for the DOM to reach a minimum size
+	// (helps with pages that lazy-load content beyond loadEventFired).
+	if sizeHint > 0 {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 15*time.Second)
+		defer pollCancel()
+		pollInterval := 500 * time.Millisecond
+		for {
+			// Check document.body.innerHTML length as a proxy for content size
+			js := `document.body ? document.body.innerText.length : 0`
+			out, err := c.Evaluate(ctx, js)
+			if err == nil {
+				if n, parseErr := strconv.Atoi(out); parseErr == nil && n >= sizeHint {
+					break // enough content loaded
+				}
+			}
+			select {
+			case <-pollCtx.Done():
+				goto print // timeout waiting for content, print anyway
+			case <-time.After(pollInterval):
+			}
+		}
+	}
+
+print:
+	// Page.printToPDF
+	res, err := c.send(ctx, "Page.printToPDF", map[string]any{
+		"landscape":          false,
+		"printBackground":    true,
+		"preferCSSPageSize":  true,
+		"marginTop":          0.2,
+		"marginBottom":       0.2,
+		"marginLeft":         0.2,
+		"marginRight":        0.2,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cdp: Page.printToPDF: %w", err)
+	}
+
+	var pdfResult struct {
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(res, &pdfResult); err != nil {
+		// The response might be nested under "result"
+		var wrapper struct {
+			Result struct {
+				Data string `json:"data"`
+			} `json:"result"`
+		}
+		if err2 := json.Unmarshal(res, &wrapper); err2 != nil {
+			return nil, fmt.Errorf("cdp: decode printToPDF: %w", err)
+		}
+		pdfResult.Data = wrapper.Result.Data
+	}
+
+	if pdfResult.Data == "" {
+		return nil, errors.New("cdp: printToPDF returned empty data")
+	}
+
+	return base64.StdEncoding.DecodeString(pdfResult.Data)
 }
 
 // Close shuts down the WebSocket connection and the read pump.

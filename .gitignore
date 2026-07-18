@@ -70,3 +70,7 @@ desktop.ini
 tests/e2e/screenshots/
 tests/e2e/output/
 tests/stress/logs/
+
+# test-data PDFs - too large for git, check Desktop/test/
+references/test-data/pdfs/
+references/test-data/embedded/

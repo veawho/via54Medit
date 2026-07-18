@@ -540,7 +540,33 @@ func (f *FullTextFinder) tier2CDP(ctx context.Context, c *types.Citation, meta *
 		r.used = append(r.used, "pmc-cdp-failed")
 	}
 
-	// --- 2b: Sci-Hub Cookie + curl (Tier 4 via CDP Cookie) ---
+	// --- 2b: CDP Page.printToPDF for ANY URL (DOI or OA PDF URL) ---
+	// This is the most reliable strategy: use Chrome to render the page and print to PDF.
+	// It works even for paywalled content if the user has institutional cookies in Chrome.
+	var urlsToTry []string
+	if c.DOI != "" {
+		urlsToTry = append(urlsToTry, fmt.Sprintf("https://doi.org/%s", c.DOI))
+	}
+	if meta.pdfURL != "" {
+		urlsToTry = append(urlsToTry, meta.pdfURL)
+	}
+
+	for _, u := range urlsToTry {
+		if f.ChromeCDP == "" {
+			break
+		}
+		pr := f.cdpPrintToPDF(ctx, c, u)
+		if pr.path != "" {
+			r.path = pr.path
+			r.format = "pdf"
+			r.size = pr.size
+			r.used = append(r.used, "cdp-print-pdf")
+			return r
+		}
+		r.used = append(r.used, fmt.Sprintf("cdp-print-pdf-failed(%s)", u))
+	}
+
+	// --- 2c: Sci-Hub Cookie + curl (Tier 4 via CDP Cookie) ---
 	// Sci-Hub Cookie extraction is a Tier 2/4 hybrid.
 	// We'll extract cookies from Chrome, then use in tier4.
 	cookies := f.extractSciHubCookies(ctx)
@@ -603,6 +629,44 @@ func (f *FullTextFinder) cdpPMC(ctx context.Context, title string, pmcid string)
 
 	info, _ := os.Stat(fn)
 	return &cdpPMCRet{path: fn, format: "txt", size: info.Size()}
+}
+
+// cdpPrintToPDF navigates to a URL via Chrome CDP, renders the page, and saves as PDF.
+func (f *FullTextFinder) cdpPrintToPDF(ctx context.Context, c *types.Citation, targetURL string) *cdpPMCRet {
+	if f.ChromeCDP == "" {
+		return nil
+	}
+
+	client, err := source.NewCDPClient(ctx, f.ChromeCDP)
+	if err != nil {
+		return nil
+	}
+	defer client.Close()
+
+	// Print page to PDF with an initial load wait + content-size check
+	// sizeHint: we want at least 500 chars of text content before printing
+	pdfBytes, err := client.PrintToPDF(ctx, targetURL, 500)
+	if err != nil {
+		return nil
+	}
+
+	// Minimum size check (PDFs smaller than 2KB are likely empty/stub pages)
+	if len(pdfBytes) < 2048 {
+		return nil
+	}
+
+	// Save to file
+	safeTitle := sanitizeFilename(c.Title)
+	if safeTitle == "unknown" && c.DOI != "" {
+		safeTitle = "doi_" + strings.NewReplacer("/", "_", ":", "_").Replace(c.DOI)
+	}
+	fn := filepath.Join(f.OutDir, safeTitle+".pdf")
+	if err := os.WriteFile(fn, pdfBytes, 0o644); err != nil {
+		return nil
+	}
+
+	info, _ := os.Stat(fn)
+	return &cdpPMCRet{path: fn, format: "pdf", size: info.Size()}
 }
 
 // ---------------------------------------------------------------------------

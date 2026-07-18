@@ -440,49 +440,130 @@ func TestWriteAndParseNetscapeCookies(t *testing.T) {
 // ===========================================================================
 
 func TestTier4SciHub_HasCookies(t *testing.T) {
-  tmp := t.TempDir()
-  pdfBytes := validPDF()
+	tmp := t.TempDir()
+	pdfBytes := validPDF()
 
-  mux := http.NewServeMux()
-  mux.HandleFunc("/10.test/article", func(w http.ResponseWriter, r *http.Request) {
-    cookie := r.Header.Get("Cookie")
-    if !strings.Contains(cookie, "cf_clearance") {
-      w.WriteHeader(401)
-      return
-    }
-    w.Header().Set("Content-Type", "application/pdf")
-    w.Write(pdfBytes)
-  })
-  srv := httptest.NewServer(mux)
-  defer srv.Close()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/10.test/article", func(w http.ResponseWriter, r *http.Request) {
+		cookie := r.Header.Get("Cookie")
+		if !strings.Contains(cookie, "cf_clearance") {
+			w.WriteHeader(401)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfBytes)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
 
-  cookiePath := filepath.Join(tmp, "sci-hub-cookies.txt")
-  if err := writeNetscapeCookies(cookiePath, []CookieEntry{
-    {Domain: ".sci-hub.st", Path: "/", Secure: true, Expires: 0, Name: "cf_clearance", Value: "abc123"},
-  }); err != nil {
-    t.Fatalf("write cookies: %v", err)
-  }
+	cookiePath := filepath.Join(tmp, "sci-hub-cookies.txt")
+	if err := writeNetscapeCookies(cookiePath, []CookieEntry{
+		{Domain: ".sci-hub.st", Path: "/", Secure: true, Expires: 0, Name: "cf_clearance", Value: "abc123"},
+	}); err != nil {
+		t.Fatalf("write cookies: %v", err)
+	}
 
-  f := NewFullTextFinder("")
-  f.OutDir = tmp
-  orig := f.client.Transport
-  if orig == nil {
-    orig = http.DefaultTransport
-  }
-  f.client = &http.Client{
-    Transport: &urlRewriter{rt: orig, rewrite: func(u *url.URL) *url.URL {
-      return &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: u.Path}
-    }},
-    CheckRedirect: func(_ *http.Request, via []*http.Request) error {
-        return http.ErrUseLastResponse
-    },
-  }
-  c := &types.Citation{DOI: "10.test/article", Title: "SciHubTest"}
-  result := f.tier4SciHub(context.Background(), c, &tier1Meta{})
-  if result == nil {
-    t.Fatalf("expected result")
-  }
-  if result.format != "pdf" {
-    t.Errorf("format = %q, want pdf", result.format)
-  }
+	f := NewFullTextFinder("")
+	f.OutDir = tmp
+	orig := f.client.Transport
+	if orig == nil {
+		orig = http.DefaultTransport
+	}
+	f.client = &http.Client{
+		Transport: &urlRewriter{rt: orig, rewrite: func(u *url.URL) *url.URL {
+			return &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: u.Path}
+		}},
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	c := &types.Citation{DOI: "10.test/article", Title: "SciHubTest"}
+	result := f.tier4SciHub(context.Background(), c, &tier1Meta{})
+	if result == nil {
+		t.Fatalf("expected result")
+	}
+	if result.format != "pdf" {
+		t.Errorf("format = %q, want pdf", result.format)
+	}
+}
+
+// ===========================================================================
+// CDP PrintToPDF (mock)
+// ===========================================================================
+
+func TestCDPPrintToPDF_NoChrome(t *testing.T) {
+	// When ChromeCDP is empty, cdpPrintToPDF should return nil without error.
+	f := NewFullTextFinder("")
+	f.OutDir = t.TempDir()
+	c := &types.Citation{DOI: "10.test/article", Title: "Test Article"}
+	result := f.cdpPrintToPDF(context.Background(), c, "https://doi.org/10.test/article")
+	if result != nil {
+		t.Errorf("expected nil when ChromeCDP is empty, got path=%q", result.path)
+	}
+}
+
+// ===========================================================================
+// DOI Pattern Classification
+// ===========================================================================
+
+func TestClassifyDOI(t *testing.T) {
+	tests := []struct {
+		doi      string
+		expected ContentType
+		label    string
+	}{
+		{"10.7717/peerj.1052/table-1", ContentChartFigure, "chart-figure"},
+		{"10.7717/peerjcs.1782/fig-3", ContentChartFigure, "chart-figure"},
+		{"10.1038/nrc3239", ContentResearchPaper, "research-paper"},
+		{"10.1200/JCO.21.01440", ContentResearchPaper, "research-paper"},
+		{"10.1038/nrclinonc.2009.184-c2", ContentAuthorReply, "author-reply"},
+		{"10.1039/d3ra05696a/v2/response1", ContentAuthorReply, "author-reply"},
+		{"10.7554/eLife.06416.026", ContentSupplementary, "supplementary"},
+		{"", ContentUnknown, "unknown"},
+	}
+	for _, tc := range tests {
+		got := ClassifyDOI(tc.doi)
+		if got != tc.expected {
+			t.Errorf("ClassifyDOI(%q) = %v, want %v (%s)", tc.doi, got, tc.expected, tc.label)
+		}
+	}
+}
+
+// ===========================================================================
+// Checkpoint
+// ===========================================================================
+
+func TestCheckpointBasic(t *testing.T) {
+	tmp := t.TempDir()
+	cpPath := filepath.Join(tmp, "checkpoint.json")
+
+	cp, err := NewCheckpoint(cpPath, 10)
+	if err != nil {
+		t.Fatalf("NewCheckpoint: %v", err)
+	}
+
+	// Record a success
+	cp.RecordSuccess(CheckpointItem{DOI: "10.test/one", Title: "Paper One", Path: "/tmp/paper1.pdf", Tier: 2, Size: 1024})
+
+	if !cp.IsDone("10.test/one") {
+		t.Errorf("expected IsDone for 10.test/one")
+	}
+	if cp.IsDone("10.test/two") {
+		t.Errorf("expected not IsDone for 10.test/two")
+	}
+
+	// Record a failure
+	cp.RecordFailure(CheckpointItem{DOI: "10.test/two", Title: "Paper Two"})
+
+	// Load from disk and verify
+	cp2, err := NewCheckpoint(cpPath, 10)
+	if err != nil {
+		t.Fatalf("NewCheckpoint reload: %v", err)
+	}
+	if !cp2.IsDone("10.test/one") {
+		t.Errorf("reloaded checkpoint should know 10.test/one is done")
+	}
+	if len(cp2.data.Items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(cp2.data.Items))
+	}
 }
