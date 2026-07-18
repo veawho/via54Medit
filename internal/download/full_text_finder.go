@@ -78,6 +78,12 @@ type FullTextFinder struct {
 	// Default: ~/.medit/audit/
 	AuditDir string
 
+	// cdpClient is a long-lived CDP connection reused across tier 2 calls.
+	// When non-nil, it avoids creating a new Chrome tab per citation.
+	// Lifetime: set once via SetCDPClient or on first tier-2 call.
+	// The caller must call Close() on the client when done.
+	cdpClient *source.CDPClient
+
 	// Rate limiting per publisher (requests/second).
 	// Default: 0.5 (Springer), 1.0 (OpenAlex/S2/Crossref).
 	SpringerRPS   float64
@@ -588,11 +594,22 @@ func (f *FullTextFinder) tier2CDP(ctx context.Context, c *types.Citation, meta *
 // ---------------------------------------------------------------------------
 
 func (f *FullTextFinder) cdpPMC(ctx context.Context, title string, pmcid string) *cdpPMCRet {
-	client, err := source.NewCDPClient(ctx, f.ChromeCDP)
-	if err != nil {
-		return nil
+	// Reuse or create CDP client
+	var client *source.CDPClient
+	var ownClient bool
+	if f.cdpClient != nil {
+		client = f.cdpClient
+	} else {
+		var err error
+		client, err = source.NewCDPClient(ctx, f.ChromeCDP)
+		if err != nil {
+			return nil
+		}
+		ownClient = true
 	}
-	defer client.Close()
+	if ownClient {
+		defer client.Close()
+	}
 
 	// Navigate to PMC article HTML page
 	articleURL := fmt.Sprintf("https://pmc.ncbi.nlm.nih.gov/articles/%s/", pmcid)
@@ -600,8 +617,8 @@ func (f *FullTextFinder) cdpPMC(ctx context.Context, title string, pmcid string)
 		return nil
 	}
 
-	// Wait a moment for rendering
-	time.Sleep(3 * time.Second)
+	// Wait for article element to appear (replaces brittle time.Sleep)
+	_ = client.WaitForSelector(ctx, "article", 10*time.Second)
 
 	// Extract article.innerText
 	js := `
@@ -632,21 +649,49 @@ func (f *FullTextFinder) cdpPMC(ctx context.Context, title string, pmcid string)
 }
 
 // cdpPrintToPDF navigates to a URL via Chrome CDP, renders the page, and saves as PDF.
+// If cdpCli is non-nil, it reuses that client; otherwise it creates a new one
+// (new clients create a new Chrome tab each time).
 func (f *FullTextFinder) cdpPrintToPDF(ctx context.Context, c *types.Citation, targetURL string) *cdpPMCRet {
 	if f.ChromeCDP == "" {
 		return nil
 	}
 
-	client, err := source.NewCDPClient(ctx, f.ChromeCDP)
-	if err != nil {
+	// Reuse or create CDP client
+	var client *source.CDPClient
+	var ownClient bool
+	if f.cdpClient != nil {
+		client = f.cdpClient
+	} else {
+		var err error
+		client, err = source.NewCDPClient(ctx, f.ChromeCDP)
+		if err != nil {
+			return nil
+		}
+		ownClient = true
+	}
+	if ownClient {
+		defer client.Close()
+	}
+
+	// Retry once on failure (transient CDP timeouts)
+	var pdfBytes []byte
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			// Brief pause before retry
+			time.Sleep(1 * time.Second)
+		}
+		var err error
+		pdfBytes, err = client.PrintToPDF(ctx, targetURL, 500)
+		if err == nil {
+			break
+		}
+	}
+	if pdfBytes == nil {
 		return nil
 	}
-	defer client.Close()
 
-	// Print page to PDF with an initial load wait + content-size check
-	// sizeHint: we want at least 500 chars of text content before printing
-	pdfBytes, err := client.PrintToPDF(ctx, targetURL, 500)
-	if err != nil {
+	// Size cap: reject PDFs > 50MB (unreasonable for a single paper)
+	if len(pdfBytes) > 50*1024*1024 {
 		return nil
 	}
 

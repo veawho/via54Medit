@@ -11,11 +11,13 @@ import "regexp"
 //   - supplementary data: elife supplements
 var (
 	// chartFigPattern matches DOIs pointing to figures, tables, or charts
-	chartFigPattern = regexp.MustCompile(`(?i)(/fig-\d+|/table-\d+|/suppl|/figure\b|\.fig-\d+)`)
+	// Note: /suppl is NOT included here because supplementary DOIs (e.g. eLife .026)
+	// are handled by suppDataPattern below.
+	chartFigPattern = regexp.MustCompile(`(?i)(/fig-\d+|/table-\d+|/figure\b|\.fig-\d+)`)
 	// responsePattern matches DOIs pointing to author responses/replies
 	responsePattern = regexp.MustCompile(`(?i)(/response\d*$|/v\d+/response\d*$|-c\d+$|\.reply|/v\d+/response1$)`)
 	// suppDataPattern matches supplementary content DOIs (e.g. eLife .026 suffix, /suppl)
-	suppDataPattern = regexp.MustCompile(`(?i)(/supplementary|/suppl_material|\.\d{3,4}$|/suppl/)`)
+	suppDataPattern = regexp.MustCompile(`(?i)(/supplementary|/suppl_material|\.\d{3,4}$|/suppl($|/))`)
 )
 
 // ContentType describes the type of content a DOI/URL points to.

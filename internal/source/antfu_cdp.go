@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -304,7 +303,6 @@ func (c *CDPClient) Evaluate(ctx context.Context, expression string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("cdp: Runtime.evaluate: %w", err)
 	}
-	log.Printf("DEBUG CDP Evaluate raw res: %s", string(res))
 	var got struct {
 		Result struct {
 			Result struct {
@@ -455,27 +453,22 @@ print:
 		return nil, fmt.Errorf("cdp: Page.printToPDF: %w", err)
 	}
 
-	var pdfResult struct {
-		Data string `json:"data"`
+	// send() returns the full JSON-RPC envelope, e.g.
+	// {"id":5, "result":{"data":"..."}}, so we unwrap the nested "result" field.
+	var wrapper struct {
+		Result struct {
+			Data string `json:"data"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(res, &pdfResult); err != nil {
-		// The response might be nested under "result"
-		var wrapper struct {
-			Result struct {
-				Data string `json:"data"`
-			} `json:"result"`
-		}
-		if err2 := json.Unmarshal(res, &wrapper); err2 != nil {
-			return nil, fmt.Errorf("cdp: decode printToPDF: %w", err)
-		}
-		pdfResult.Data = wrapper.Result.Data
+	if err := json.Unmarshal(res, &wrapper); err != nil {
+		return nil, fmt.Errorf("cdp: decode printToPDF: %w", err)
 	}
 
-	if pdfResult.Data == "" {
+	if wrapper.Result.Data == "" {
 		return nil, errors.New("cdp: printToPDF returned empty data")
 	}
 
-	return base64.StdEncoding.DecodeString(pdfResult.Data)
+	return base64.StdEncoding.DecodeString(wrapper.Result.Data)
 }
 
 // Close shuts down the WebSocket connection and the read pump.

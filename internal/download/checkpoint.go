@@ -5,6 +5,7 @@ package download
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -129,11 +130,15 @@ func (cp *Checkpoint) Summary() string {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
 	d := cp.data
-	return formatProgress(d.Successes, d.Failures, d.Skipped, d.Total)
+	return fmt.Sprintf("processed=%d ok=%d fail=%d skip=%d total=%d",
+		d.Processed, d.Successes, d.Failures, d.Skipped, d.Total)
 }
 
-func formatProgress(ok, fail, skip, total int) string {
-	return ""
+// Progress returns the number of items processed so far.
+func (cp *Checkpoint) Progress() int {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	return cp.data.Processed
 }
 
 // save writes checkpoint to disk (caller must hold mu).
