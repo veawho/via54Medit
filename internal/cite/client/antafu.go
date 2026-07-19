@@ -262,7 +262,11 @@ func (c *AntafuClient) CaptureTokensViaCDP(ctx context.Context) error {
 		// Get cookies for this page
 		var result map[string]interface{}
 		cookiesReq, _ := http.NewRequestWithContext(ctx, "POST", c.cdpURL+"/json/version", nil)
-		cookiesResp, _ := c.client.Do(cookiesReq)
+		cookiesResp, err := c.client.Do(cookiesReq)
+		if err != nil {
+			// connection probe failed — fall through to next tab
+			continue
+		}
 		defer cookiesResp.Body.Close()
 		_ = json.NewDecoder(cookiesResp.Body).Decode(&result)
 
