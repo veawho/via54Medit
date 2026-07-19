@@ -85,7 +85,7 @@ func journalPattern() *regexp.Regexp {
 }
 
 // Extract all text from all slides
-func extractAllSlideText(pptxPath string) ([]map[int]string, []string) {
+func extractAllSlideText(pptxPath string) (map[int]string, []int) {
 	z, err := zip.OpenReader(pptxPath)
 	if err != nil {
 		log.Fatal(err)
@@ -495,4 +495,17 @@ func readAll(r interface{}) ([]byte, error) {
 		return b, nil
 	}
 	return nil, fmt.Errorf("unsupported type")
+}
+
+// parseInt converts a string to an int, returning (value, nil) on success.
+func parseInt(s string) (int, error) {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("not a digit: %c", c)
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }
