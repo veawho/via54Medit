@@ -26,14 +26,28 @@ from typing import Dict, List, Optional, Tuple
 
 RULES_TEXT = """
 ═══════════════════════════════════════════════════════════════
-via54Medit 6 步规则 (2026-08-10 用户版)
+via54Medit 6 步规则 (2026-08-10 用户版 + AGENTS.md 校准)
 ═══════════════════════════════════════════════════════════════
 
+[表格列定义 — 8 列标准表头, 与 AGENTS.md Rule 12 一致]
+  A = PPT页              (slide number)
+  B = 第几条             (citation mark, 1-N)
+  C = 引用语义           (semantic context, e.g. "标准与讨论" 段)
+  D = PPT引文完整字段     (full citation field, e.g. "Qin S, et al. Lancet Oncol. 2025")
+  E = DOI                (with hyperlink)
+  F = 类型               (LITERATURE / DATABASE / GOVERNMENT / CONFERENCE / OTHER)
+  G = 对应PDF文件         (filename, not full path)
+  H = 来源链接            (来源链接 + 视觉/文字分析 + 应证推理 + Highlight 链接)
+
+  [注意] 用户原话 "D 列 = 视觉+文字分析结果" 实际映射到 H 列的"应证推理"段
+         D 列在真实表里是 PPT引文完整字段 (用户可能用 D 泛指"分析结果")
+         H 列才是真正的分析 + Highlight 综合位置
+
 【步骤一】拿到 PPT 后, 先建立文献整理目录
-  1. PPT 目录:
-     - 原版 PPT
+  1. PPT 目录 (3 个内容):
+     - 原版 PPT (file: *.pptx)
      - 重新扩充页面尺寸的 PPT (保证关键内容都能看到)
-     - 扩充页面尺寸后导出的 PPT 图片
+     - 扩充页面尺寸后导出的 PPT 图片 (用于视觉分析)
   2. 文献 PDF 下载目录
   3. 文献 PDF highlight 目录
 
@@ -41,18 +55,18 @@ via54Medit 6 步规则 (2026-08-10 用户版)
   1. 文献标注分两部分: 引用序号 + slide 底部对应引用文献
   2. 视觉分析所有元素可见性. 引用文献超出页面 → 重新扩 PPT 页.
      扩页时分析引用文献文字颜色, 扩后底色必须保证引用文献可识别.
-  3. 视觉 + 文字理解, 分析引用序号指向的 PPT 内容, 记到表格 D 列
-     A=slide 序号, B=引用序号, C=对应引用文献, D=视觉+文字分析结果
-  4. A/B/C 列对齐 PPT 后固定不变
-  5. D 列因缺 PDF 校准为暂定, 后续可调
-  6. 必须视觉分析. 如需先导出图片, 建立 PPT 导出图片目录
+  3. 视觉 + 文字理解, 分析引用序号指向的 PPT 内容, 记到 H 列"应证推理"段
+     A=slide, B=mark, C=引用语义, D=完整引文, F=类型
+     A/B/C 对齐 PPT 后固定不变
+     D 列因缺 PDF 校准为暂定, 后续可调
+  4. 必须视觉分析. 如需先导出图片, 建立 PPT 导出图片目录
 
 【步骤三】搜索并下载文献
-  1. 引用文献完整字段的 DOI 值 (带超链接) 填入 E 列
-  2. 完整字段 + DOI 交叉校验, 找出下载链接. PPT 引文 = 唯一真值
+  1. 引用文献完整字段 (D 列) 的 DOI 值 (带超链接) 填入 E 列
+  2. D + E 交叉校验, 找出下载链接. PPT 引文 (D 列) = 唯一真值
   3. 下载所有文献, 按 Pn-x 归档 (不去重), 一 Pn-x = 一 PDF.
      没有全文就下载摘要 PDF
-  4. 所有 PDF + DOI 对齐每个 slide 每个引文序号的引用文献完整字段
+  4. 所有 PDF + DOI 对齐每个 slide 每个引文序号的引用文献完整字段 (D 列)
 
 【步骤四】对文献 PDF 做 highlight (按 slide 顺序)
   1. 把确认的下载子目录全部复制到 highlight 目录
@@ -67,15 +81,23 @@ via54Medit 6 步规则 (2026-08-10 用户版)
      每目录 1 个已 highlight PDF + 多张 highlight 图片
 
 【步骤五】三方对齐 (PPT 视觉 / 表格 / PDF highlight)
-  1. PPT slide+引用序号  &  表格 A+B  &  下载目录  &  highlight 目录
-  2. PPT 引用文献字段  &  表格 C+E  &  下载 PDF  &  highlight PDF
-  3. PPT 视觉内容  &  highlight 图片  &  表格 D+F+H
+  1. PPT slide+引用序号 (A+B)  &  下载目录  &  highlight 目录
+  2. PPT 引用文献字段 (D)  &  表格 D+E  &  下载 PDF  &  highlight PDF
+  3. PPT 视觉内容  &  highlight 图片  &  表格 H (应证推理段)
 
 【步骤六】Highlight 目录整理 + 打包
-  1. 合并相同文献目录, 命名 Pn1-x1Pn2-x2 格式
+  1. 合并相同文献目录, 命名 Pn1-x1Pn2-x2 格式 (代码默认用 "_" 分隔)
   2. 验证每目录 = 1 篇文献, 1 文献 = 1 目录, 无冲突
   3. 最终检查: 原始 PPT / 扩尺寸 PPT / 扩尺寸 PPT 图片 / 下载目录 /
      highlight 目录 / PPT-文献逐页引用表 — 全部正确且为真实情况
+
+[via54_rules.py 校验用法]
+  python3.11 via54_rules.py check <project_dir> [--verbose]
+  python3.11 via54_rules.py quick-check <project_dir>    # exit 0/1
+  python3.11 via54_rules.py print-rules                    # 打印本规则文本
+
+  兼容 nested (Pn-x/main.pdf) + flat (Pn-x_main.pdf) 两种目录约定
+  TMA 项目用 flat, 雷管方案用 nested, check 自动适配
 """
 
 

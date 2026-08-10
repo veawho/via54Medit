@@ -376,7 +376,7 @@ class TestRulesText(unittest.TestCase):
             self.assertIn(f"步骤{n}", RULES_TEXT, f"缺步骤{n}")
 
     def test_text_mentions_critical_concepts(self):
-        for kw in ["DOI", "Pn-x", "highlight", "扩页", "细黄线", "三方对齐", "合并"]:
+        for kw in ["DOI", "Pn-x", "highlight", "扩页", "细黄线", "三方对齐", "合并", "8 列"]:
             self.assertIn(kw, RULES_TEXT, f"规则文本缺关键词: {kw}")
 
 
