@@ -102,6 +102,28 @@ def _old_yellow_stats(dir_path: str) -> float:
     return max_pct
 
 
+def _read_csv_full(csv_path: str) -> Dict[str, Tuple[str, str]]:
+    """
+    读 12 列 CSV, 返回 {Pn-x: (c_citation, d_visual)}
+    给 GLM 用
+    """
+    if not os.path.isfile(csv_path):
+        return {}
+    with open(csv_path, encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    result = {}
+    for r in rows:
+        a = r.get('A_slide', '').strip()
+        b = r.get('B_mark', '').strip()
+        if not a or not b:
+            continue
+        pn = f"P{a}-{b}"
+        c_cit = r.get('C_citation', '') or ''
+        d_vis = r.get('D_ppt_visual', '') or ''
+        result[pn] = (c_cit, d_vis)
+    return result
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -109,12 +131,14 @@ def main():
     parser.add_argument("--mode", default=DEFAULT_HIGHLIGHT_MODE, choices=["line", "fill", "both"])
     parser.add_argument("--out-dir", default=STEP4_NEW_DIR)
     parser.add_argument("--skip-existing", action="store_true", help="跳过已生成的")
+    parser.add_argument("--use-glm", action="store_true", help="启用 GLM 增强 (应证段提取)")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     csv_kws = _read_csv_kws(CSV_PATH)
-    print(f"CSV 关键词: {len(csv_kws)} Pn-x")
+    csv_full = _read_csv_full(CSV_PATH) if args.use_glm else {}
+    print(f"CSV 关键词: {len(csv_kws)} Pn-x, GLM 模式: {args.use_glm}")
 
     # 扫描 step3 Pn-x
     pn_x_dirs = sorted([d for d in os.listdir(STEP3_DIR)
@@ -156,8 +180,17 @@ def main():
         out_pdf = os.path.join(out_pn_dir, main_pdfs[0].replace('.pdf', '_v10.pdf'))
         jpg_dir = out_pn_dir  # jpg 也在同一目录
 
+        # v10.2: GLM 应证段
+        c_cit, d_vis = csv_full.get(pn, ("", ""))
+
         try:
-            r = process_pn_x(pn, main_pdf, out_pdf, kws, jpg_dir, f"{pn}_page", mode=args.mode)
+            r = process_pn_x(
+                pn, main_pdf, out_pdf, kws, jpg_dir, f"{pn}_page",
+                mode=args.mode,
+                use_glm=args.use_glm,
+                glm_citation=c_cit,
+                glm_visual=d_vis,
+            )
         except Exception as e:
             print(f"  ❌ {pn}: ERROR {e}")
             fail += 1

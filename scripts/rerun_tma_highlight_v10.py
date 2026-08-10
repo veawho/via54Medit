@@ -95,12 +95,13 @@ def main():
     parser.add_argument("--mode", default=DEFAULT_HIGHLIGHT_MODE,
                         choices=["line", "fill", "both"])
     parser.add_argument("--out-dir", default=HIGHLIGHT_NEW_DIR)
+    parser.add_argument("--use-glm", action="store_true", help="启用 GLM 应证段")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     csv_kws = _read_csv_kws(CSV_PATH)
-    print(f"CSV 关键词: {len(csv_kws)} Pn-x")
+    print(f"CSV 关键词: {len(csv_kws)} Pn-x, GLM: {args.use_glm}")
 
     # 找所有 main PDF
     pdfs = sorted(glob_pdfs(PDF_DIR))
@@ -128,7 +129,13 @@ def main():
         os.makedirs(jpg_dir, exist_ok=True)
 
         try:
-            r = process_pn_x(pn, pdf_in, out_pdf, kws, jpg_dir, f"{pn}_page", mode=args.mode)
+            r = process_pn_x(
+                pn, pdf_in, out_pdf, kws, jpg_dir, f"{pn}_page",
+                mode=args.mode,
+                use_glm=args.use_glm,
+                glm_citation=c_cit,
+                glm_visual=d_ppt,
+            )
         except Exception as e:
             print(f"  ❌ {pn}: ERROR {e}")
             fail += 1
@@ -151,11 +158,13 @@ def main():
             "skipped_terms": len(r["skipped_terms"]),
             "mode": r.get("mode", "?"),
             "ok": r["ok"],
+            "glm_evidence_count": len(r.get("glm_evidence", []) or []),
         })
         success += 1 if r["ok"] else 0
         fail += 0 if r["ok"] else 1
-        delta_str = f"{new_yellow - old_yellow:+5.3f}%" if old_yellow >= 0 else "  N/A"
-        print(f"  {mark} {pn}: OLD={old_yellow:6.3f}%  NEW={new_yellow:6.3f}%  Δ={delta_str}  hits={r['total_hits']:3d}  mode={r['mode']}")
+        delta_str = f"{new_yellow - old_yellow:+5.3f}%" if old_yellow >= 0 else "  N/A "
+        glm_n = r.get("glm_evidence_count", 0)
+        print(f"  {mark} {pn}: OLD={old_yellow:6.3f}%  NEW={new_yellow:6.3f}%  Δ={delta_str}  hits={r['total_hits']:3d}  glm_ev={glm_n}")
 
     # 写 summary
     summary_csv = os.path.join(args.out_dir, "_rerun_summary.csv")
