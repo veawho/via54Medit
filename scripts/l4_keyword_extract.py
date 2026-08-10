@@ -75,15 +75,19 @@ LOW_CONFIDENCE_TERMS = {
 
 def extract_keywords_v2(citation: str, visual_context: str = "",
                        min_confidence: float = 0.3,
-                       max_keywords: int = 12) -> List[Dict]:
+                       max_keywords: int = 12,
+                       use_glm: bool = False) -> List[Dict]:
     """
     抽取关键词 + 可信度评分
+
+    v10.2: 加 use_glm 参数, 本地抽完后调 GLM 补关键医学术语
 
     Args:
         citation: D 列引文
         visual_context: D 列视觉内容 (可选, 用于补充)
         min_confidence: 最低可信度阈值 (低于丢弃)
         max_keywords: 最多返回几个
+        use_glm: True 则本地抽完调 GLM 补抽 (兜底医学术语)
 
     Returns:
         [{'term': str, 'confidence': float, 'category': str, 'source': str}, ...]
@@ -181,16 +185,40 @@ def extract_keywords_v2(citation: str, visual_context: str = "",
     result = [c for c in candidates.values() if c["confidence"] >= min_confidence]
     result.sort(key=lambda c: -c["confidence"])
 
-    return result[:max_keywords]
+    final = result[:max_keywords]
+
+    # v10.2: GLM 补抽 (本地抽完后, 用 GLM 补更精准的医学术语)
+    if use_glm and citation:
+        try:
+            from glm_integration import supplement_keywords_with_glm
+            existing = [c["term"] for c in final]
+            glm_kws = supplement_keywords_with_glm(
+                citation=citation,
+                visual_context=visual_context,
+                existing_kws=existing,
+                use_glm=True,
+            )
+            for kw in glm_kws[:max_keywords - len(final)]:
+                final.append({
+                    "term": kw,
+                    "confidence": 0.7,
+                    "category": "glm_supplement",
+                    "source": "glm-4-flash",
+                })
+        except Exception:
+            pass
+
+    return final[:max_keywords]
 
 
 # ════════════════════════════════════════════════════════════════
 # 与 v10.1 兼容的简化版本 (返回 list[str])
 # ════════════════════════════════════════════════════════════════
 
-def extract_keywords_simple(citation: str, visual_context: str = "") -> List[str]:
+def extract_keywords_simple(citation: str, visual_context: str = "",
+                             use_glm: bool = False) -> List[str]:
     """v10.1 兼容 API: 返回 [term, ...]"""
-    return [c["term"] for c in extract_keywords_v2(citation, visual_context)]
+    return [c["term"] for c in extract_keywords_v2(citation, visual_context, use_glm=use_glm)]
 
 
 # ════════════════════════════════════════════════════════════════

@@ -188,18 +188,22 @@ def _extract_pdf_features(pdf_path: str, max_pages: int = 3) -> Dict:
 # 校验: PDF 是否符合 D 列引文
 # ════════════════════════════════════════════════════════════════
 
-def verify_paper_match(pdf_path: str, expected_citation: str, min_score: float = 0.5) -> Dict:
+def verify_paper_match(pdf_path: str, expected_citation: str, min_score: float = 0.5,
+                      use_glm: bool = False) -> Dict:
     """
     验证下载的 PDF 是否符合 expected_citation
+
+    v10.2: 加 use_glm 参数, 模糊区 (本地 score 0.3-0.7) 自动调 GLM 兜底确认
 
     Returns:
         {
             'ok': bool,             # 是否匹配
-            'score': float,         # 0-1
-            'matches': {...},       # 匹配的字段
-            'mismatches': [...],    # 不匹配的字段
-            'expected': {...},      # 期望特征
-            'actual': {...},        # PDF 实际特征
+            'score': float,         # 0-1 (本地 + GLM 综合)
+            'matches': {...},
+            'mismatches': [...],
+            'expected': {...},
+            'actual': {...},
+            'glm_check': {...} | None,  # GLM 兜底结果 (如果调了)
         }
     """
     expected = _extract_d_citation(expected_citation)
@@ -271,7 +275,7 @@ def verify_paper_match(pdf_path: str, expected_citation: str, min_score: float =
     # 归一化
     final_score = score / max_score if max_score > 0 else 0
 
-    return {
+    result = {
         "ok": final_score >= min_score and not mismatches,
         "score": round(final_score, 3),
         "matches": matches,
@@ -279,7 +283,28 @@ def verify_paper_match(pdf_path: str, expected_citation: str, min_score: float =
         "expected": expected,
         "actual": actual,
         "min_score": min_score,
+        "glm_check": None,
     }
+
+    # v10.2: GLM 兜底 (本地模糊区)
+    if use_glm and not result["ok"]:
+        try:
+            from glm_integration import verify_paper_match_with_glm
+            glm_result = verify_paper_match_with_glm(
+                pdf_path=pdf_path,
+                expected_citation=expected_citation,
+                local_score=final_score,
+                use_glm=True,
+            )
+            if glm_result:
+                result["glm_check"] = glm_result
+                # GLM 确认 → ok=True
+                if glm_result["confirmed"] and glm_result["confidence"] >= 0.6:
+                    result["ok"] = True
+        except Exception:
+            pass
+
+    return result
 
 
 # ════════════════════════════════════════════════════════════════

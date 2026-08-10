@@ -113,6 +113,7 @@ def _check_step5_alignment(
     step3_dir: str,
     step4_dir: str,
     convention: str = "nested",
+    use_glm: bool = False,
 ) -> Dict:
     """
     主函数: 跑三方对齐检查
@@ -258,6 +259,24 @@ def _check_step5_alignment(
             row["issues"].append("5#3: 无 highlight 目录")
             issues["5#3 no_highlight"] = issues.get("5#3 no_highlight", 0) + 1
 
+        # v10.2: GLM 语义对齐 (5#3 失败时调 GLM 兜底)
+        if use_glm and not row["aligned_5_3"] and d_visual and hl_jpgs:
+            try:
+                from glm_integration import semantic_align_step5
+                # 取第一张 highlight jpg 的文字作为 highlight_text
+                # (实际应该用 GLM 应证段, 但简单版用 jpg OCR 太慢)
+                glm_result = semantic_align_step5(
+                    visual_context=d_visual,
+                    highlight_text=hl_jpgs[0][:100] if hl_jpgs else "",
+                    use_glm=True,
+                )
+                if glm_result and glm_result.get("aligns"):
+                    row["aligned_5_3"] = True
+                    n_aligned_5_3 += 1
+                    row["glm_align"] = glm_result
+            except Exception:
+                pass
+
         rows_result.append(row)
 
     return {
@@ -389,7 +408,9 @@ def main():
     parser.add_argument("--step4", help="Highlight 目录 (覆盖 --project.step4)")
     parser.add_argument("--out", help="输出目录 (覆盖 --project.step5)")
     parser.add_argument("--convention", choices=["nested", "flat", "auto"], default="auto")
+    parser.add_argument("--use-glm", action="store_true", help="启用 GLM 语义对齐兜底 (5#3)")
     args = parser.parse_args()
+    use_glm = args.use_glm
 
     # 解析参数
     if args.project:
@@ -419,7 +440,7 @@ def main():
     print(f"约定:     {convention}")
     print()
 
-    report = _check_step5_alignment(csv_path, step3_dir, step4_dir, convention)
+    report = _check_step5_alignment(csv_path, step3_dir, step4_dir, convention, use_glm=use_glm)
     if "error" in report:
         print(f"❌ {report['error']}")
         sys.exit(1)

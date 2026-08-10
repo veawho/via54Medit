@@ -243,30 +243,36 @@ def highlight_pdf_robust(
     max_pages: int = 20,
     min_yellow_pct: float = YELLOW_MIN_PCT,
     mode: str = DEFAULT_HIGHLIGHT_MODE,
+    use_glm: bool = False,
+    glm_citation: str = "",
+    glm_visual: str = "",
 ) -> Dict:
     """
     稳健高亮: 直接画黄色标记在文字下方 (规则第 4 步要求 "细黄线")
     跳过页眉/页脚/标题区
+
+    v10.2: 加 use_glm 参数, 用 GLM 找应证段 → 坐标 → 画线
 
     Args:
         pdf_in: 输入 PDF
         pdf_out: 输出 PDF (高亮后的副本)
         keywords: 关键词列表 (e.g. ['HIMALAYA', 'STRIDE', '16.9%'])
         max_pages: 最多处理页数
-        min_yellow_pct: 最小黄色像素占比 (用于报告)
-        mode: 高亮样式
-            - "line" (默认, 6 步规则要求): 文字下方画细黄线
-            - "fill": 文字 bbox 填黄 (高亮笔效果, 文字仍可读)
-            - "both": line + fill
+        min_yellow_pct: 最小黄色像素占比
+        mode: "line" / "fill" / "both"
+        use_glm: True 用 GLM 应证段提取 (精准, 但要 token)
+        glm_citation: D 列引文 (use_glm=True 时必填)
+        glm_visual: D 列视觉分析 (可选)
 
     Returns:
         {
             'pages_processed': int,
             'total_hits': int,
-            'per_page': [{'page', 'terms_matched', 'rects'}],
+            'per_page': [...],
             'yellow_pct_estimate': float,
             'skipped_terms': [...],
             'mode': str,
+            'glm_evidence': [...] | None,  # GLM 应证段 (如果调了)
         }
     """
     if mode not in HIGHLIGHT_MODES:
@@ -280,6 +286,8 @@ def highlight_pdf_robust(
     total_hits = 0
     skipped_terms: List[str] = []
     matched_terms: List[str] = []
+    glm_evidence = None
+    glm_highlights: List[Dict] = []  # GLM 找的应证段坐标
 
     for pi in range(n_pages):
         page = doc[pi]
@@ -368,6 +376,61 @@ def highlight_pdf_robust(
 
         per_page_hits.append(page_data)
 
+    # v10.2: GLM 应证段提取 (use_glm=True 时)
+    if use_glm and glm_citation:
+        try:
+            from glm_integration import extract_evidence_for_highlight, find_highlight_coordinates
+            evidence = extract_evidence_for_highlight(
+                pdf_path=pdf_in,
+                citation=glm_citation,
+                visual_context=glm_visual,
+                use_glm=True,
+                max_pages=max_pages,
+            )
+            if evidence:
+                glm_evidence = evidence
+                # 找坐标
+                glm_highlights = find_highlight_coordinates(pdf_in, evidence)
+                # 画线
+                for hl in glm_highlights:
+                    page_idx = hl["page"] - 1
+                    if page_idx < 0 or page_idx >= n_pages:
+                        continue
+                    page = doc[page_idx]
+                    bbox = hl["bbox"]
+                    if len(bbox) != 4:
+                        continue
+                    rect = fitz.Rect(bbox[0], bbox[1], bbox[2], bbox[3])
+                    # 扩展一点
+                    pad = 1.5
+                    draw_rect = fitz.Rect(
+                        max(0, rect.x0 - pad),
+                        max(0, rect.y0 - pad),
+                        min(page.rect.x1, rect.x1 + pad),
+                        min(page.rect.y1, rect.y1 + pad)
+                    )
+                    if mode in ("fill", "both"):
+                        page.draw_rect(draw_rect, fill=HIGHLIGHT_FILL, color=HIGHLIGHT_FILL,
+                                       width=0, overlay=True, fill_opacity=0.55)
+                    if mode in ("line", "both"):
+                        page.draw_line(
+                            fitz.Point(rect.x0, rect.y1 + 1.2),
+                            fitz.Point(rect.x1, rect.y1 + 1.2),
+                            color=HIGHLIGHT_FILL, width=LINE_WIDTH_PT, overlay=True,
+                        )
+                    total_hits += 1
+                    # 把 GLM 坐标加到 per_page
+                    if page_idx < len(per_page_hits):
+                        per_page_hits[page_idx]["rects"].append({
+                            "term": f"[GLM] {hl.get('text', '')[:40]}",
+                            "rect": bbox,
+                            "source": "glm",
+                        })
+                        per_page_hits[page_idx]["terms_matched"].append(f"[GLM:{hl.get('type', 'text')}]")
+        except Exception as e:
+            # GLM 失败不影响本地
+            pass
+
     # 处理未匹配的 term
     for kw in keywords:
         if kw and kw not in matched_terms:
@@ -396,6 +459,8 @@ def highlight_pdf_robust(
         "min_yellow_pct": effective_threshold,
         "ok": yellow_pct >= effective_threshold,
         "mode": mode,
+        "glm_evidence": glm_evidence,
+        "glm_highlights": glm_highlights,
     }
 
 
@@ -457,20 +522,22 @@ def render_pages_jpg(pdf_path: str, out_dir: str, prefix: str,
 # 关键词提取 (从 CSV D/C 列)
 # ════════════════════════════════════════════════════════════════
 
-def extract_keywords_from_d(d_text: str, c_text: str = "") -> List[str]:
+def extract_keywords_from_d(d_text: str, c_text: str = "", use_glm: bool = False) -> List[str]:
     """
     从 D 列 + C 列提搜索关键词
     v10.1.1: 优先用 L4 v2 (可信度评分), fallback 到原启发式
+    v10.2: 加 use_glm, GLM 补抽关键医学术语
 
     v10.1 增强: 调用 l4_keyword_extract.extract_keywords_v2() 用 5 维特征
     + 可信度评分, 避免抽过于通用的词 (e.g., 2020, 99%)
+    v10.2 增强: use_glm=True 时, L4 v2 抽完后 GLM 补关键医学术语
     """
     if not d_text and not c_text:
         return []
     # 优先用 L4 v2 (如果可 import)
     try:
         from l4_keyword_extract import extract_keywords_simple
-        kws = extract_keywords_simple(c_text or "", d_text or "")
+        kws = extract_keywords_simple(c_text or "", d_text or "", use_glm=use_glm)
         if kws:
             return kws
     except ImportError:
@@ -719,9 +786,14 @@ def process_pn_x(
     jpg_out_dir: Optional[str] = None,
     jpg_prefix: Optional[str] = None,
     mode: str = DEFAULT_HIGHLIGHT_MODE,
+    use_glm: bool = False,
+    glm_citation: str = "",
+    glm_visual: str = "",
 ) -> Dict:
     """
     顶层 API: 处理一个 Pn-x, 输出高亮 PDF + 可选 page jpg
+
+    v10.2: 加 use_glm 参数, 用 GLM 应证段精准 highlight
 
     Args:
         pn_x: 'P11-1'
@@ -731,11 +803,17 @@ def process_pn_x(
         jpg_out_dir: 可选, 输出 page jpg 目录
         jpg_prefix: 可选, jpg 前缀 (默认 pn_x)
         mode: 高亮样式 ("line" / "fill" / "both")
+        use_glm: True 用 GLM 找应证段
+        glm_citation: D 列引文 (use_glm=True 时)
+        glm_visual: D 列视觉分析 (可选)
 
     Returns:
         同 highlight_pdf_robust() 返回值 + jpg_files
     """
-    result = highlight_pdf_robust(pdf_in, pdf_out, keywords, mode=mode)
+    result = highlight_pdf_robust(
+        pdf_in, pdf_out, keywords, mode=mode,
+        use_glm=use_glm, glm_citation=glm_citation, glm_visual=glm_visual,
+    )
     jpg_files = []
     if jpg_out_dir:
         prefix = jpg_prefix or pn_x

@@ -156,6 +156,11 @@ def cmd_all(args):
     return 0
 
 
+def cmd_glm(args):
+    """GLM 集成层直接调用"""
+    return _run_module("glm_integration.py", args)
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -172,6 +177,7 @@ def main():
         "keyword": cmd_keyword,
         "ppt": cmd_ppt,
         "diff": cmd_diff,
+        "glm": cmd_glm,
         "all": cmd_all,
     }
 
