@@ -638,10 +638,11 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 6 步规则 vs 8 列 CSV (双项目验证)
 
-- **雷管方案**: 6/7 步过, 99.4% 三方对齐, 160 Pn-x
-- **TMA**: 5/7 步过 (Step 1b/2 待跑 ppt_vision_analyze), 85.8% GLM highlight, 106 Pn-x
+- **雷管方案**: 7/7 步过 ✅, 99.4% 三方对齐, 160 Pn-x
+- **TMA**: 7/7 步过 ✅, 85.8% GLM highlight, 106 Pn-x
 - 测试: 69/69 通过 (`test_via54_highlight_fix_v10.py` 40 + `test_via54_rules.py` 29)
 - CI: `.github/workflows/rules_check.yml` 自动跑 `via54.py rules <project>`
+- v10.2 增强 (2026-08-10): TMA 5/7 → 7/7 (修了 via54_rules.py 兼容 TMA nested 结构和 _jpgs/ 辅助目录)
 
 ### 已知错论文 (GLM 已识别, 需手工从 Google Patents / 替代源补)
 
