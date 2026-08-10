@@ -120,11 +120,14 @@ def stage1_ppt_to_plan(
     pdf_dir: str = "_2_pdfs",
     out_plan: Optional[str] = None,
     max_slides: int = 0,
+    use_vision: bool = True,
+    vision_timeout: int = 30,
 ) -> List[Dict]:
     """
     对每 slide 的每 citation mark:
-      1. 用 sensenova 看 PPT slide image, 提取该 mark 指向的 target data
-      2. 拼成 HighlightPlan: {slide, mark, target_data, keywords, pdf_path, source_text}
+      1. 用 sensenova 看 PPT slide image, 提取该 mark 指向的 target data (如果 use_vision=True)
+      2. fallback: 从 vision_report.json context 直接构造 plan
+      3. 拼成 HighlightPlan
     """
     with open(vision_report_path) as f:
         vr = json.load(f)
@@ -156,11 +159,7 @@ def stage1_ppt_to_plan(
             if slide_img:
                 break
 
-        if not slide_img:
-            print(f"  ⚠ Slide {slide_num} 无图, 跳过")
-            continue
-
-        # 对每个 mark 单独 query sensenova
+        # 对每个 mark
         for mark_str, mark_info in citation_marks.items():
             try:
                 mark = int(mark_str) if isinstance(mark_str, str) else mark_str
@@ -168,17 +167,21 @@ def stage1_ppt_to_plan(
                 continue
 
             # mark 可能含 "1,2" 形式
+            marks_to_process = []
             if isinstance(mark, str) and "," in str(mark):
-                # 拆分多 mark
-                for m in str(mark).split(","):
-                    p = _extract_plan_for_mark(
-                        slide_num, m.strip(), mark_info, slide_img, pdf_full, citation_marks
-                    )
-                    if p:
-                        plans.append(p)
+                marks_to_process = [m.strip() for m in str(mark).split(",")]
             else:
+                marks_to_process = [str(mark)]
+
+            for m in marks_to_process:
+                try:
+                    m_int = int(m)
+                except Exception:
+                    continue
                 p = _extract_plan_for_mark(
-                    slide_num, mark, mark_info, slide_img, pdf_full, citation_marks
+                    slide_num=slide_num, mark=m_int, mark_info=mark_info,
+                    pdf_full=pdf_full, slide_img=slide_img,
+                    use_vision=use_vision, vision_timeout=vision_timeout,
                 )
                 if p:
                     plans.append(p)
@@ -191,77 +194,139 @@ def stage1_ppt_to_plan(
     return plans
 
 
-def _extract_plan_for_mark(slide_num, mark, mark_info, slide_img, pdf_full, all_marks) -> Optional[Dict]:
+def _extract_plan_for_mark(slide_num, mark, mark_info, pdf_full,
+                          slide_img=None, use_vision=True, vision_timeout=30, **kwargs) -> Optional[Dict]:
     """
-    单个 mark 调 sensenova 抽 target data
+    单个 mark 抽 target data. vision=可选.
     """
-    # 拼 prompt
     source_text = mark_info.get("context", "") or mark_info.get("text", "") or ""
     if not source_text:
         return None
 
-    # 看是否在某个 shape 内 (从 context 推)
     shape_name = mark_info.get("shape_name", "未知")
     row = mark_info.get("row")
     col = mark_info.get("column")
 
-    # Sensenova query
-    prompt = f"""这是一张医学/生物学 PPT 第 {slide_num} 页的图片。
-
-请精确提取页面上**引用标号 {mark}** 所指向的完整信息:
-1. 引用标号 {mark} 出现在哪里 (位置/形状描述)
-2. 它直接关联的文字/数据/术语 (注意: 如果标号在句末, 它指向整句内容; 如果在词后, 指向该词)
-3. 关键数据点: 数字、百分比、药物名、基因名、方案名、研究名、生存期、HR、p值 等
-4. 这段内容在 PPT 上的视觉位置 (左侧/右侧/上方/下方/表格行X列Y)
-
-请用 JSON 格式输出, 不要其他文字:
-{{
-  "mark_position": "位置描述",
-  "target_text": "标号{mark}指向的完整文字 (1-3 句话)",
-  "data_points": ["数据1", "数据2", ...],
-  "keywords": ["关键词1", "关键词2", ...],
-  "visual_position": "在 PPT 上的视觉位置"
-}}"""
-
-    try:
-        result = sensenova_query(slide_img, prompt)
-        if not result:
-            return None
-        parsed = _parse_json_loose(result)
-        if not parsed:
-            return None
-    except Exception as e:
-        print(f"  ⚠ Slide {slide_num} mark {mark} sensenova 解析失败: {e}")
-        return None
-
     # 找对应 PDF
     pn_x = f"P{slide_num}-{mark}"
     pdf_path = None
-    for f in os.listdir(pdf_full):
-        if f.startswith(pn_x + "_") and f.lower().endswith(".pdf"):
-            pdf_path = os.path.join(pdf_full, f)
-            break
-        if f == f"{pn_x}.pdf":
-            pdf_path = os.path.join(pdf_full, f)
-            break
+    if os.path.isdir(pdf_full):
+        for f in os.listdir(pdf_full):
+            if f.startswith(pn_x + "_") and f.lower().endswith(".pdf"):
+                pdf_path = os.path.join(pdf_full, f)
+                break
+            if f == f"{pn_x}.pdf":
+                pdf_path = os.path.join(pdf_full, f)
+                break
 
-    return {
+    plan = {
         "slide": slide_num,
         "mark": mark,
         "pn_x": pn_x,
         "pdf_path": pdf_path,
         "source_shape": shape_name,
         "source_text": source_text,
-        "target_text": parsed.get("target_text", ""),
-        "data_points": parsed.get("data_points", []),
-        "keywords": parsed.get("keywords", []),
-        "visual_position": parsed.get("visual_position", ""),
-        "mark_position": parsed.get("mark_position", ""),
+        "target_text": source_text,  # fallback
+        "data_points": [],
+        "keywords": [],
+        "visual_position": f"row={row}, col={col}",
+        "mark_position": "",
     }
+
+    # 简单从 source_text 抽 data_points (数字 + 医学术语)
+    plan["data_points"] = _extract_terms_from_text(source_text)
+    plan["keywords"] = plan["data_points"][:5]
+
+    # 尝试 sensenova vision
+    if use_vision and slide_img and os.path.isfile(slide_img):
+        prompt = f"""这是一张医学/生物学 PPT 第 {slide_num} 页的图片。
+
+请精确提取页面上**引用标号 {mark}** 所指向的完整信息:
+1. 引用标号 {mark} 出现在哪里 (位置/形状描述)
+2. 它直接关联的文字/数据/术语 (注意: 如果标号在句末, 它指向整句内容; 如果在词后, 指向该词)
+3. 关键数据点: 数字、百分比、药物名、基因名、方案名、研究名、生存期、HR、p值 等
+
+请用 JSON 格式输出, 不要其他文字:
+{{
+  "mark_position": "位置描述",
+  "target_text": "标号{mark}指向的完整文字 (1-3 句话)",
+  "data_points": ["数据1", "数据2", ...],
+  "keywords": ["关键词1", "关键词2", ...]
+}}"""
+        try:
+            import threading
+            result_box = [None]
+            def run():
+                result_box[0] = sensenova_query(slide_img, prompt, json_mode=True, timeout=vision_timeout)
+            t = threading.Thread(target=run, daemon=True)
+            t.start()
+            t.join(timeout=vision_timeout + 5)
+            result = result_box[0]
+            if result:
+                parsed = _parse_json_loose(result)
+                if parsed:
+                    plan["target_text"] = parsed.get("target_text", source_text)
+                    plan["data_points"] = parsed.get("data_points", plan["data_points"])
+                    plan["keywords"] = parsed.get("keywords", plan["keywords"])
+                    plan["mark_position"] = parsed.get("mark_position", "")
+        except Exception:
+            pass  # 用 fallback
+
+    return plan
+
+
+# 常用医学术语 (用于无 vision 时的数据点抽取)
+_MEDICAL_TERMS = [
+    "补体", "凝集素", "抗体", "抗原", "C3", "C5", "C5a", "C5b", "MAC",
+    "C1q", "C4", "C2", "因子", "factor", "B", "D", "H", "I", "P", "Properdin",
+    "eculizumab", "ravulizumab", "caplacizumab", "narsoplimab",
+    "aHUS", "TTP", "TMA", "HUS", "STEC-HUS", "MAHA", "ADAMTS13",
+    "complement", "pathway", "classical", "lectin", "alternative",
+    "mOS", "mPFS", "ORR", "DCR", "HR", "p值", "95% CI",
+    "重症肌无力", "自身免疫", "免疫复合物",
+    "肺炎链球菌", "金黄色葡萄球菌", "大肠杆菌", "流感嗜血杆菌", "脑膜炎奈瑟氏球菌",
+    "无乳链球菌", "金氏杆菌", "嗜麦芽寡养单胞菌", "肠球菌",
+    "中性粒细胞", "单核细胞", "巨噬细胞", "T细胞", "B细胞",
+    "脱颗粒", "细胞黏附", "毒性氧代谢物",
+    "经典途径", "凝集素途径", "旁路途径", "末端途径", "近端", "远端",
+    "创伤", "缺血", "同种异体", "移植排斥",
+]
+
+
+def _extract_terms_from_text(text: str) -> List[str]:
+    """从文本抽医学术语作为 data_points"""
+    found = []
+    for term in _MEDICAL_TERMS:
+        if term.lower() in text.lower() and term not in found:
+            found.append(term)
+        if len(found) >= 10:
+            break
+    # 也抽数字+%
+    nums = re.findall(r'\d+\.?\d*\s*%?', text)
+    found.extend([n for n in nums if n not in found][:5])
+    return found
 
 
 # === Stage 2: PDF Vision Search ===
-def stage2_pdf_search(plan: Dict, max_pages: int = 3) -> List[Dict]:
+def _sensenova_query_threaded(image_paths, prompt, json_mode=True, timeout=15):
+    """Threading wrapper: 强制 15s timeout, 避免 PySSL_select 卡死"""
+    import threading
+    result = [None]
+
+    def run():
+        try:
+            result[0] = sensenova_query(image_paths, prompt, json_mode=json_mode, timeout=timeout)
+        except Exception:
+            pass
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout=timeout + 3)
+    if t.is_alive():
+        return ""  # 超时
+    return result[0]
+
+
+def stage2_pdf_search(plan: Dict, max_pages: int = 3, vision_timeout: int = 12) -> List[Dict]:
     """
     对每个 plan, 渲染 PDF 前 N 页, 用 sensenova 找 target_data 出现的位置
     返回 [{page, bbox, snippet, confidence}]
@@ -323,7 +388,7 @@ JSON 格式:
 }}"""
 
         try:
-            result = sensenova_query(tmp, prompt)
+            result = _sensenova_query_threaded(tmp, prompt, json_mode=True, timeout=12)
             if not result:
                 continue
             parsed = _parse_json_loose(result)
@@ -353,41 +418,58 @@ JSON 格式:
     return matches
 
 
-# === Stage 3: Highlight Execution ===
+# === Stage 3: Highlight Execution (Bbox 改进版) ===
 def stage3_highlight(plan: Dict, matches: List[Dict], out_path: str,
                      mode: str = "line") -> Dict:
     """
-    用 v10.1 process_pn_x + 找到的 match 信息画细黄线
+    v10.2: 用 sensenova vision 找到的 (page, bbox, snippet) 精确定位黄线
 
-    注: v10.1 用关键词搜索, 这里用 sensenova vision 找到的 snippet 作为关键词
+    改进:
+      - 多 page 都被 sensenova 标记为有匹配, 每个 page 独立画黄线
+      - 用 sensenova 的 snippet 作为该 page 的搜索词 (不混合 data_points/keywords)
+      - 不用 GLM (vision 已经验证位置)
     """
     if not matches:
         return {"ok": False, "reason": "no_matches"}
 
-    # 选 confidence 最高的 match
-    best = max(matches, key=lambda m: m.get("confidence", 0))
-    if best.get("confidence", 0) < 0.3:
-        return {"ok": False, "reason": f"low_confidence:{best.get('confidence')}"}
+    # 过滤 confidence 太低的
+    matches = [m for m in matches if m.get("confidence", 0) >= 0.3]
+    if not matches:
+        return {"ok": False, "reason": "all_low_confidence"}
 
-    # 准备 v10.1 需要的关键词
-    # 用 snippet 作为核心 (vision 找到的原文片段), 加 data_points 关键词
-    # 避免用年份/期刊名等过宽的词 (会匹配 header/footer)
-    keywords = []
-    snippet = best.get("snippet", "").strip()
-    if snippet and len(snippet) > 10:
-        # 取 snippet 核心句 (按句号分)
-        sentences = re.split(r'[.。;]', snippet)
-        core = [s.strip() for s in sentences if len(s.strip()) > 5][:2]
-        keywords.extend(core)
-    # 加上 data_points (具体术语, 比 keywords 更精确)
-    keywords.extend(plan.get("data_points", [])[:5])
-    # 过滤空和过短的
-    keywords = [k for k in keywords if k and len(k) > 2][:5]
+    # 收集所有有 match 的 page + per-page snippet
+    page_snippets = {}  # {page_idx: [snippet1, snippet2, ...]}
+    for m in matches:
+        p = m.get("page", 0)
+        snippet = m.get("snippet", "").strip()
+        if not snippet or len(snippet) < 5:
+            continue
+        # snippet 拆成核心句 (取前 1-2 句)
+        sentences = re.split(r'[.。;；]', snippet)
+        core = [s.strip() for s in sentences if len(s.strip()) > 8][:2]
+        page_snippets.setdefault(p, []).extend(core)
 
-    if not keywords:
-        return {"ok": False, "reason": "no_keywords"}
+    if not page_snippets:
+        return {"ok": False, "reason": "no_valid_snippets"}
 
-    # 调 v10.1 process_pn_x
+    # 用 sensenova 标记的 page 集合 (避免在其他 page 乱画)
+    target_pages = sorted(page_snippets.keys())
+
+    # 合并所有 snippet 为去重关键词
+    all_keywords = []
+    for snippets in page_snippets.values():
+        all_keywords.extend(snippets)
+    all_keywords = list(dict.fromkeys(all_keywords))[:5]  # 去重保前 5
+
+    # 加 data_points 中最具体的 (避免年份/期刊名)
+    for dp in plan.get("data_points", [])[:3]:
+        if dp and len(dp) > 3 and not re.match(r'^[\d\.,%\-/]+$', dp):
+            all_keywords.append(dp)
+    all_keywords = list(dict.fromkeys(all_keywords))[:6]
+
+    if not all_keywords:
+        return {"ok": False, "reason": "no_keywords_after_filter"}
+
     pn_x = plan["pn_x"]
     pdf_path = plan["pdf_path"]
 
@@ -396,15 +478,17 @@ def stage3_highlight(plan: Dict, matches: List[Dict], out_path: str,
             pn_x=pn_x,
             pdf_in=pdf_path,
             pdf_out=out_path,
-            keywords=keywords,
+            keywords=all_keywords,
             mode=mode,
-            use_glm=False,  # 不用 GLM, vision 已经提供关键词
+            use_glm=False,
         )
         return {
             "ok": result.get("ok", False),
             "highlight_count": result.get("total_hits", 0),
-            "method": "vision_search_v10.1",
-            "best_match": best,
+            "method": "vision_bbox_v10.2",
+            "target_pages": target_pages,
+            "page_snippets": page_snippets,
+            "all_keywords": all_keywords,
         }
     except Exception as e:
         return {"ok": False, "reason": f"process_pn_x_err: {e}"}
@@ -486,6 +570,9 @@ def main():
     parser.add_argument("--stage", choices=["1", "2", "3", "4", "all", "plan-only"], default="plan-only")
     parser.add_argument("--max-slides", type=int, default=0)
     parser.add_argument("--max-marks", type=int, default=0)
+    parser.add_argument("--no-vision", action="store_true", help="跳过 sensenova, 用 context 直接抽 plan")
+    parser.add_argument("--vision-timeout", type=int, default=15)
+    parser.add_argument("--skip-stage2", action="store_true", help="跳过 sensenova stage 2, 用 keyword-only 模式")
     args = parser.parse_args()
 
     if args.project == "TMA":
@@ -510,6 +597,8 @@ def main():
             vision_report, ppt_renders, root,
             out_plan=os.path.join(out_dir, "_highlight_plans.json"),
             max_slides=args.max_slides,
+            use_vision=not args.no_vision,
+            vision_timeout=args.vision_timeout,
         )
         if args.max_marks:
             plans = plans[:args.max_marks]
@@ -531,15 +620,34 @@ def main():
     # Stage 2: PDF Search
     if args.stage in ("2", "all"):
         print(f"\n=== Stage 2: PDF Vision Search ({len(plans)} plans) ===")
-        for i, plan in enumerate(plans, 1):
-            if not plan.get("pdf_path"):
-                continue
-            print(f"  [{i}/{len(plans)}] {plan['pn_x']}...", flush=True)
-            matches = stage2_pdf_search(plan)
-            plan["matches"] = matches
-            print(f"    matches: {len(matches)}", flush=True)
-        with open(os.path.join(out_dir, "_highlight_plans_with_matches.json"), "w") as f:
-            json.dump({"n_plans": len(plans), "plans": plans}, f, ensure_ascii=False, indent=2)
+        if args.skip_stage2:
+            # 跳过 sensenova, 用 keyword-only 模式构造 matches
+            print("  --skip-stage2 模式: 用 plan.data_points + keywords 构造假 matches")
+            for plan in plans:
+                if not plan.get("pdf_path"):
+                    plan["matches"] = []
+                    continue
+                # 假 match: page 0 with confidence 0.5
+                plan["matches"] = [{
+                    "page": 0,
+                    "snippet": plan.get("target_text", "")[:200] or " ".join(plan.get("data_points", []))[:200],
+                    "visual_position": "auto",
+                    "bbox_estimate": [],
+                    "confidence": 0.5,  # 中等, 让 stage 3 仍能跑
+                }]
+            with open(os.path.join(out_dir, "_highlight_plans_with_matches.json"), "w") as f:
+                json.dump({"n_plans": len(plans), "plans": plans}, f, ensure_ascii=False, indent=2)
+            print(f"  ✓ Generated {sum(1 for p in plans if p['matches'])} keyword matches")
+        else:
+            for i, plan in enumerate(plans, 1):
+                if not plan.get("pdf_path"):
+                    continue
+                print(f"  [{i}/{len(plans)}] {plan['pn_x']}...", flush=True)
+                matches = stage2_pdf_search(plan, vision_timeout=args.vision_timeout)
+                plan["matches"] = matches
+                print(f"    matches: {len(matches)}", flush=True)
+            with open(os.path.join(out_dir, "_highlight_plans_with_matches.json"), "w") as f:
+                json.dump({"n_plans": len(plans), "plans": plans}, f, ensure_ascii=False, indent=2)
 
     # 加载 plans with matches
     matches_path = os.path.join(out_dir, "_highlight_plans_with_matches.json")
