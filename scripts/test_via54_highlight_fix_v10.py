@@ -268,10 +268,21 @@ class TestExtractKeywordsFromD(unittest.TestCase):
         self.assertIn("0.78", kws)
 
     def test_year(self):
+        # v10.1.1: L4 v2 默认丢弃纯年份 (low confidence)
+        # 要年份必须在 visual context 里
         d = "Author et al. Lancet 2025; 406: 1234-1245"
         kws = extract_keywords_from_d(d, "")
-        self.assertIn("2025", kws)
         self.assertIn("Lancet", kws)
+        # 2025 不强求 (L4 v2 默认丢弃)
+        # self.assertIn("2025", kws)
+
+    def test_year_with_context(self):
+        # 加 visual context "发表年份" 才能保留
+        d = "Author et al. Lancet 2025; 406: 1234-1245"
+        c = "[发表年份: 2025]"
+        kws = extract_keywords_from_d(d, c)
+        self.assertIn("Lancet", kws)
+        self.assertIn("2025", kws)
 
 
 # ════════════════════════════════════════════════════════════════

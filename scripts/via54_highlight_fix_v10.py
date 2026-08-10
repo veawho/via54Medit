@@ -460,14 +460,23 @@ def render_pages_jpg(pdf_path: str, out_dir: str, prefix: str,
 def extract_keywords_from_d(d_text: str, c_text: str = "") -> List[str]:
     """
     从 D 列 + C 列提搜索关键词
-    - 数字+%
-    - HR/p值/95%CI
-    - 期刊 (Lancet/NEJM/Hepatol/...)
-    - 关键术语 (HIMALAYA/STRIDE/...)
-    - 年份
+    v10.1.1: 优先用 L4 v2 (可信度评分), fallback 到原启发式
+
+    v10.1 增强: 调用 l4_keyword_extract.extract_keywords_v2() 用 5 维特征
+    + 可信度评分, 避免抽过于通用的词 (e.g., 2020, 99%)
     """
     if not d_text and not c_text:
         return []
+    # 优先用 L4 v2 (如果可 import)
+    try:
+        from l4_keyword_extract import extract_keywords_simple
+        kws = extract_keywords_simple(c_text or "", d_text or "")
+        if kws:
+            return kws
+    except ImportError:
+        pass
+
+    # Fallback: 原启发式
     keywords = set()
     full = f"{d_text} {c_text}"
 
