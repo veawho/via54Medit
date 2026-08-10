@@ -1,0 +1,308 @@
+[
+  {
+    "pn_x": "P3-1",
+    "topic": "补体系统三条活化途径综述",
+    "search_term": "complement system three activation pathways review",
+    "candidates": [
+      {
+        "pmid": "42136966",
+        "title": "A new perspective on the pathophysiology of kidney diseases: the intracellular complement system- \"complosome\".",
+        "authors": "Leventoğlu E, Bakkaloğlu SA",
+        "journal": "Front Nephrol",
+        "year": "2026",
+        "pmcid": "PMC13167706",
+        "doi": "10.3389/fneph.2026.1741099",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.3389/fneph.2026.1741099"
+      },
+      {
+        "pmid": "42112359",
+        "title": "A new perspective on AMD pathogenesis: a sequential Factor H-centered view of complement dysregulation.",
+        "authors": "Skerka C, Cochlovius B, Hüllebrand JP",
+        "journal": "Front Immunol",
+        "year": "2026",
+        "pmcid": "PMC13149112",
+        "doi": "10.3389/fimmu.2026.1814415",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.3389/fimmu.2026.1814415"
+      },
+      {
+        "pmid": "41978671",
+        "title": "Effectiveness of Interventions to Reduce Carbon-Emissions Within Secondary Healthcare: Systematic Review and Evidence an",
+        "authors": "Shaw L, Orr N, Lawal HM",
+        "journal": "Campbell Syst Rev",
+        "year": "2025",
+        "pmcid": "PMC12723626",
+        "doi": "10.1002/cl2.70077",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.1002/cl2.70077"
+      }
+    ]
+  },
+  {
+    "pn_x": "P3-2",
+    "topic": "补体激活和调节相关综述",
+    "search_term": "complement activation regulation review",
+    "candidates": [
+      {
+        "pmid": "42493353",
+        "title": "Basophils in Immunity: Activation Pathways, Roles in Allergy and AllergoOncology and Application of the Basophil Activat",
+        "authors": "Chauhan J, Vlasova S, Chenoweth A",
+        "journal": "Allergy",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1111/all.70457",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1111/all.70457"
+      },
+      {
+        "pmid": "42484484",
+        "title": "Complement Factor H-Based Therapeutics: A Comprehensive Overview.",
+        "authors": "Hamers SMWR, Buter EJ, Pouw RB",
+        "journal": "Eur J Immunol",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1002/eji.70241",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1002/eji.70241"
+      },
+      {
+        "pmid": "42467713",
+        "title": "Complement evasion by apicomplexans: Convergent strategies across diverse parasites.",
+        "authors": "Espinosa-Hernández S, Ramírez-Flores CJ",
+        "journal": "PLoS Pathog",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1371/journal.ppat.1014435",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1371/journal.ppat.1014435"
+      }
+    ]
+  },
+  {
+    "pn_x": "P4-5",
+    "topic": "近端补体活化产物调理吞噬综述",
+    "search_term": "complement opsonization phagocytosis proximal review",
+    "candidates": []
+  },
+  {
+    "pn_x": "P8-2",
+    "topic": "TMA 三联征综述 (MAHA, 血小板减少, 器官损伤)",
+    "search_term": "thrombotic microangiopathy triad review",
+    "candidates": [
+      {
+        "pmid": "40341411",
+        "title": "Eculizumab in severe pediatric STEC-HUS and its impact on neurological prognosis-a systematic review and meta-analysis.",
+        "authors": "Spagnol R, Alfisi A, Moi M",
+        "journal": "Eur J Pediatr",
+        "year": "2025",
+        "pmcid": "PMC12062034",
+        "doi": "10.1007/s00431-025-06160-2",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.1007/s00431-025-06160-2"
+      },
+      {
+        "pmid": "38242706",
+        "title": "Risk of Streptococcus pneumoniae-associated haemolytic uraemic syndrome in industrialised nations: a systematic review o",
+        "authors": "Ho CLT, Ting ASJ, Oligbu P",
+        "journal": "Epidemiol Mikrobiol Imunol",
+        "year": "2023",
+        "pmcid": "",
+        "doi": "",
+        "is_oa": false,
+        "fulltext_url": ""
+      },
+      {
+        "pmid": "36674666",
+        "title": "Transplant-Associated Thrombotic Microangiopathy in the Context of Allogenic Hematopoietic Stem Cell Transplantation: Wh",
+        "authors": "Lazana I",
+        "journal": "Int J Mol Sci",
+        "year": "2023",
+        "pmcid": "PMC9863862",
+        "doi": "10.3390/ijms24021159",
+        "is_oa": true,
+        "fulltext_url": "https://www.mdpi.com/1422-0067/24/2/1159/pdf?version=1673006953"
+      }
+    ]
+  },
+  {
+    "pn_x": "P12-1",
+    "topic": "血涂片 schistocytes 裂红细胞综述",
+    "search_term": "schistocytes blood smear review MAHA",
+    "candidates": [
+      {
+        "pmid": "28447424",
+        "title": "Does morphology matter in 2017? An approach to morphologic clues in non-neoplastic blood and bone marrow disorders.",
+        "authors": "Chabot-Richards DS, Foucar K",
+        "journal": "Int J Lab Hematol",
+        "year": "2017",
+        "pmcid": "",
+        "doi": "10.1111/ijlh.12667",
+        "is_oa": false,
+        "fulltext_url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1111/ijlh.12667"
+      },
+      {
+        "pmid": "8488374",
+        "title": "[Emergency blood picture].",
+        "authors": "Tobler A",
+        "journal": "Schweiz Med Wochenschr",
+        "year": "1993",
+        "pmcid": "",
+        "doi": "",
+        "is_oa": false,
+        "fulltext_url": ""
+      }
+    ]
+  },
+  {
+    "pn_x": "P12-2",
+    "topic": "MAHA 血涂片特征综述",
+    "search_term": "microangiopathic hemolytic anemia blood smear review",
+    "candidates": [
+      {
+        "pmid": "42369207",
+        "title": "AI-Augmented Hematological Signatures for Equitable Detection of Hereditary Hemolytic Anemia Carriers: A Global Systemat",
+        "authors": "Ali NT, Abdullah RS, Mehdi MAH",
+        "journal": "Hum Mutat",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1155/humu/9405486",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1155/humu/9405486"
+      },
+      {
+        "pmid": "41630338",
+        "title": "Successful treatment of severe cerebral malaria with artificial liver blood purification technology: A case report.",
+        "authors": "Fan C, Dai Y, Du H",
+        "journal": "Medicine (Baltimore)",
+        "year": "2026",
+        "pmcid": "PMC12863806",
+        "doi": "10.1097/md.0000000000047528",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.1097/MD.0000000000047528"
+      },
+      {
+        "pmid": "40384402",
+        "title": "Red Blood Cell Disorders in Newborns: Bridging Traditional and Modern Diagnostics.",
+        "authors": "Shirani Asl V, Tamaddon G",
+        "journal": "Fetal Pediatr Pathol",
+        "year": "2025",
+        "pmcid": "",
+        "doi": "10.1080/15513815.2025.2503178",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1080/15513815.2025.2503178"
+      }
+    ]
+  },
+  {
+    "pn_x": "P14-1",
+    "topic": "TMA 内皮损伤血小板激活综述",
+    "search_term": "TMA endothelial injury platelet activation review",
+    "candidates": [
+      {
+        "pmid": "23411690",
+        "title": "Complement activation in thrombotic microangiopathy.",
+        "authors": "Karpman D, Tati R",
+        "journal": "Hamostaseologie",
+        "year": "2013",
+        "pmcid": "",
+        "doi": "10.5482/hamo-12-12-0025",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.5482/HAMO-12-12-0025"
+      }
+    ]
+  },
+  {
+    "pn_x": "P15-1",
+    "topic": "TMA 病因分类 (原发/继发/特发) 综述",
+    "search_term": "TMA etiology classification primary secondary idiopathic",
+    "candidates": []
+  },
+  {
+    "pn_x": "P17-2",
+    "topic": "ADAMTS13 检测 TTP 诊断综述",
+    "search_term": "ADAMTS13 assay TTP diagnosis review",
+    "candidates": [
+      {
+        "pmid": "42461718",
+        "title": "Clinical laboratory diagnostics and monitoring of ADAMTS13 deficiency and of related diseases: an integrated approach.",
+        "authors": "Binder NB, Depasse F, Spannagl M",
+        "journal": "Expert Rev Hematol",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1080/17474086.2026.2702550",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1080/17474086.2026.2702550"
+      },
+      {
+        "pmid": "41970181",
+        "title": "Precision medicine in thrombotic thrombocytopenic purpura: a narrative review.",
+        "authors": "Al-Shibly R, Ghasoub R, AlRasheed M",
+        "journal": "Ther Adv Hematol",
+        "year": "2026",
+        "pmcid": "PMC13069169",
+        "doi": "10.1177/20406207261430423",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.1177/20406207261430423"
+      },
+      {
+        "pmid": "41770788",
+        "title": "Thrombotic thrombocytopenic purpura: celebrating 25 years of ADAMTS13.",
+        "authors": "Scully M, Carter MA, Subhan M",
+        "journal": "Blood",
+        "year": "2026",
+        "pmcid": "",
+        "doi": "10.1182/blood.2025030791",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1182/blood.2025030791"
+      }
+    ]
+  },
+  {
+    "pn_x": "P20-1",
+    "topic": "STEC-HUS 肾外表现综述",
+    "search_term": "STEC-HUS extra-renal manifestations review",
+    "candidates": [
+      {
+        "pmid": "40722309",
+        "title": "Neurological Manifestations of Hemolytic Uremic Syndrome: A Comprehensive Review.",
+        "authors": "Tonkovic U, Bogicevic M, Manzar A",
+        "journal": "Brain Sci",
+        "year": "2025",
+        "pmcid": "PMC12293647",
+        "doi": "10.3390/brainsci15070717",
+        "is_oa": true,
+        "fulltext_url": "https://doi.org/10.3390/brainsci15070717"
+      }
+    ]
+  },
+  {
+    "pn_x": "P28-3",
+    "topic": "TTP 死亡率 治疗 综述",
+    "search_term": "TTP mortality untreated review",
+    "candidates": [
+      {
+        "pmid": "37331965",
+        "title": "Current Intensive Care Management of Thrombotic Thrombocytopenic Purpura: A Case Report and Updated Literature Review.",
+        "authors": "Okoli S, Jenkins KA, Bojanowski CM",
+        "journal": "J Intensive Care Med",
+        "year": "2023",
+        "pmcid": "",
+        "doi": "10.1177/08850666231171907",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1177/08850666231171907"
+      },
+      {
+        "pmid": "23455401",
+        "title": "Bortezomib for patients with previously untreated multiple myeloma: a systematic review and meta-analysis of randomized ",
+        "authors": "Zeng Z, Lin J, Chen J",
+        "journal": "Ann Hematol",
+        "year": "2013",
+        "pmcid": "",
+        "doi": "10.1007/s00277-013-1711-7",
+        "is_oa": false,
+        "fulltext_url": "https://doi.org/10.1007/s00277-013-1711-7"
+      }
+    ]
+  }
+]

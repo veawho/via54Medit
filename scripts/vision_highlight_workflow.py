@@ -134,6 +134,13 @@ def stage1_ppt_to_plan(
     slides = vr.get("slides", {})
 
     pdf_full = os.path.join(project_root, pdf_dir)
+    # 雷管方案: 优先用 step3_pdf下载_160目录
+    if not os.path.isdir(pdf_full):
+        for alt in ("step3_pdf下载_160目录", "step3_pdf", "_pdfs_real"):
+            alt_path = os.path.join(project_root, alt)
+            if os.path.isdir(alt_path):
+                pdf_full = alt_path
+                break
     plans = []
 
     for slide_key, slide_data in slides.items():
@@ -207,7 +214,7 @@ def _extract_plan_for_mark(slide_num, mark, mark_info, pdf_full,
     row = mark_info.get("row")
     col = mark_info.get("column")
 
-    # 找对应 PDF
+    # 找对应 PDF (flat + nested 都试)
     pn_x = f"P{slide_num}-{mark}"
     pdf_path = None
     if os.path.isdir(pdf_full):
@@ -218,6 +225,14 @@ def _extract_plan_for_mark(slide_num, mark, mark_info, pdf_full,
             if f == f"{pn_x}.pdf":
                 pdf_path = os.path.join(pdf_full, f)
                 break
+        # nested: Pn-x/main.pdf 或 Pn-x/Pn-x_main_*.pdf
+        if not pdf_path:
+            nested_dir = os.path.join(pdf_full, pn_x)
+            if os.path.isdir(nested_dir):
+                for f in os.listdir(nested_dir):
+                    if f.lower() == "main.pdf" or (f.startswith(pn_x + "_main") and f.lower().endswith(".pdf")):
+                        pdf_path = os.path.join(nested_dir, f)
+                        break
 
     plan = {
         "slide": slide_num,
@@ -581,11 +596,22 @@ def main():
         root = LEIDA_ROOT
 
     vision_report = os.path.join(root, "_vision_report.json")
-    ppt_renders = os.path.join(root, "_1_ppt/_3_images")
-    if not os.path.isdir(ppt_renders):
-        ppt_renders = os.path.join(root, "_ppt_renders")
-    if not os.path.isdir(ppt_renders):
-        ppt_renders = os.path.join(root, "_1_ppt")
+    # 按优先级尝试多个 PPT render 目录. 优先选有 slide_001.jpg 内容的 (避免选到空 / PDF-only dir)
+    ppt_renders_candidates = [
+        os.path.join(root, "_1_ppt/_3_images"),                  # TMA 主路径
+        os.path.join(root, "step1_ppt_目录/_ppt_renders_expanded"),  # 雷管方案 expanded (优先)
+        os.path.join(root, "step1_ppt_目录/_ppt_renders"),       # 雷管方案
+        os.path.join(root, "_ppt_renders_expanded"),             # 雷管方案 backup
+        os.path.join(root, "_ppt_renders"),                      # TMA/雷管 fallback (可能有空 PDF)
+        os.path.join(root, "_1_ppt"),
+    ]
+    def _has_slide_jpg(p):
+        return os.path.isdir(p) and any(
+            f.startswith("slide_") and f.endswith((".jpg", ".png"))
+            for f in os.listdir(p)[:20]
+        )
+    ppt_renders = next((p for p in ppt_renders_candidates if _has_slide_jpg(p)), root)
+    print(f"  ppt_renders resolved: {ppt_renders}")
 
     out_dir = os.path.join(root, "_3_highlight_vision")
     os.makedirs(out_dir, exist_ok=True)

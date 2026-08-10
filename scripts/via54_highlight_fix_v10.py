@@ -50,6 +50,7 @@ SKIP_TOP_RATIO = 0.10   # 跳过顶部 10% (页眉)
 SKIP_BOTTOM_RATIO = 0.08  # 跳过底部 8% (页脚/页码)
 SKIP_TOP_LINES = 2       # 跳过前 2 行 (标题/作者)
 SKIP_BOTTOM_LINES = 2    # 跳过后 2 行 (通信/脚注)
+STRICT_SKIP_HEADER = True  # 当所有 rect 都在 skip zone 时返回 0 (避免 HIGHLIGHT_IN_HEADER)
 
 # 健康检查的黄色像素阈值
 YELLOW_R_MIN = 200
@@ -136,6 +137,16 @@ def highlight_pdf(pdf_path, page_num, terms, output_path):
 # ════════════════════════════════════════════════════════════════
 # 核心: 单 PDF 高亮
 # ════════════════════════════════════════════════════════════════
+
+def _is_in_header_zone(rect: fitz.Rect, page_rect: fitz.Rect) -> bool:
+    """判断 rect 是否落在真正的页眉 (顶部 10%) / 页脚 (底部 8%). 严格模式用. 标题区不算. """
+    ph = page_rect.height
+    if rect.y0 < ph * SKIP_TOP_RATIO:
+        return True
+    if rect.y1 > ph * (1 - SKIP_BOTTOM_RATIO):
+        return True
+    return False
+
 
 def _is_in_skip_zone(rect: fitz.Rect, page_rect: fitz.Rect,
                      first_lines: List[str], last_lines: List[str]) -> bool:
@@ -322,12 +333,18 @@ def highlight_pdf_robust(
             if not rects:
                 continue
 
-            # 过滤 skip zone
-            valid_rects = [r for r in rects if not _is_in_skip_zone(r, page_rect, all_lines, all_lines)]
+            # 过滤 skip zone. v10.3 strict 模式: 只过滤真正的 header/footer, 不动 title 区.
+            if STRICT_SKIP_HEADER:
+                valid_rects = [r for r in rects if not _is_in_header_zone(r, page_rect)]
+            else:
+                valid_rects = [r for r in rects if not _is_in_skip_zone(r, page_rect, all_lines, all_lines)]
             if not valid_rects:
-                # 全在 skip zone 也至少画 1 个 (避免 0% 黄色), 选离标题最远的
+                if STRICT_SKIP_HEADER:
+                    # 全在 header/footer zone, 不画 (避免 HIGHLIGHT_IN_HEADER)
+                    continue
+                # 兼容旧 v10.1/v10.2 行为: 选最下的一个, 至少画 1 个 (避免 0% 黄色)
                 rects_sorted = sorted(rects, key=lambda r: r.y0)
-                valid_rects = [rects_sorted[-1]]  # 最下面的一个
+                valid_rects = [rects_sorted[-1]]
 
             for r in valid_rects:
                 # 扩展 rect 一点, 让高亮更明显
