@@ -55,7 +55,9 @@ SKIP_BOTTOM_LINES = 2    # 跳过后 2 行 (通信/脚注)
 YELLOW_R_MIN = 200
 YELLOW_G_MIN = 200
 YELLOW_B_MAX = 150
-YELLOW_MIN_PCT = 0.01  # 0.01% (与 via54_health.py 一致)
+YELLOW_MIN_PCT = 0.01  # 0.01% (与 via54_health.py 一致, fill 模式适用)
+# line 模式 (6 步规则要求 "细黄线") 因线本身面积小, 阈值放宽到 0.003%
+YELLOW_MIN_PCT_LINE = 0.003
 
 # 高亮样式 (6 步规则第 4 步要求 "文字下方细黄线")
 HIGHLIGHT_MODES = ("line", "fill", "both")
@@ -379,6 +381,11 @@ def highlight_pdf_robust(
     # 估计黄色像素占比
     yellow_pct = _estimate_yellow_pct(pdf_out, max_pages=n_pages)
 
+    # line 模式天然面积小, 自动用更低的阈值
+    effective_threshold = min_yellow_pct
+    if mode == "line" and min_yellow_pct == YELLOW_MIN_PCT:
+        effective_threshold = YELLOW_MIN_PCT_LINE
+
     return {
         "pages_processed": n_pages,
         "total_hits": total_hits,
@@ -386,8 +393,8 @@ def highlight_pdf_robust(
         "yellow_pct_estimate": yellow_pct,
         "matched_terms": matched_terms,
         "skipped_terms": skipped_terms,
-        "min_yellow_pct": min_yellow_pct,
-        "ok": yellow_pct >= min_yellow_pct,
+        "min_yellow_pct": effective_threshold,
+        "ok": yellow_pct >= effective_threshold,
         "mode": mode,
     }
 

@@ -116,9 +116,11 @@ def _check_step1_dirs(project_dir: str) -> Dict:
     found: Dict[str, Optional[str]] = {}
 
     candidates = {
-        "ppt": ["_ppt", "ppt", "_1_ppt", "PPT"],
-        "download": ["_download", "download", "_pdfs", "_2_pdfs", "pdfs"],
-        "highlight": ["_highlight", "highlight", "_3_highlight", "hl"],
+        "ppt": ["_ppt", "ppt", "_1_ppt", "PPT", "step1_ppt_目录", "step1_ppt"],
+        "download": ["_download", "download", "_pdfs", "_2_pdfs", "pdfs",
+                     "step3_pdf下载_160目录", "step3_pdf", "step3_pdfs"],
+        "highlight": ["_highlight", "highlight", "_3_highlight", "hl",
+                      "step4_highlight_96目录_合并DOI", "step4_highlight"],
     }
     for kind, names in candidates.items():
         for n in names:
