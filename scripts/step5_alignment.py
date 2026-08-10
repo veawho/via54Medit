@@ -33,6 +33,13 @@ try:
 except ImportError:
     HAS_PIL = False
 
+# PyMuPDF 用于抽 highlight 文字
+try:
+    import fitz
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
+
 
 # ════════════════════════════════════════════════════════════════
 # 项目预设
@@ -43,7 +50,7 @@ PROJECTS = {
         "root": "/Users/david/Desktop/雷管方案_文献整理",
         "csv": "step2_标注分析/PPT_citations_8col_aligned.csv",
         "step3": "step3_pdf下载_160目录",
-        "step4": "step4_highlight_96目录_合并DOI",
+        "step4": "step4_highlight_v10_glm",  # v10.2: GLM 增强版
         "step5": "step5_三方对齐",
         "convention": "nested",  # Pn-x/ 内有 main.pdf
     },
@@ -51,9 +58,9 @@ PROJECTS = {
         "root": "/Users/david/Desktop/TMA_文献整理",
         "csv": "_citation_table/tma_citation_table.csv",
         "step3": "_2_pdfs",
-        "step4": "_3_highlight",
-        "step5": "_step5_三方对齐",  # 待创建
-        "convention": "flat",  # Pn-x_main.pdf 直接在 _2_pdfs/
+        "step4": "_3_highlight_v10_glm",  # v10.2: GLM 增强版 (vs 旧 _3_highlight)
+        "step5": "_step5_三方对齐",
+        "convention": "flat",
     },
 }
 
@@ -106,6 +113,35 @@ def _yellow_pct(jpg_path: str) -> float:
         return float(yellow.sum() / yellow.size * 100)
     except Exception:
         return 0.0
+
+
+def _extract_highlight_text(pdf_path: str, page_hint: Optional[int] = None,
+                            max_chars: int = 500) -> str:
+    """
+    从 PDF 抽 highlight 区域文字 (给 GLM 用)
+    优先用 page_hint, 否则 page 1-3
+
+    Returns: 抽取的文本 (可能空)
+    """
+    if not HAS_PYMUPDF or not pdf_path or not os.path.isfile(pdf_path):
+        return ""
+    try:
+        doc = fitz.open(pdf_path)
+        n = min(3, len(doc))
+        # 优先 page_hint 页
+        if page_hint and 1 <= page_hint <= n:
+            text = doc[page_hint - 1].get_text() or ""
+            if text:
+                doc.close()
+                return text[:max_chars]
+        # fallback: 抽前 N 页
+        all_text = ""
+        for i in range(n):
+            all_text += (doc[i].get_text() or "") + "\n"
+        doc.close()
+        return all_text[:max_chars]
+    except Exception:
+        return ""
 
 
 def _check_step5_alignment(
@@ -260,20 +296,24 @@ def _check_step5_alignment(
             issues["5#3 no_highlight"] = issues.get("5#3 no_highlight", 0) + 1
 
         # v10.2: GLM 语义对齐 (5#3 失败时调 GLM 兜底)
-        if use_glm and not row["aligned_5_3"] and d_visual and hl_jpgs:
+        if use_glm and not row["aligned_5_3"] and d_visual:
             try:
                 from glm_integration import semantic_align_step5
-                # 取第一张 highlight jpg 的文字作为 highlight_text
-                # (实际应该用 GLM 应证段, 但简单版用 jpg OCR 太慢)
-                glm_result = semantic_align_step5(
-                    visual_context=d_visual,
-                    highlight_text=hl_jpgs[0][:100] if hl_jpgs else "",
-                    use_glm=True,
+                # 抽 highlight 实际文字 (从 PDF 找应证段, 不用 jpg 文件名)
+                highlight_text = _extract_highlight_text(
+                    pdf_path=row.get("pdf_path", ""),
+                    page_hint=int(r.get("page", 0)) or None,
                 )
-                if glm_result and glm_result.get("aligns"):
-                    row["aligned_5_3"] = True
-                    n_aligned_5_3 += 1
-                    row["glm_align"] = glm_result
+                if highlight_text:
+                    glm_result = semantic_align_step5(
+                        visual_context=d_visual,
+                        highlight_text=highlight_text,
+                        use_glm=True,
+                    )
+                    if glm_result and glm_result.get("aligns"):
+                        row["aligned_5_3"] = True
+                        n_aligned_5_3 += 1
+                        row["glm_align"] = glm_result
             except Exception:
                 pass
 
