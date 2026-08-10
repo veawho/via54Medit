@@ -119,7 +119,9 @@ def _check_step1_dirs(project_dir: str) -> Dict:
         "ppt": ["_ppt", "ppt", "_1_ppt", "PPT", "step1_ppt_目录", "step1_ppt"],
         "download": ["_download", "download", "_pdfs", "_2_pdfs", "pdfs",
                      "step3_pdf下载_160目录", "step3_pdf", "step3_pdfs"],
-        "highlight": ["_highlight", "highlight", "_3_highlight", "hl",
+        # v10_glm 是最新最完整的 (含合并 Pn1-x1Pn2-x2), 优先选
+        "highlight": ["_3_highlight_v10_glm", "step4_highlight_v10_glm",
+                      "_highlight", "highlight", "_3_highlight", "hl",
                       "step4_highlight_96目录_合并DOI", "step4_highlight"],
     }
     for kind, names in candidates.items():
@@ -142,6 +144,9 @@ def _check_step1_dirs(project_dir: str) -> Dict:
 def _check_step1_ppt_expansion(project_dir: str, ppt_dir: Optional[str]) -> Dict:
     """
     步骤一#1: PPT 目录应有原版 + 扩页后 + 扩页后导出的图
+
+    支持 TMA 风格 nested 结构: _1_ppt/_1_original/TMA临床路径的诊断与鉴别.pptx
+    直接子文件 + 1 层子目录 都算.
     """
     issues: List[str] = []
     if not ppt_dir or not os.path.isdir(ppt_dir):
@@ -159,8 +164,9 @@ def _check_step1_ppt_expansion(project_dir: str, ppt_dir: Optional[str]) -> Dict
             except OSError:
                 pass
     all_files = files + sub_files
-    has_original = any(f.lower().endswith(('.pptx', '.ppt')) for f in files)
-    has_expanded = any('expand' in f.lower() or 'enlarged' in f.lower() for f in files)
+    # has_original: 直接子文件 或 1 层子目录里都算 (TMA 风格 _1_original/...)
+    has_original = any(f.lower().endswith(('.pptx', '.ppt')) for f in all_files)
+    has_expanded = any('expand' in f.lower() or 'enlarged' in f.lower() for f in all_files)
     has_images = any(f.lower().endswith(('.jpg', '.png', '.jpeg')) for f in all_files)
 
     if not has_original:
@@ -193,11 +199,25 @@ def _check_step2_ppt_analysis(ppt_dir: Optional[str]) -> Dict:
         return {"ok": False, "issues": ["PPT 目录不存在"], "checks": {}}
 
     # 检查是否有 _vision_report.json 或 _analysis.md
+    # 支持: 直接子文件 + 1 层子目录 (TMA 风格 _1_ppt/_1_original/...)
     analysis_files = ['_vision_report.json', '_analysis.md', '_ppt_analysis.json']
-    checks["analysis_file"] = any(os.path.isfile(os.path.join(ppt_dir, f)) for f in analysis_files)
-    # 检查 _exported_images 或 _ppt_renders 目录
-    img_dirs = ['_exported_images', '_ppt_renders', '_ppt_images', 'images']
-    checks["exported_images"] = any(os.path.isdir(os.path.join(ppt_dir, d)) for d in img_dirs)
+    analysis_paths = []
+    for f in analysis_files:
+        # 直接
+        if os.path.isfile(os.path.join(ppt_dir, f)):
+            analysis_paths.append(os.path.join(ppt_dir, f))
+        # 1 层子目录
+        for sub in os.listdir(ppt_dir):
+            sp = os.path.join(ppt_dir, sub)
+            if os.path.isdir(sp) and os.path.isfile(os.path.join(sp, f)):
+                analysis_paths.append(os.path.join(sp, f))
+    checks["analysis_file"] = len(analysis_paths) > 0
+    # 检查 _exported_images 或 _ppt_renders 目录 (直接 + 1 层)
+    img_dirs = ['_exported_images', '_ppt_renders', '_ppt_images', 'images', '_3_images', '_2_expanded']
+    checks["exported_images"] = any(os.path.isdir(os.path.join(ppt_dir, d)) for d in img_dirs) \
+        or any(os.path.isdir(os.path.join(ppt_dir, sub, d))
+               for sub in os.listdir(ppt_dir) if os.path.isdir(os.path.join(ppt_dir, sub))
+               for d in img_dirs)
 
     if not checks["analysis_file"]:
         issues.append("无 PPT 视觉分析结果 (建议: _vision_report.json)")
@@ -286,8 +306,23 @@ def _check_step4_highlight(highlight_dir: Optional[str], download_dir: Optional[
     if not highlight_dir:
         return {"ok": False, "issues": ["Highlight 目录不存在"], "counts": counts}
 
-    pn_x_dirs = [d for d in os.listdir(highlight_dir)
-                 if os.path.isdir(os.path.join(highlight_dir, d)) and d.startswith('P')]
+    # 区分 nested 真正的 Pn-x (有 main.pdf / v10.pdf) vs flat 的 Pn-x_jpgs/ 辅助目录
+    # 规则: 只把包含 PDF 的目录当 nested Pn-x, 其他是辅助
+    all_p_dirs = [d for d in os.listdir(highlight_dir)
+                  if os.path.isdir(os.path.join(highlight_dir, d)) and d.startswith('P')]
+    pn_x_dirs = []
+    pn_x_jpgs = []  # 辅助 jpg 目录 (Pn-x_jpgs/)
+    for d in all_p_dirs:
+        full = os.path.join(highlight_dir, d)
+        if d.endswith('_jpgs') or d.endswith('_images'):
+            pn_x_jpgs.append(d)
+            continue
+        files = os.listdir(full)
+        if any(f.lower().endswith('.pdf') for f in files):
+            pn_x_dirs.append(d)
+        else:
+            # 纯 jpg 目录 (无 PDF) 也算辅助
+            pn_x_jpgs.append(d)
 
     if pn_x_dirs:
         counts["convention"] = "nested"
@@ -328,8 +363,10 @@ def _check_step4_highlight(highlight_dir: Optional[str], download_dir: Optional[
     else:
         if counts["with_pdf"] == 0:
             issues.append("Highlight 目录无 PDF")
-        if counts["with_highlight_jpg"] == 0:
-            issues.append("Highlight 目录无 highlight 图片 (文件名含 'highlight')")
+        # v10 line 模式: jpg 命名是 page_001.jpg / page_page1.jpg, 不一定含 highlight
+        # 兼容: 含 highlight 的 jpg 优先, 否则任意 jpg 都算
+        if counts["with_highlight_jpg"] == 0 and counts["with_jpg"] == 0:
+            issues.append("Highlight 目录无图片 (jpg/png)")
 
     # 对齐检查: highlight 数 ≈ download 数 (无论哪种约定)
     if download_dir and os.path.isdir(download_dir):
@@ -344,13 +381,19 @@ def _check_step4_highlight(highlight_dir: Optional[str], download_dir: Optional[
 
 
 def _count_pn_x(dir_path: str) -> int:
-    """统计一个目录下 Pn-x 的数量 (兼容 nested + flat)"""
-    pn_x_dirs = [d for d in os.listdir(dir_path)
-                 if os.path.isdir(os.path.join(dir_path, d)) and d.startswith('P')]
-    if pn_x_dirs:
-        return len(pn_x_dirs)
-    # flat
-    files = [f for f in os.listdir(dir_path) if f.startswith('P')]
+    """统计一个目录下 Pn-x 的数量 (兼容 nested + flat + 辅助 _jpgs/_images)"""
+    # 排除辅助目录 (Pn-x_jpgs/, Pn-x_images/)
+    real_dirs = [d for d in os.listdir(dir_path)
+                 if os.path.isdir(os.path.join(dir_path, d))
+                 and d.startswith('P')
+                 and not (d.endswith('_jpgs') or d.endswith('_images'))]
+    if real_dirs:
+        return len(real_dirs)
+    # flat: 统计顶层 Pn-x_*.pdf 文件
+    files = [f for f in os.listdir(dir_path)
+             if f.startswith('P')
+             and not os.path.isdir(os.path.join(dir_path, f))
+             and (f.lower().endswith('.pdf') or '_' in f)]
     pns = set()
     for f in files:
         m = re.match(r'(P\d+-\d+)', f)
@@ -377,10 +420,28 @@ def _check_step5_alignment(
     if not download_dir or not highlight_dir:
         return {"ok": False, "issues": ["下载或 highlight 目录缺失"], "info": {}}
 
-    dl_pn_x = {d for d in os.listdir(download_dir)
-               if os.path.isdir(os.path.join(download_dir, d)) and d.startswith('P')}
-    hl_pn_x = {d for d in os.listdir(highlight_dir)
-               if os.path.isdir(os.path.join(highlight_dir, d)) and d.startswith('P')}
+    # 排除辅助目录 (Pn-x_jpgs/, Pn-x_images/)
+    def _real_pn_x(d: str) -> bool:
+        return (d.startswith('P')
+                and not d.endswith('_jpgs')
+                and not d.endswith('_images'))
+
+    def _extract_pn_x_set(dir_path: str) -> set:
+        """兼容 nested (Pn-x 目录) + flat (Pn-x_*.pdf)"""
+        items = set()
+        for name in os.listdir(dir_path):
+            full = os.path.join(dir_path, name)
+            if os.path.isdir(full):
+                if _real_pn_x(name):
+                    items.add(name)
+            elif name.startswith('P') and (name.lower().endswith('.pdf') or '_' in name):
+                m = re.match(r'(P\d+-\d+)', name)
+                if m:
+                    items.add(m.group(1))
+        return items
+
+    dl_pn_x = _extract_pn_x_set(download_dir)
+    hl_pn_x = _extract_pn_x_set(highlight_dir)
 
     # A+B 对齐: highlight 应当包含 download 的所有 Pn-x
     missing_in_hl = dl_pn_x - hl_pn_x
