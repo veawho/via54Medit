@@ -5,7 +5,8 @@
 // scrape the HTML search results page.
 //
 // Endpoint:
-//   https://scholar.google.com/scholar?q=<query>&hl=en&as_sdt=0%2C5
+//
+//	https://scholar.google.com/scholar?q=<query>&hl=en&as_sdt=0%2C5
 //
 // Rate limits: Google Scholar aggressively throttles (429 + CAPTCHA) and
 // has no published rate limit. We implement:
@@ -50,12 +51,12 @@ import (
 type gScholarSource struct {
 	enabled    bool
 	client     *http.Client
-	rps        float64       // requests per second
+	rps        float64 // requests per second
 	mu         sync.Mutex
 	tokens     float64
 	lastFill   time.Time
-	userAgents []string       // rotating UA pool
-	uaIndex    int           // current UA index (protected by mu)
+	userAgents []string // rotating UA pool
+	uaIndex    int      // current UA index (protected by mu)
 }
 
 // gScholarEndpoint is the Google Scholar search URL base.
@@ -151,12 +152,12 @@ func (s *gScholarSource) Health(ctx context.Context) error {
 // Search scrapes Google Scholar and returns up to `limit` citations.
 //
 // Scraping flow:
-//   1. Construct URL with hl=en, as_sdt=0,5 (all dates)
-//   2. GET with rotating UA
-//   3. Parse result blocks (div.gs_ri)
-//   4. For each block: extract title, author, venue, year, snippet, links
-//   5. Extract DOI/PMID from "all versions" links and PDF indicators
-//   6. Return []types.Citation
+//  1. Construct URL with hl=en, as_sdt=0,5 (all dates)
+//  2. GET with rotating UA
+//  3. Parse result blocks (div.gs_ri)
+//  4. For each block: extract title, author, venue, year, snippet, links
+//  5. Extract DOI/PMID from "all versions" links and PDF indicators
+//  6. Return []types.Citation
 func (s *gScholarSource) Search(ctx context.Context, q types.EBMQuestion, limit int) ([]types.Citation, error) {
 	if !s.enabled {
 		return nil, fmt.Errorf("gscholar: source is disabled")

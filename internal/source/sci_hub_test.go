@@ -106,8 +106,8 @@ func TestResolve_MirrorReturnsPDF(t *testing.T) {
 	defer server.Close()
 
 	s, err := NewSciHubSource(map[string]any{
-		"enabled":  true,
-		"mirrors":  server.URL, // use test server as mirror
+		"enabled":    true,
+		"mirrors":    server.URL, // use test server as mirror
 		"rate_limit": 100,
 	})
 	if err != nil {
@@ -134,8 +134,8 @@ func TestResolve_MirrorReturnsHTML_OK(t *testing.T) {
 	defer server.Close()
 
 	s, err := NewSciHubSource(map[string]any{
-		"enabled":  true,
-		"mirrors":  server.URL,
+		"enabled":    true,
+		"mirrors":    server.URL,
 		"rate_limit": 100,
 	})
 	if err != nil {
@@ -164,8 +164,8 @@ func TestResolve_MirrorReturns404_NextMirror(t *testing.T) {
 	defer server2.Close()
 
 	s, err := NewSciHubSource(map[string]any{
-		"enabled":  true,
-		"mirrors":  fmt.Sprintf("%s,%s", server1.URL, server2.URL),
+		"enabled":    true,
+		"mirrors":    fmt.Sprintf("%s,%s", server1.URL, server2.URL),
 		"rate_limit": 100,
 	})
 	if err != nil {
@@ -194,8 +194,8 @@ func TestResolve_AllMirrorsFail(t *testing.T) {
 	defer server2.Close()
 
 	s, err := NewSciHubSource(map[string]any{
-		"enabled":  true,
-		"mirrors":  fmt.Sprintf("%s,%s", server1.URL, server2.URL),
+		"enabled":    true,
+		"mirrors":    fmt.Sprintf("%s,%s", server1.URL, server2.URL),
 		"rate_limit": 100,
 	})
 	if err != nil {

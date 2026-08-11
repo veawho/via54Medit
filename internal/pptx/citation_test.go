@@ -160,9 +160,9 @@ func TestFindCitationLines_JournalWindow(t *testing.T) {
 
 func TestBatchResult_Structure(t *testing.T) {
 	r := &BatchResult{
-		Total:          5,
-		Exact:          3,
-		Downloadable:   4,
+		Total:        5,
+		Exact:        3,
+		Downloadable: 4,
 	}
 	if r.Total != 5 {
 		t.Fatal("BatchResult fields not accessible")

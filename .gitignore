@@ -78,3 +78,16 @@ medit
 cmd/medit/medit
 *.exe
 list_citations_v2
+
+# User-specific paths (NEVER commit; protect private project data + tokens)
+# 雷管方案 (临床文献整理项目, 私有, 商业机密)
+雷管方案_文献整理/
+**/雷管方案_文献整理/
+
+# User credentials / tokens (NEVER commit; protect secrets)
+feishu_credentials.json
+**/feishu_credentials.json
+.env
+.env.local
+*.local.yaml
+config.local.yaml

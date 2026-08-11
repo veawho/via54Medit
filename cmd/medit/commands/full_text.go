@@ -27,13 +27,13 @@ import (
 )
 
 var (
-	fullTextCDP      string
-	fullTextCookies  string
-	fullTextOutDir   string
-	fullTextWorkers  int
+	fullTextCDP        string
+	fullTextCookies    string
+	fullTextOutDir     string
+	fullTextWorkers    int
 	fullTextCheckpoint string
-	fullTextHTML     bool
-	fullTextInput    string
+	fullTextHTML       bool
+	fullTextInput      string
 )
 
 var fullTextCmd = &cobra.Command{
@@ -158,6 +158,9 @@ func runFullTextDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	result, err := finder.Get(ctx, c)
+	if result == nil {
+		return fmt.Errorf("fulltext download: no result (nil) for %q", identifier)
+	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Fetched full text for: %s\n", c.Title)
 	fmt.Fprintf(out, "Tier: %d\n", result.Tier)
@@ -457,8 +460,8 @@ func expandPath(p string) string {
 }
 
 type httpWork struct {
-	Id          string       `json:"id"`
-	Title       string       `json:"title"`
+	Id          string `json:"id"`
+	Title       string `json:"title"`
 	Authorships []struct {
 		Author struct {
 			Name string `json:"name"`

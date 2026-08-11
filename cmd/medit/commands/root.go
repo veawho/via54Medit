@@ -1,4 +1,8 @@
 // Package commands wires the 13 medit CLI subcommands.
+//
+// HLO 集成 (Phase 5, 2026-07-28):
+//   新增 4 个 subcommand: medit hlo ask/audit/truth/corr
+//   每个调 hlo_nlu_v2.py (Python) - 0 浏览器注册, 0 密钥
 package commands
 
 import (
@@ -14,7 +18,20 @@ var rootCmd = &cobra.Command{
 	Long: `via54Medit is a natural-language-driven multi-source medical literature
 router for Evidence-Based Medicine. It dispatches clinical questions
 to Antfu RAG, PubMed, OpenAlex, and Semantic Scholar, fuses results,
-and outputs graded evidence packages with optional PPT rendering.`,
+and outputs graded evidence packages with optional PPT rendering.
+
+Phase 5 (2026-07-28): HLO (Hermes Literature Orchestrator) 集成
+  - medit hlo ask "处理 P5-7"    (NLU 入口, 14 意图路由)
+  - medit hlo audit              (32 Producer 白名单真伪鉴定)
+  - medit hlo truth P5-7         (字段真值表查询)
+  - medit hlo corr 5-7 d "Qin S" "Meyer T"  (NL 修正自升级)
+
+Phase 6 (2026-07-31): Feishu (飞书) 集成
+  - medit feishu verify           (CSV ↔ 飞书 一致性 verify)
+  - medit feishu push [--dry-run] (CSV → 飞书 push, auto-fix)
+  - medit citation match <ref> <pdf>  (算法驱动 D 列 vs PDF 内容匹配)
+  - medit citation test-extract <ref> (抽取 author+journal+year+trial+drug+DOI)
+  - medit citation replayer           (经验闭环: 修正 → 测试 → CI)`,
 	Version: version.Short(),
 }
 
@@ -58,11 +75,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&askNoLLM, "no-llm", false,
 		"Skip LLM summary/extraction")
 
-	// Wire all 13 subcommands (Phase 0: all stubs that print "coming in Phase N")
+	// Wire all 13 + 4 HLO subcommands
 	registerAll()
 }
 
-// registerAll wires the 13 subcommands.
+// registerAll wires the 13 + 4 HLO subcommands.
 func registerAll() {
 	// --- Retrieval (5) ---
 	rootCmd.AddCommand(askCmd)        // ask <query>
@@ -104,6 +121,15 @@ func registerAll() {
 	// --- pptx sub-subcommands ---
 	pptxCmd.AddCommand(pptxVerifyCmd)  // pptx verify <file.pptx>
 	pptxCmd.AddCommand(pptxExtractCmd) // pptx extract <file.pptx>
+
+	// --- HLO 集成 (Phase 5, 2026-07-28) ---
+	rootCmd.AddCommand(hloCmd) // hlo <ask|audit|truth|corr> [args...]
+
+	// --- Feishu 集成 (Phase 6, 2026-07-31) ---
+	rootCmd.AddCommand(feishuCmd) // feishu <verify|push> [args...]
+
+	// --- Citation 算法核心 (Phase 6, 2026-07-31) ---
+	rootCmd.AddCommand(citationCmd) // citation <match|test-extract|replayer> [args...]
 
 	// --- Meta (1, already in root.Version) ---
 	// rootCmd.AddCommand(versionCmd) is implicit via root.Version

@@ -23,17 +23,17 @@ import (
 // is via the user's real browser, where cookies + captcha tokens persist.
 //
 // Usage flow (default, always-on):
-//   1. System launches the user's default browser to chat.antafu.com
-//   2. Human completes login (QR code / password) + any captcha
-//   3. Tool watches the browser network tab for the streamChat API call
-//   4. Captures: Authorization, did-token, consultData
-//   5. Subsequent queries reuse the captured session until expiry
+//  1. System launches the user's default browser to chat.antafu.com
+//  2. Human completes login (QR code / password) + any captcha
+//  3. Tool watches the browser network tab for the streamChat API call
+//  4. Captures: Authorization, did-token, consultData
+//  5. Subsequent queries reuse the captured session until expiry
 //
 // Environment variables:
-//   ANTAFU_BROWSER_OPEN    "always" | "once" | "never"  (default: "once")
-//   ANTAFU_TOKEN_FILE      Path to cached session JSON
-//   ANTAFU_CDP_URL         Chrome DevTools URL if user runs debug-mode Chrome
 //
+//	ANTAFU_BROWSER_OPEN    "always" | "once" | "never"  (default: "once")
+//	ANTAFU_TOKEN_FILE      Path to cached session JSON
+//	ANTAFU_CDP_URL         Chrome DevTools URL if user runs debug-mode Chrome
 type AntafuClient struct {
 	baseURL string
 	client  *http.Client

@@ -138,7 +138,7 @@ func buildRouter(useLLM bool) (*router.Router, error) {
 			r.AddSource(s)
 		case "gscholar":
 			s, err := source.NewGScholarSource(map[string]any{
-				"enabled": true,
+				"enabled":    true,
 				"rate_limit": 6, // 6 req/min
 			})
 			if err != nil {

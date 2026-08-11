@@ -441,13 +441,13 @@ func (c *CDPClient) PrintToPDF(ctx context.Context, targetURL string, sizeHint i
 print:
 	// Page.printToPDF
 	res, err := c.send(ctx, "Page.printToPDF", map[string]any{
-		"landscape":          false,
-		"printBackground":    true,
-		"preferCSSPageSize":  true,
-		"marginTop":          0.2,
-		"marginBottom":       0.2,
-		"marginLeft":         0.2,
-		"marginRight":        0.2,
+		"landscape":         false,
+		"printBackground":   true,
+		"preferCSSPageSize": true,
+		"marginTop":         0.2,
+		"marginBottom":      0.2,
+		"marginLeft":        0.2,
+		"marginRight":       0.2,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cdp: Page.printToPDF: %w", err)

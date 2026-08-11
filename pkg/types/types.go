@@ -90,9 +90,9 @@ type Citation struct {
 	MeSH     []string `json:"mesh,omitempty"`
 
 	// Impact metrics
-	CitedBy  int     `json:"cited_by,omitempty"`   // from S2
-	FWCI     float64 `json:"fwci,omitempty"`       // from OpenAlex
-	TLDR     string  `json:"tldr,omitempty"`       // from S2 AI summary
+	CitedBy int     `json:"cited_by,omitempty"` // from S2
+	FWCI    float64 `json:"fwci,omitempty"`     // from OpenAlex
+	TLDR    string  `json:"tldr,omitempty"`     // from S2 AI summary
 	// OAPDFURL is a direct link to the open-access PDF of the article.
 	OAPDFURL string `json:"oa_pdf_url,omitempty"` // Open Access PDF
 

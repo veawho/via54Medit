@@ -8,10 +8,10 @@
 //   - OpenClaw-Medical-Skills clinical-note-summarization (SOAP)
 //
 // Pipeline:
-//   1. TextExtractor — PDF → text (pdftotext), HTML → text (strip tags), text → text
-//   2. EntityExtractor — LLM-based NER for medical entities
-//   3. SoapSummarizer — LLM-based SOAP format summarization
-//   4. Pipeline — chains all three stages
+//  1. TextExtractor — PDF → text (pdftotext), HTML → text (strip tags), text → text
+//  2. EntityExtractor — LLM-based NER for medical entities
+//  3. SoapSummarizer — LLM-based SOAP format summarization
+//  4. Pipeline — chains all three stages
 //
 // Design decisions:
 //   - LLM-based entity extraction (higher recall than regex for clinical text)
@@ -42,10 +42,10 @@ import (
 
 // Pipeline chains text extraction → entity extraction → SOAP summarization.
 type Pipeline struct {
-	llm       foundation.LLMProvider
-	textExt   *TextExtractor
-	nerExt    *EntityExtractor
-	soapExt   *SoapSummarizer
+	llm     foundation.LLMProvider
+	textExt *TextExtractor
+	nerExt  *EntityExtractor
+	soapExt *SoapSummarizer
 }
 
 // NewPipeline creates a document processing pipeline.
@@ -72,11 +72,11 @@ func NewPipelineWithEntityOnly(llm foundation.LLMProvider) *Pipeline {
 
 // Result holds the output of the full pipeline.
 type Result struct {
-	RawText   string           `json:"raw_text"`
-	Entities  *ExtractedEntities `json:"entities,omitempty"`
-	Soap      *SoapSummary     `json:"soap,omitempty"`
-	Errors    []string         `json:"errors,omitempty"`
-	Duration  time.Duration    `json:"-"`
+	RawText  string             `json:"raw_text"`
+	Entities *ExtractedEntities `json:"entities,omitempty"`
+	Soap     *SoapSummary       `json:"soap,omitempty"`
+	Errors   []string           `json:"errors,omitempty"`
+	Duration time.Duration      `json:"-"`
 }
 
 // Process runs the full pipeline on a file path.
@@ -240,45 +240,45 @@ func (e *TextExtractor) extractText(ctx context.Context, path string) (string, e
 
 // ExtractedEntities holds the structured entities extracted from clinical text.
 type ExtractedEntities struct {
-	Symptoms      []Symptom      `json:"symptoms"`
-	Medications   []Medication   `json:"medications"`
-	LabValues     []LabValue     `json:"lab_values"`
-	Diagnoses     []Diagnosis    `json:"diagnoses"`
-	VitalSigns    []VitalSign    `json:"vital_signs"`
-	Procedures    []Procedure    `json:"procedures"`
-	ActionItems   []ActionItem   `json:"action_items"`
-	Contradictions []string      `json:"contradictions"`
-	MissingInfo   []string       `json:"missing_info"`
-	PHIFlags      []string       `json:"phi_flags"`
+	Symptoms       []Symptom    `json:"symptoms"`
+	Medications    []Medication `json:"medications"`
+	LabValues      []LabValue   `json:"lab_values"`
+	Diagnoses      []Diagnosis  `json:"diagnoses"`
+	VitalSigns     []VitalSign  `json:"vital_signs"`
+	Procedures     []Procedure  `json:"procedures"`
+	ActionItems    []ActionItem `json:"action_items"`
+	Contradictions []string     `json:"contradictions"`
+	MissingInfo    []string     `json:"missing_info"`
+	PHIFlags       []string     `json:"phi_flags"`
 }
 
 // Symptom represents an extracted symptom.
 type Symptom struct {
-	Name        string  `json:"name"`
-	Severity    string  `json:"severity"`     // mild / moderate / severe
-	Duration    string  `json:"duration"`
-	Onset       string  `json:"onset"`
-	Progression string  `json:"progression"` // improving / stable / worsening
-	Context     string  `json:"context"`
+	Name        string `json:"name"`
+	Severity    string `json:"severity"` // mild / moderate / severe
+	Duration    string `json:"duration"`
+	Onset       string `json:"onset"`
+	Progression string `json:"progression"` // improving / stable / worsening
+	Context     string `json:"context"`
 }
 
 // Medication represents an extracted medication.
 type Medication struct {
-	Name     string `json:"name"`
-	Dosage   string `json:"dosage"`
+	Name      string `json:"name"`
+	Dosage    string `json:"dosage"`
 	Frequency string `json:"frequency"`
-	Route    string `json:"route"`
-	Context  string `json:"context"` // new / existing / stopped
+	Route     string `json:"route"`
+	Context   string `json:"context"` // new / existing / stopped
 }
 
 // LabValue represents an extracted lab result.
 type LabValue struct {
-	Type      string `json:"type"`    // blood_pressure / glucose / cholesterol / ...
-	Value     string `json:"value"`
-	Unit      string `json:"unit"`
-	Timestamp string `json:"timestamp"`
+	Type        string `json:"type"` // blood_pressure / glucose / cholesterol / ...
+	Value       string `json:"value"`
+	Unit        string `json:"unit"`
+	Timestamp   string `json:"timestamp"`
 	NormalRange string `json:"normal_range"`
-	Abnormal  bool   `json:"abnormal"`
+	Abnormal    bool   `json:"abnormal"`
 }
 
 // Diagnosis represents an extracted diagnosis.
@@ -289,7 +289,7 @@ type Diagnosis struct {
 
 // VitalSign represents an extracted vital sign.
 type VitalSign struct {
-	Type      string `json:"type"`    // temperature / heart_rate / respiratory_rate / oxygen_saturation / blood_pressure
+	Type      string `json:"type"` // temperature / heart_rate / respiratory_rate / oxygen_saturation / blood_pressure
 	Value     string `json:"value"`
 	Unit      string `json:"unit"`
 	Timestamp string `json:"timestamp"`
@@ -298,13 +298,13 @@ type VitalSign struct {
 // Procedure represents an extracted procedure.
 type Procedure struct {
 	Name    string `json:"name"`
-	Type    string `json:"type"`  // planned / completed / cancelled
+	Type    string `json:"type"` // planned / completed / cancelled
 	Context string `json:"context"`
 }
 
 // ActionItem represents an extracted action item.
 type ActionItem struct {
-	Type    string `json:"type"`    // appointment / refill / question / callback / test / medication_change
+	Type    string `json:"type"` // appointment / refill / question / callback / test / medication_change
 	Details string `json:"details"`
 	Urgency string `json:"urgency"` // low / medium / high
 	Reason  string `json:"reason"`
@@ -321,7 +321,7 @@ type EntityExtractor struct {
 // NewEntityExtractor creates a new entity extractor.
 func NewEntityExtractor(llm foundation.LLMProvider) *EntityExtractor {
 	return &EntityExtractor{
-		llm:     llm,
+		llm:      llm,
 		MaxChars: 0,
 	}
 }
@@ -403,13 +403,13 @@ func (e *EntityExtractor) recoverJSON(raw string) string {
 
 // SoapSummary holds the SOAP-format summary.
 type SoapSummary struct {
-	Subjective   string `json:"subjective"`
-	Objective    string `json:"objective"`
-	Assessment   string `json:"assessment"`
-	Plan         string `json:"plan"`
-	Alerts       []string `json:"alerts"`
-	MissingInfo  []string `json:"missing_info"`
-	Confidence   float64 `json:"confidence"` // 0.0-1.0
+	Subjective  string   `json:"subjective"`
+	Objective   string   `json:"objective"`
+	Assessment  string   `json:"assessment"`
+	Plan        string   `json:"plan"`
+	Alerts      []string `json:"alerts"`
+	MissingInfo []string `json:"missing_info"`
+	Confidence  float64  `json:"confidence"` // 0.0-1.0
 }
 
 // SoapSummarizer generates SOAP-format summaries.

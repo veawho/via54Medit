@@ -86,13 +86,13 @@ type CrossrefMessage struct {
 }
 
 type CrossrefItem struct {
-	Type           string          `json:"type"`
-	Title          []string        `json:"title"`
+	Type           string           `json:"type"`
+	Title          []string         `json:"title"`
 	Author         []CrossrefAuthor `json:"author"`
-	ContainerTitle []string        `json:"container-title"`
-	Published      CrossrefDate    `json:"published"`
-	DOI            string          `json:"DOI"`
-	Score          float64         `json:"score"`
+	ContainerTitle []string         `json:"container-title"`
+	Published      CrossrefDate     `json:"published"`
+	DOI            string           `json:"DOI"`
+	Score          float64          `json:"score"`
 }
 
 type CrossrefAuthor struct {

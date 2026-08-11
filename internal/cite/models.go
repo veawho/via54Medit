@@ -2,18 +2,19 @@
 // enriches them via PubMed/Crossref, and resolves against known trial names.
 //
 // Design:
-//   Extractor interface  -- each format implements it
-//   Factory             -- auto-detects by file extension
-//   CitationVerifier    -- PMID → PubMed, DOI → Crossref,
-//                          fallback: trial-name → PubMed search
+//
+//	Extractor interface  -- each format implements it
+//	Factory             -- auto-detects by file extension
+//	CitationVerifier    -- PMID → PubMed, DOI → Crossref,
+//	                       fallback: trial-name → PubMed search
 package cite
 
 // Citation is the unified citation model.
 type Citation struct {
 	// Source
-	DocumentType string `json:"document_type"` // "pptx" | "pdf" | "docx"
+	DocumentType string `json:"document_type"`    // "pptx" | "pdf" | "docx"
 	Number       int    `json:"number,omitempty"` // reference number if numbered style
-	PageIndex    int    `json:"page_index"`    // 1-based page/slide number
+	PageIndex    int    `json:"page_index"`       // 1-based page/slide number
 	PageTitle    string `json:"page_title,omitempty"`
 
 	// Raw
@@ -31,15 +32,15 @@ type Citation struct {
 	DOI     string `json:"doi,omitempty"`
 
 	// Verified metadata (enriched)
-	VerifiedPMID string `json:"verified_pmid,omitempty"`
-	VerifiedDOI  string `json:"verified_doi,omitempty"`
-	VerifiedTitle string `json:"verified_title,omitempty"`
+	VerifiedPMID    string `json:"verified_pmid,omitempty"`
+	VerifiedDOI     string `json:"verified_doi,omitempty"`
+	VerifiedTitle   string `json:"verified_title,omitempty"`
 	VerifiedJournal string `json:"verified_journal,omitempty"`
-	VerifiedYear int `json:"verified_year"`
+	VerifiedYear    int    `json:"verified_year"`
 
 	// Trial identification
-	TrialName string `json:"trial_name,omitempty"` // e.g. "HIMALAYA", "CheckMate 9L"
-	IsTrialPaper bool `json:"is_trial_paper"`
+	TrialName    string `json:"trial_name,omitempty"` // e.g. "HIMALAYA", "CheckMate 9L"
+	IsTrialPaper bool   `json:"is_trial_paper"`
 
 	// Verification
 	Status  string `json:"status"` // "verified" | "partial" | "unverified" | "error"

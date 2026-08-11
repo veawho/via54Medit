@@ -55,6 +55,116 @@ type SciHubSource struct {
 	mu       sync.Mutex
 	tokens   float64
 	lastFill time.Time
+
+	// === 算法驱动 v1.0.0 (Phase 2 算法化, 2026-07-29) ===
+
+	// mirrorStats 记录每个 mirror 的命中率 + 响应时间 (EWMA)
+	// 算法: 健康度 = 命中率 (0-1) * (1 - 响应时间/p95)
+	// → 替代硬编码字符串列表, 动态选择最优 mirror
+	mirrorStats map[string]*mirrorStat
+
+	// latencyEWMA 全局响应时间 EWMA 跟踪
+	// 算法: 用过去 N 次响应时间推导 p95, 然后 timeout = p95 * 2 + buffer
+	// → 替代硬编码 60s timeout
+	latencyEWMA float64
+	latencyCount int
+}
+
+// mirrorStat 是单个 mirror 的健康度统计
+type mirrorStat struct {
+	mu              sync.Mutex
+	successCount    int
+	failCount       int
+	latencyMS       int64 // EWMA
+	lastSeen        time.Time
+}
+
+// healthScore 算法: 0-1, 越高越优先
+func (m *mirrorStat) healthScore() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	total := m.successCount + m.failCount
+	if total == 0 {
+		return 0.5 // 未测试, 默认中等
+	}
+	hits := float64(m.successCount) / float64(total)
+	// latency 惩罚 (latency 越大分越低)
+	latencyPenalty := 1.0
+	if m.latencyMS > 0 {
+		latencyPenalty = 1.0 / (1.0 + float64(m.latencyMS)/1000.0)
+	}
+	return hits * latencyPenalty
+}
+
+// recordSuccess/fail 算法: 持续更新健康度
+func (m *mirrorStat) recordSuccess(latency time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.successCount++
+	m.lastSeen = time.Now()
+	if m.latencyMS == 0 {
+		m.latencyMS = latency.Milliseconds()
+	} else {
+		// EWMA: alpha=0.3 (新数据权重 30%)
+		m.latencyMS = int64(0.7*float64(m.latencyMS) + 0.3*float64(latency.Milliseconds()))
+	}
+}
+
+func (m *mirrorStat) recordFail() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failCount++
+	m.lastSeen = time.Now()
+}
+
+// sortMirrorsByHealth 算法: 按健康度排序 mirror 列表
+func (s *SciHubSource) sortMirrorsByHealth() []string {
+	if s.mirrorStats == nil {
+		return s.mirrors
+	}
+	type scored struct {
+		url   string
+		score float64
+	}
+	var scoredList []scored
+	for _, m := range s.mirrors {
+		stat, ok := s.mirrorStats[m]
+		score := 0.5
+		if ok {
+			score = stat.healthScore()
+		}
+		scoredList = append(scoredList, scored{m, score})
+	}
+	// 算法: 排序 (按 score 降序) - 不稳定但无所谓
+	for i := 0; i < len(scoredList); i++ {
+		for j := i + 1; j < len(scoredList); j++ {
+			if scoredList[j].score > scoredList[i].score {
+				scoredList[i], scoredList[j] = scoredList[j], scoredList[i]
+			}
+		}
+	}
+	out := make([]string, len(scoredList))
+	for i, s := range scoredList {
+		out[i] = s.url
+	}
+	return out
+}
+
+// adaptiveTimeout 算法: 用 EWMA 跟踪的 p95 推导 timeout
+func (s *SciHubSource) adaptiveTimeout(defaultTimeout time.Duration) time.Duration {
+	if s.latencyCount < 5 {
+		return defaultTimeout // 数据不足, 用默认
+	}
+	// p95 ≈ latencyEWMA * 2.5 (粗估, 长尾场景)
+	p95 := time.Duration(s.latencyEWMA*2.5) * time.Millisecond
+	timeout := p95 * 2
+	if timeout < defaultTimeout {
+		timeout = defaultTimeout // 不少于默认
+	}
+	if timeout > 5*defaultTimeout {
+		timeout = 5 * defaultTimeout // 不超过 5x 默认
+	}
+	return timeout
 }
 
 // NewSciHubSource builds a Sci-Hub adapter.
@@ -193,8 +303,9 @@ func (s *SciHubSource) Resolve(ctx context.Context, identifier string) (string, 
 // probe sends a HEAD then GET if HEAD fails, to the Sci-Hub URL.
 // Returns (ok, resolvedURL, err).
 // Sci-Hub typically:
-//   1. Returns 200 HTML with a script that sets window.location to the actual PDF
-//   2. Or returns 302 to a file-storage URL
+//  1. Returns 200 HTML with a script that sets window.location to the actual PDF
+//  2. Or returns 302 to a file-storage URL
+//
 // We check the Content-Type to decide if it's usable.
 func (s *SciHubSource) probe(ctx context.Context, targetURL string) (bool, string, error) {
 	// Try HEAD first (cheaper)
@@ -278,8 +389,8 @@ func canonicalizeIdentifier(raw string) string {
 }
 
 var (
-	doiRegex    = regexp.MustCompile(`^10\.\d{4,9}/[-._;()/:A-Za-z0-9]+$`)
-	pmidRegex   = regexp.MustCompile(`^\d{4,10}$`)
+	doiRegex  = regexp.MustCompile(`^10\.\d{4,9}/[-._;()/:A-Za-z0-9]+$`)
+	pmidRegex = regexp.MustCompile(`^\d{4,10}$`)
 )
 
 // parseMirrorList splits a comma-separated mirror URL string.

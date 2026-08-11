@@ -8,8 +8,9 @@
 //	medit gscholar --query "heart failure" --limit 5
 //
 // ⚠️  Compliance note: Scraping Google Scholar violates its Terms of
-//    Service. This command is disabled by default and logs every
-//    request to ~/.medit/audit/.
+//
+//	Service. This command is disabled by default and logs every
+//	request to ~/.medit/audit/.
 package commands
 
 import (
@@ -25,12 +26,12 @@ import (
 )
 
 var (
-	gsQuery    string
-	gsLimit    int
-	gsRate     int  // req/min
-	gsForce    bool // force-enable even when disabled
-	gsNoWarn   bool // suppress compliance warning
-	gsJSON     bool // JSON output
+	gsQuery  string
+	gsLimit  int
+	gsRate   int  // req/min
+	gsForce  bool // force-enable even when disabled
+	gsNoWarn bool // suppress compliance warning
+	gsJSON   bool // JSON output
 )
 
 var gScholarCmd = &cobra.Command{
@@ -159,4 +160,3 @@ func runGScholar(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-

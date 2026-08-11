@@ -2,10 +2,10 @@
 // CitationVerifier resolves extracted citations to PubMed/Crossref records.
 //
 // Resolution order:
-//   1. If PMID present → PubMed esummary (instant lookup)
-//   2. If DOI present → Crossref API
-//   3. If trial name detected → trialNameMap lookup (instant)
-//   4. Fallback: PubMed search with extracted fields (author, journal, year)
+//  1. If PMID present → PubMed esummary (instant lookup)
+//  2. If DOI present → Crossref API
+//  3. If trial name detected → trialNameMap lookup (instant)
+//  4. Fallback: PubMed search with extracted fields (author, journal, year)
 package cite
 
 import (
@@ -32,10 +32,10 @@ type CitationVerifier struct {
 	client *http.Client
 
 	// Multi-source search backends (fallback chain)
-	crossref    *client.CrossrefClient
-	semSch      *client.SemSchClient
-	clinTrials  *client.ClinTrialsClient
-	antafu      *client.AntafuClient
+	crossref   *client.CrossrefClient
+	semSch     *client.SemSchClient
+	clinTrials *client.ClinTrialsClient
+	antafu     *client.AntafuClient
 
 	// Mutex for PubMed rate-limiting — serializes all requests to stay under 3 rps NCBI limit
 	mu sync.Mutex
@@ -273,10 +273,10 @@ func (v *CitationVerifier) lookupCrossrefByDOI(ctx context.Context, doi string) 
 
 	var got struct {
 		Message struct {
-			Title []string `json:"title"`
-			DOI   string   `json:"DOI"`
+			Title          []string `json:"title"`
+			DOI            string   `json:"DOI"`
 			ContainerTitle []string `json:"container-title"`
-			Created struct {
+			Created        struct {
 				DateParts [][]int `json:"date-parts"`
 			} `json:"created"`
 			Published struct {
@@ -292,9 +292,9 @@ func (v *CitationVerifier) lookupCrossrefByDOI(ctx context.Context, doi string) 
 	}
 
 	hit := &EnrichmentHit{
-		PMID:  "",
-		DOI:   got.Message.DOI,
-		Title: "",
+		PMID:    "",
+		DOI:     got.Message.DOI,
+		Title:   "",
 		Journal: "",
 	}
 
@@ -339,81 +339,81 @@ func (v *CitationVerifier) parseCrossrefRaw(ctx context.Context, body interface{
 // Source: PubMed Journal-Link NLM catalog (https://www.nlm.nih.gov/databases/
 // ---------------------------------------------------------------------------
 var journalNLM = map[string]string{
-	"lancet":                           "Lancet",
-	"lancet oncol":                     "Lancet Oncol",
-	"lancet gastroenterol":             "Lancet Gastroenterol Hepatol",
-	"lancet hematology":                "Lancet Haematol",
-	"new england journal of medicine":  "N Engl J Med",
-	"new england jour":                 "N Engl J Med",
-	"nejm":                             "N Engl J Med",
-	"jama":                             "JAMA",
-	"journal of clinical oncology":     "J Clin Oncol",
-	"j clin oncol":                     "J Clin Oncol",
-	"journal of hepatology":            "J Hepatol",
-	"j hepatol":                        "J Hepatol",
-	"hepatology":                       "Hepatology",
-	"hepatology communications":        "Hepatol Commun",
+	"lancet":                              "Lancet",
+	"lancet oncol":                        "Lancet Oncol",
+	"lancet gastroenterol":                "Lancet Gastroenterol Hepatol",
+	"lancet hematology":                   "Lancet Haematol",
+	"new england journal of medicine":     "N Engl J Med",
+	"new england jour":                    "N Engl J Med",
+	"nejm":                                "N Engl J Med",
+	"jama":                                "JAMA",
+	"journal of clinical oncology":        "J Clin Oncol",
+	"j clin oncol":                        "J Clin Oncol",
+	"journal of hepatology":               "J Hepatol",
+	"j hepatol":                           "J Hepatol",
+	"hepatology":                          "Hepatology",
+	"hepatology communications":           "Hepatol Commun",
 	"hepatobiliary surgery and nutrition": "Hepatobiliary Surg Nutr",
-	"hepatol int":                      "Hepatol Int",
-	"hepatology international":         "Hepatol Int",
-	"clin cancer res":                  "Clin Cancer Res",
-	"clinical cancer research":         "Clin Cancer Res",
-	"annals of oncology":               "Ann Oncol",
-	"ann oncol":                        "Ann Oncol",
+	"hepatol int":                         "Hepatol Int",
+	"hepatology international":            "Hepatol Int",
+	"clin cancer res":                     "Clin Cancer Res",
+	"clinical cancer research":            "Clin Cancer Res",
+	"annals of oncology":                  "Ann Oncol",
+	"ann oncol":                           "Ann Oncol",
 	"alimentary pharmacology and therapeutics": "Aliment Pharmacol Ther",
-	"alim pharmacol ther":              "Aliment Pharmacol Ther",
-	"jama oncology":                    "JAMA Oncol",
-	"gastroenterology":                 "Gastroenterology",
-	"front immunol":                    "Front Immunol",
-	"int j mol sci":                    "Int J Mol Sci",
-	"med sci monit":                    "Med Sci Monit",
-	"medicine":                         "Medicine",
-	"liver cancer":                     "Liver Cancer",
-	"liver int":                        "Liver Int",
-	"nature medicine":                  "Nat Med",
-	"nat med":                          "Nat Med",
-	"nature communications":            "Nat Commun",
-	"nat commun":                       "Nat Commun",
-	"nature reviews cancer":            "Nat Rev Cancer",
-	"nat rev cancer":                   "Nat Rev Cancer",
-	"nature reviews immunology":        "Nat Rev Immunol",
-	"nat rev immunol":                  "Nat Rev Immunol",
-	"nature reviews clinical oncology": "Nat Rev Clin Oncol",
-	"nat rev clin oncol":               "Nat Rev Clin Oncol",
-	"cell":                             "Cell",
-	"science":                          "Science",
-	"cancers":                          "Cancers",
-	"onco targets ther":                "Onco Targets Ther",
-	"oncotarget":                       "Oncotarget",
-	"anti cancer research":             "Anticancer Res",
-	"anticancer research":              "Anticancer Res",
-	"jama interna med":                 "JAMA Intern Med",
-	"jama intern med":                  "JAMA Intern Med",
-	"j clin gastroenterol":             "J Clin Gastroenterol",
-	"world j gastroenterol":            "World J Gastroenterol",
-	"wjg":                              "World J Gastroenterol",
-	"signal transduct target ther":     "Signal Transduct Target Ther",
-	"mol cancer ther":                  "Mol Cancer Ther",
-	"molecular cancer therapeutics":    "Mol Cancer Ther",
-	"clin transl med":                  "Clin Transl Med",
-	"pharmacol res":                    "Pharmacol Res",
-	"int immunopharmacol":              "Int Immunopharmacol",
-	"j autoimmun":                      "J Autoimmun",
-	"j of autoimmun":                   "J Autoimmun",
-	"semin cancer biol":                "Semin Cancer Biol",
-	"mabs":                             "MAbs",
-	"j hematol oncol":                  "J Hematol Oncol",
-	"cancer immunol res":               "Cancer Immunol Res",
-	"sci transl med":                   "Sci Transl Med",
-	"acs cent sci":                     "ACS Cent Sci",
-	"bmc cancer":                       "BMC Cancer",
-	"int j cancer":                     "Int J Cancer",
-	"bmc gastroenterol":                "BMC Gastroenterol",
-	"bmc med":                          "BMC Med",
-	"mol cancer":                       "Mol Cancer",
-	"br j cancer":                      "Br J Cancer",
-	"european journal of cancer":       "Eur J Cancer",
-	"ejc":                              "Eur J Cancer",
+	"alim pharmacol ther":                      "Aliment Pharmacol Ther",
+	"jama oncology":                            "JAMA Oncol",
+	"gastroenterology":                         "Gastroenterology",
+	"front immunol":                            "Front Immunol",
+	"int j mol sci":                            "Int J Mol Sci",
+	"med sci monit":                            "Med Sci Monit",
+	"medicine":                                 "Medicine",
+	"liver cancer":                             "Liver Cancer",
+	"liver int":                                "Liver Int",
+	"nature medicine":                          "Nat Med",
+	"nat med":                                  "Nat Med",
+	"nature communications":                    "Nat Commun",
+	"nat commun":                               "Nat Commun",
+	"nature reviews cancer":                    "Nat Rev Cancer",
+	"nat rev cancer":                           "Nat Rev Cancer",
+	"nature reviews immunology":                "Nat Rev Immunol",
+	"nat rev immunol":                          "Nat Rev Immunol",
+	"nature reviews clinical oncology":         "Nat Rev Clin Oncol",
+	"nat rev clin oncol":                       "Nat Rev Clin Oncol",
+	"cell":                                     "Cell",
+	"science":                                  "Science",
+	"cancers":                                  "Cancers",
+	"onco targets ther":                        "Onco Targets Ther",
+	"oncotarget":                               "Oncotarget",
+	"anti cancer research":                     "Anticancer Res",
+	"anticancer research":                      "Anticancer Res",
+	"jama interna med":                         "JAMA Intern Med",
+	"jama intern med":                          "JAMA Intern Med",
+	"j clin gastroenterol":                     "J Clin Gastroenterol",
+	"world j gastroenterol":                    "World J Gastroenterol",
+	"wjg":                                      "World J Gastroenterol",
+	"signal transduct target ther":             "Signal Transduct Target Ther",
+	"mol cancer ther":                          "Mol Cancer Ther",
+	"molecular cancer therapeutics":            "Mol Cancer Ther",
+	"clin transl med":                          "Clin Transl Med",
+	"pharmacol res":                            "Pharmacol Res",
+	"int immunopharmacol":                      "Int Immunopharmacol",
+	"j autoimmun":                              "J Autoimmun",
+	"j of autoimmun":                           "J Autoimmun",
+	"semin cancer biol":                        "Semin Cancer Biol",
+	"mabs":                                     "MAbs",
+	"j hematol oncol":                          "J Hematol Oncol",
+	"cancer immunol res":                       "Cancer Immunol Res",
+	"sci transl med":                           "Sci Transl Med",
+	"acs cent sci":                             "ACS Cent Sci",
+	"bmc cancer":                               "BMC Cancer",
+	"int j cancer":                             "Int J Cancer",
+	"bmc gastroenterol":                        "BMC Gastroenterol",
+	"bmc med":                                  "BMC Med",
+	"mol cancer":                               "Mol Cancer",
+	"br j cancer":                              "Br J Cancer",
+	"european journal of cancer":               "Eur J Cancer",
+	"ejc":                                      "Eur J Cancer",
 }
 
 // normalizeJournalNLM converts an extracted journal name to PubMed NLM abbreviation.

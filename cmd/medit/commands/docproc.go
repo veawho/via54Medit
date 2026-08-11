@@ -6,18 +6,18 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/veawho/via54Medit/internal/docproc"
 	"github.com/spf13/cobra"
+	"github.com/veawho/via54Medit/internal/docproc"
 )
 
 // docprocCmd runs the clinical-document pipeline.
 var docprocCmd = &cobra.Command{
-	Use:     "docproc [file]",
-	Short:   "Extract medical entities from documents (PDF / HTML / text)",
-	Long:    `Run a local clinical-document pipeline: extract text, extract medical entities, and summarize into SOAP format.`,
+	Use:   "docproc [file]",
+	Short: "Extract medical entities from documents (PDF / HTML / text)",
+	Long:  `Run a local clinical-document pipeline: extract text, extract medical entities, and summarize into SOAP format.`,
 	Example: `medit docproc clinical_note.txt
 medit docproc clinical_note.txt --soap`,
-	Args:    cobra.ExactArgs(1),
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider, err := buildLLM()
 		if err != nil {

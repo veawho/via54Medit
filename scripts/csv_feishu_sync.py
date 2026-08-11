@@ -194,6 +194,74 @@ def validate(csv_path: str) -> int:
         return 1
 
 
+def pull(csv_path: str) -> int:
+    """Pull (overwrite) local CSV with Feishu table contents.
+
+    Strategy:
+    1. Detect row count from Feishu (A1:H<auto>)
+    2. Validate Feishu header == CANONICAL_HEADER
+    3. Backup local CSV to <csv_path>.bak_pre_feishu_pull
+    4. Write Feishu data over local CSV (with canonical header)
+    """
+    # Detect row count first (read just column A from A1:A2000 to find last filled row)
+    cmd = [
+        LARK_CLI, "sheets", "+cells-get",
+        "--spreadsheet-token", FEISHU_SHEET_TOKEN,
+        "--sheet-id", FEISHU_SHEET_ID,
+        "--range", "A1:A2000",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        print(f"❌ lark-cli A column read failed: {result.stderr}")
+        return 1
+    a_data = json.loads(result.stdout)
+    a_cells = a_data.get("data", {}).get("ranges", [{}])[0].get("cells", [])
+    # find last non-empty row in column A
+    last_row = 0
+    for cell in a_cells:
+        v = cell.get("value", "")
+        if v and v.strip():
+            row_n = cell.get("row", 0)
+            if row_n > last_row:
+                last_row = row_n
+    if last_row < 2:
+        print(f"❌ Feishu has no data rows (last_row={last_row})")
+        return 1
+    print(f"✅ Feishu has data through row {last_row}")
+
+    # Now read full range A1:H{last_row}
+    feishu = feishu_get_range(f"A1:H{last_row}")
+    if not feishu or len(feishu) < 2:
+        print(f"❌ Feishu returned insufficient data")
+        return 1
+
+    # Validate header
+    feishu_header = [c.strip().lstrip("\ufeff") for c in feishu[0]]
+    if feishu_header != CANONICAL_HEADER:
+        print(f"❌ Feishu header mismatch:")
+        print(f"   got:  {feishu_header}")
+        print(f"   want: {CANONICAL_HEADER}")
+        return 1
+
+    # Backup local CSV
+    import shutil
+    bak_path = f"{csv_path}.bak_pre_feishu_pull"
+    if Path(csv_path).exists():
+        shutil.copy2(csv_path, bak_path)
+        print(f"✅ backup: {bak_path}")
+
+    # Write Feishu data (skip header row, since write_csv adds it)
+    data_rows = feishu[1:]
+    # Pad short rows to 8 cells
+    padded = []
+    for r in data_rows:
+        rr = list(r) + [""] * (len(CANONICAL_HEADER) - len(r))
+        padded.append(rr[:len(CANONICAL_HEADER)])
+    write_csv(csv_path, padded)
+    print(f"✅ pulled {len(padded)} rows from Feishu → {csv_path}")
+    return 0
+
+
 def sync(csv_path: str) -> int:
     """Validate local CSV, then compare against Feishu, reporting mismatches."""
     try:
@@ -255,6 +323,8 @@ def main():
 
     p_sync = sub.add_parser("sync", help="validate + compare with Feishu")
     p_sync.add_argument("csv_path")
+    p_pull = sub.add_parser("pull", help="pull (overwrite) local CSV with Feishu data")
+    p_pull.add_argument("csv_path")
 
     args = parser.parse_args()
 
@@ -262,6 +332,8 @@ def main():
         sys.exit(validate(args.csv_path))
     elif args.cmd == "sync":
         sys.exit(sync(args.csv_path))
+    elif args.cmd == "pull":
+        sys.exit(pull(args.csv_path))
 
 
 if __name__ == "__main__":

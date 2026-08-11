@@ -7,21 +7,25 @@
 // text bytes on disk under ~/.medit/pdfs/<doi|.txt|.pdf>.
 //
 // Tier 1 — Metadata APIs (read-only, no download):
-//    OpenAlex → PMC ID + publisher links
-//    Semantic Scholar → OA PDF URL
-//    Crossref → DOI → publisher link
+//
+//	OpenAlex → PMC ID + publisher links
+//	Semantic Scholar → OA PDF URL
+//	Crossref → DOI → publisher link
 //
 // Tier 2 — User Chrome CDP (localhost:9223):
-//    PMC article HTML → article.innerText (60-70% success)
-//    sci-hub Cookie extraction (DDoS-Guard cookie, 2-4 h lifetime)
-//    Nature/NEJM paywalled articles via user browser session
+//
+//	PMC article HTML → article.innerText (60-70% success)
+//	sci-hub Cookie extraction (DDoS-Guard cookie, 2-4 h lifetime)
+//	Nature/NEJM paywalled articles via user browser session
 //
 // Tier 3 — curl direct download (publisher PDF links):
-//    Springer Link (~40% success)
-//    PMC PDF URLs (behind CAPTCHA, ~0-10% via curl)
+//
+//	Springer Link (~40% success)
+//	PMC PDF URLs (behind CAPTCHA, ~0-10% via curl)
 //
 // Tier 4 — Sci-Hub via extracted Cookie (fallback for known-in-database DOIs):
-//    curl with Netscape-format cookies extracted from Chrome
+//
+//	curl with Netscape-format cookies extracted from Chrome
 //
 // Every successful or failed attempt is logged to ~/.medit/audit/.
 package download
@@ -55,13 +59,13 @@ import (
 //
 // Typical call flow:
 //
-//	f := NewFullTextFinder("http://localhost:9223")
-//	c := types.Citation{DOI: "10.1016/j.cell.2021.01.001"}
-//	result, err := f.Get(ctx, &c)
+//		f := NewFullTextFinder("http://localhost:9223")
+//		c := types.Citation{DOI: "10.1016/j.cell.2021.01.001"}
+//		result, err := f.Get(ctx, &c)
 //
-//  result.Path  → absolute path to the saved artifact (PDF or txt)
-//  result.Tier  → which tier succeeded (1-4)
-//  result.Err   → first non-nil error across all tiers (non-fatal)
+//	 result.Path  → absolute path to the saved artifact (PDF or txt)
+//	 result.Tier  → which tier succeeded (1-4)
+//	 result.Err   → first non-nil error across all tiers (non-fatal)
 type FullTextFinder struct {
 	// User Chrome CDP base URL (e.g. "http://localhost:9223").
 	// Empty means "skip all CDP-based tiers".
@@ -86,8 +90,8 @@ type FullTextFinder struct {
 
 	// Rate limiting per publisher (requests/second).
 	// Default: 0.5 (Springer), 1.0 (OpenAlex/S2/Crossref).
-	SpringerRPS   float64
-	ApiRPS        float64
+	SpringerRPS float64
+	ApiRPS      float64
 
 	// User-Agent for curl-style requests.
 	UserAgent string
@@ -147,14 +151,14 @@ func (f *rateLimiter) take(ctx context.Context) error {
 
 // FullTextResult carries what (if anything) was retrieved.
 type FullTextResult struct {
-	Citation *types.Citation   // original citation (may be mutated in-place)
-	Path     string            // absolute path to artifact ("" = nothing)
-	Tier     int               // 0 = failed; 1 = metadata-only; 2 = CDP; 3 = curl; 4 = sci-hub
-	Format   string            // "pdf" | "txt"
-	Size     int64             // bytes on disk
-	Duration time.Duration     // wall time for this attempt
-	Err      error             // first non-nil across all tiers (non-fatal)
-	Used     []string          // which tiers succeeded (e.g. ["openalex", "pmc-cdp"])
+	Citation *types.Citation // original citation (may be mutated in-place)
+	Path     string          // absolute path to artifact ("" = nothing)
+	Tier     int             // 0 = failed; 1 = metadata-only; 2 = CDP; 3 = curl; 4 = sci-hub
+	Format   string          // "pdf" | "txt"
+	Size     int64           // bytes on disk
+	Duration time.Duration   // wall time for this attempt
+	Err      error           // first non-nil across all tiers (non-fatal)
+	Used     []string        // which tiers succeeded (e.g. ["openalex", "pmc-cdp"])
 }
 
 // ---------------------------------------------------------------------------
@@ -163,10 +167,10 @@ type FullTextResult struct {
 
 func NewFullTextFinder(chromeCDP string) *FullTextFinder {
 	f := &FullTextFinder{
-		ChromeCDP:  chromeCDP,
+		ChromeCDP:   chromeCDP,
 		SpringerRPS: 0.5,
-		ApiRPS:     1.0,
-		UserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		ApiRPS:      1.0,
+		UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 		client: &http.Client{
 			Timeout: 45 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -273,11 +277,11 @@ func (f *FullTextFinder) Get(ctx context.Context, c *types.Citation) (*FullTextR
 // ---------------------------------------------------------------------------
 
 type auditEntry struct {
-	Tier     string `json:"tier"`
-	DOI      string `json:"doi"`
-	Format   string `json:"format"`
-	Path     string `json:"path,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Tier      string `json:"tier"`
+	DOI       string `json:"doi"`
+	Format    string `json:"format"`
+	Path      string `json:"path,omitempty"`
+	Error     string `json:"error,omitempty"`
 	Timestamp string `json:"ts"`
 }
 
@@ -398,11 +402,11 @@ func (f *FullTextFinder) openalexForDOI(ctx context.Context, doi string) *openal
 	// Parse minimal JSON — look at locations array
 	var work struct {
 		Locations []struct {
-			Src     string `json:"source"`
-			IsOA    bool   `json:"is_oa"`
-			OAURL   string `json:"oa_url"`
-			PDFURL  string `json:"pdf_url"`
-			PMCID   string `json:"pmcid"`
+			Src    string `json:"source"`
+			IsOA   bool   `json:"is_oa"`
+			OAURL  string `json:"oa_url"`
+			PDFURL string `json:"pdf_url"`
+			PMCID  string `json:"pmcid"`
 		} `json:"locations"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&work); err != nil {
@@ -717,12 +721,12 @@ func (f *FullTextFinder) cdpPrintToPDF(ctx context.Context, c *types.Citation, t
 
 // CookieEntry represents a Netscape-format cookie line.
 type CookieEntry struct {
-	Domain     string
-	Path       string
-	Secure     bool
-	Expires    int64 // 0 = session
-	Name       string
-	Value      string
+	Domain  string
+	Path    string
+	Secure  bool
+	Expires int64 // 0 = session
+	Name    string
+	Value   string
 }
 
 func (f *FullTextFinder) extractSciHubCookies(ctx context.Context) []CookieEntry {
@@ -764,9 +768,9 @@ func (f *FullTextFinder) extractSciHubCookies(ctx context.Context) []CookieEntry
 	for _, cp := range cookiePairs {
 		// Filter for relevant cookies (cf_clearance, __ddg_, etc.)
 		if strings.Contains(strings.ToLower(cp.Name), "cf_") ||
-		   strings.Contains(strings.ToLower(cp.Name), "ddg_") ||
-		   strings.Contains(strings.ToLower(cp.Name), "sid") ||
-		   strings.Contains(strings.ToLower(cp.Name), "cookie") {
+			strings.Contains(strings.ToLower(cp.Name), "ddg_") ||
+			strings.Contains(strings.ToLower(cp.Name), "sid") ||
+			strings.Contains(strings.ToLower(cp.Name), "cookie") {
 			out = append(out, CookieEntry{
 				Domain: ".sci-hub.st", Path: "/", Secure: true,
 				Name: cp.Name, Value: cp.Value,

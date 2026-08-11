@@ -28,46 +28,46 @@ type CitationFinder struct {
 	// 2. Reference list entries: "1. Author et al. Title Journal Year;Vol:Pages."
 	// 3. Author-year citations: "Author et al. 2023" or "(Author 2023)"
 	// 4. Full DOI patterns
-	patNumberedRef   *regexp.Regexp // match reference list entries like "1. Author..."
-	patInlineNum     *regexp.Regexp // match "[1]", "[1,2]", etc.
-	patAuthorYear    *regexp.Regexp // match "(Author et al., 2023)" or "Author 2023"
-	patJournal       *regexp.Regexp // match journal names in citation
-	patVolumeIssue   *regexp.Regexp // match "2021;26:1234-45"
-	patYear          *regexp.Regexp // match year at end
-	patPMID          *regexp.Regexp // match PMID
-	patDOI           *regexp.Regexp // match DOI
-	patConf          *regexp.Regexp // match conference/abstract markers (APASL, ASCO, ESMO, etc.)
-	patAuthor        *regexp.Regexp // match author name pattern at start of line
+	patNumberedRef *regexp.Regexp // match reference list entries like "1. Author..."
+	patInlineNum   *regexp.Regexp // match "[1]", "[1,2]", etc.
+	patAuthorYear  *regexp.Regexp // match "(Author et al., 2023)" or "Author 2023"
+	patJournal     *regexp.Regexp // match journal names in citation
+	patVolumeIssue *regexp.Regexp // match "2021;26:1234-45"
+	patYear        *regexp.Regexp // match year at end
+	patPMID        *regexp.Regexp // match PMID
+	patDOI         *regexp.Regexp // match DOI
+	patConf        *regexp.Regexp // match conference/abstract markers (APASL, ASCO, ESMO, etc.)
+	patAuthor      *regexp.Regexp // match author name pattern at start of line
 }
 
 // NewCitationFinder creates a finder with compiled patterns.
 func NewCitationFinder() *CitationFinder {
 	return &CitationFinder{
-	// Numbered reference list entry: "1. Author..." or "[1] Author..."
-	// Matches lines starting with a number followed by a period or space and author name
-	// The author name starts with an uppercase letter
-	patNumberedRef: regexp.MustCompile(`^\s*\[?(\d+)\]?\.?\s*([A-Z][a-z]+)`),
-	// Inline numbered citations: "[1]", "[1, 2]", "[1-5]"
-	patInlineNum: regexp.MustCompile(`\[(\d+(?:\s*,\s*\d+)*|\d+\s*[-–]\s*\d+)\]`),
-	// Author-year citations: "(Smith et al., 2023)" or "Smith et al. 2023"
-	patAuthorYear: regexp.MustCompile(`\(([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+et al\.)?,\s*\d{4})\)`),
-	// Journal name patterns — HCC/oncology/relevant journals (expanded)
-	// Note: for journals with parenthetical city (e.g. "Cancers (Basel)"), we match the
-	// bare journal name; the (City) suffix is extra context and breaks \b after the paren.
-	patJournal: regexp.MustCompile(`(?i)\b(New\s*England\s*J\s*Med|New\s*England\s*Journal\s*of\s*Medicine|N\s*Engl\s*J\s*Med|N\.?\s*Engl\.?\s*J\.?\s*Med|NEJM|NEJM\s*Evid|Lancet|Lancet\s*Oncol|Lancet\s*Gastroenterol|JAMA|JAMA\s*Oncol|Journal\s*of\s*Clinical\s*Oncology|J Clin Oncol|J\.?\s*Clin\.?\s*Oncol|J Hepatol|J\.?\s*Hepatol|Hepatology|Gastroenterology|Ann Oncol|BMJ|Nat Med|Nat\s*Med|Cell|Science|Nature|Sci\s*Transl\s*Med|Signal Transduct Target Ther|Hepatol\s*Commun|Hepatobiliary\s*Surg\s*Nutr|Hepatol\s*Int|J\s*Gastroenterol\s*Hepatol|World\s*J\s*Gastroenterol|Clin\s*Cancer\s*Res|Clin\s*Transl\s*Med|Med\s*Sci\s*Monit|Medicine|Liver\s*Cancer|Liver\s*Int|Int\s*J\s*Mol\s*Sci|Front\s*Immunol|Anticancer\s*Research|Nat\s*Rev\s*Cancer|Nat\s*Rev\s*Immunol|Nat\s*Rev\s*Clin\s*Oncol|Nat\s*Commun|J\s*Autoimmun|Semin\s*Cancer\s*Biol|Cancers|ACS\s*Cent\s*Sci|Onco\s*Targets\s*Ther|OncoTargets\s*Ther|Oncotarget|Int\s*Immunopharmacol|MAbs|J\s*Immunol|Antibodies|J\s*Hematol\s*Oncol|Acta\s*Crystallogr|Cancer\s*Immunol\s*Res|Pharmaceuticals|Pharmacol\s*Res|Transl\s*Med)\b`),
-	// Conference / abstract markers
-	patConf: regexp.MustCompile(`(?i)\b(APASL|ASCO|ESMO|AASLD|EASL|WCC|ILCA|JSH|APASL\s*OP|APASL\s*LB|APASL\s*PO|CSCO|EASL|WCO)\b`),
-	// Volume/issue/pages: "2021;26:1234-45" or "26(3):1234-1245"
-	patVolumeIssue: regexp.MustCompile(`(\d{4}[;:,]\s*\d+|;\s*\d+[:\s]\d+[-–]\d+|\d+[-–]\d+)`),
-	// Year pattern: 4-digit year at word boundary
-	patYear: regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`),
-	// PMID
-	patPMID: regexp.MustCompile(`PMID:\s*(\d+)`),
-	// DOI
-	patDOI: regexp.MustCompile(`DOI:\s*(\d{4,5}/\S+)`),
-	// Author name pattern: uppercase letter start, lowercase continuation, optional comma/dot
-	patAuthor: regexp.MustCompile(`^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s*[,\.]?`),
-}
+		// Numbered reference list entry: "1. Author..." or "[1] Author..."
+		// Matches lines starting with a number followed by a period or space and author name
+		// The author name starts with an uppercase letter
+		patNumberedRef: regexp.MustCompile(`^\s*\[?(\d+)\]?\.?\s*([A-Z][a-z]+)`),
+		// Inline numbered citations: "[1]", "[1, 2]", "[1-5]"
+		patInlineNum: regexp.MustCompile(`\[(\d+(?:\s*,\s*\d+)*|\d+\s*[-–]\s*\d+)\]`),
+		// Author-year citations: "(Smith et al., 2023)" or "Smith et al. 2023"
+		patAuthorYear: regexp.MustCompile(`\(([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+et al\.)?,\s*\d{4})\)`),
+		// Journal name patterns — HCC/oncology/relevant journals (expanded)
+		// Note: for journals with parenthetical city (e.g. "Cancers (Basel)"), we match the
+		// bare journal name; the (City) suffix is extra context and breaks \b after the paren.
+		patJournal: regexp.MustCompile(`(?i)\b(New\s*England\s*J\s*Med|New\s*England\s*Journal\s*of\s*Medicine|N\s*Engl\s*J\s*Med|N\.?\s*Engl\.?\s*J\.?\s*Med|NEJM|NEJM\s*Evid|Lancet|Lancet\s*Oncol|Lancet\s*Gastroenterol|JAMA|JAMA\s*Oncol|Journal\s*of\s*Clinical\s*Oncology|J Clin Oncol|J\.?\s*Clin\.?\s*Oncol|J Hepatol|J\.?\s*Hepatol|Hepatology|Gastroenterology|Ann Oncol|BMJ|Nat Med|Nat\s*Med|Cell|Science|Nature|Sci\s*Transl\s*Med|Signal Transduct Target Ther|Hepatol\s*Commun|Hepatobiliary\s*Surg\s*Nutr|Hepatol\s*Int|J\s*Gastroenterol\s*Hepatol|World\s*J\s*Gastroenterol|Clin\s*Cancer\s*Res|Clin\s*Transl\s*Med|Med\s*Sci\s*Monit|Medicine|Liver\s*Cancer|Liver\s*Int|Int\s*J\s*Mol\s*Sci|Front\s*Immunol|Anticancer\s*Research|Nat\s*Rev\s*Cancer|Nat\s*Rev\s*Immunol|Nat\s*Rev\s*Clin\s*Oncol|Nat\s*Commun|J\s*Autoimmun|Semin\s*Cancer\s*Biol|Cancers|ACS\s*Cent\s*Sci|Onco\s*Targets\s*Ther|OncoTargets\s*Ther|Oncotarget|Int\s*Immunopharmacol|MAbs|J\s*Immunol|Antibodies|J\s*Hematol\s*Oncol|Acta\s*Crystallogr|Cancer\s*Immunol\s*Res|Pharmaceuticals|Pharmacol\s*Res|Transl\s*Med)\b`),
+		// Conference / abstract markers
+		patConf: regexp.MustCompile(`(?i)\b(APASL|ASCO|ESMO|AASLD|EASL|WCC|ILCA|JSH|APASL\s*OP|APASL\s*LB|APASL\s*PO|CSCO|EASL|WCO)\b`),
+		// Volume/issue/pages: "2021;26:1234-45" or "26(3):1234-1245"
+		patVolumeIssue: regexp.MustCompile(`(\d{4}[;:,]\s*\d+|;\s*\d+[:\s]\d+[-–]\d+|\d+[-–]\d+)`),
+		// Year pattern: 4-digit year at word boundary
+		patYear: regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`),
+		// PMID
+		patPMID: regexp.MustCompile(`PMID:\s*(\d+)`),
+		// DOI
+		patDOI: regexp.MustCompile(`DOI:\s*(\d{4,5}/\S+)`),
+		// Author name pattern: uppercase letter start, lowercase continuation, optional comma/dot
+		patAuthor: regexp.MustCompile(`^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s*[,\.]?`),
+	}
 }
 
 // FindCitations extracts citation candidates from a map of (page_number, text).
@@ -500,9 +500,9 @@ func (f *CitationFinder) extractVolumeIssuePages(raw string) (volume, issue, pag
 
 // Pipeline orchestrates the full citation extraction workflow.
 type Pipeline struct {
-	Extractor  Extractor
-	Finder     *CitationFinder
-	Verifier   *CitationVerifier
+	Extractor    Extractor
+	Finder       *CitationFinder
+	Verifier     *CitationVerifier
 	DocumentType string
 }
 
@@ -513,9 +513,9 @@ func NewPipeline(filePath string) (*Pipeline, error) {
 		return nil, err
 	}
 	return &Pipeline{
-		Extractor:   extractor,
-		Finder:      NewCitationFinder(),
-		Verifier:    NewCitationVerifier(),
+		Extractor:    extractor,
+		Finder:       NewCitationFinder(),
+		Verifier:     NewCitationVerifier(),
 		DocumentType: extractor.Type(),
 	}, nil
 }

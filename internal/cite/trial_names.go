@@ -11,13 +11,13 @@ import (
 
 // TrialName defines a trial and its metadata for search/enrichment.
 type TrialName struct {
-	Name      string   // canonical name: "HIMALAYA", "CheckMate 9L"
-	Drugs     []string // drug names to anchor search: ["durvalumab", "tremelimumab"]
-	Disease   string   // "hepatocellular carcinoma"
-	Journal   string   // journal name
-	Year      int      // publication year
-	PMID      string   // expected PMID
-	Title     string   // expected title fragment
+	Name    string   // canonical name: "HIMALAYA", "CheckMate 9L"
+	Drugs   []string // drug names to anchor search: ["durvalumab", "tremelimumab"]
+	Disease string   // "hepatocellular carcinoma"
+	Journal string   // journal name
+	Year    int      // publication year
+	PMID    string   // expected PMID
+	Title   string   // expected title fragment
 }
 
 // trialNameMap is the authoritative list of trial → PubMed search anchors.

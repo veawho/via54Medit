@@ -9,7 +9,7 @@ import (
 
 // PdfExtractor uses pdftotext to extract text page-by-page.
 type PdfExtractor struct {
-	filePath string
+	filePath     string
 	pdftotextBin string
 }
 

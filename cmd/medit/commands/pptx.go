@@ -24,12 +24,12 @@ Outputs a JSON array of CitationEntry records.`,
 
 // pptxVerifyCmd extracts + verifies citations in a .pptx.
 var pptxVerifyCmd = &cobra.Command{
-	Use:     "verify [file.pptx]",
-	Short:   "Extract and verify citations from a .pptx file",
-	Long:    `Run the full citation pipeline: extract → parse → verify (PubMed + Crossref + S2) → downloadability check.`,
+	Use:   "verify [file.pptx]",
+	Short: "Extract and verify citations from a .pptx file",
+	Long:  `Run the full citation pipeline: extract → parse → verify (PubMed + Crossref + S2) → downloadability check.`,
 	Example: `medit pptx verify deck.pptx
 medit pptx verify deck.pptx --json`,
-	Args:    cobra.ExactArgs(1),
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runVerify(args[0], false)
 	},
@@ -37,10 +37,10 @@ medit pptx verify deck.pptx --json`,
 
 // pptxExtractCmd extracts citation lines only (no network calls).
 var pptxExtractCmd = &cobra.Command{
-	Use:     "extract [file.pptx]",
-	Short:   "Extract citation lines from a .pptx file (offline)",
-	Long:    `Extract raw citation-like lines from slide XML without calling any academic APIs.`,
-	Args:    cobra.ExactArgs(1),
+	Use:   "extract [file.pptx]",
+	Short: "Extract citation lines from a .pptx file (offline)",
+	Long:  `Extract raw citation-like lines from slide XML without calling any academic APIs.`,
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runVerify(args[0], true)
 	},

@@ -19,57 +19,57 @@ import (
 
 // CitationEntry is one parsed and verified citation.
 type CitationEntry struct {
-	Slide      int    `json:"slide"`
-	RawText    string `json:"raw_text"`
-	Authors    string `json:"authors"`
-	Journal    string `json:"journal"`
-	Year       string `json:"year"`
-	Volume     string `json:"volume"`
-	Issue      string `json:"issue"`
-	Pages      string `json:"pages"`
-	PMID       string `json:"pmid"`
-	DOI        string `json:"doi"`
-	RealTitle  string `json:"real_title"`
-	Status     string `json:"status"` // exact/partial/not_found
+	Slide     int    `json:"slide"`
+	RawText   string `json:"raw_text"`
+	Authors   string `json:"authors"`
+	Journal   string `json:"journal"`
+	Year      string `json:"year"`
+	Volume    string `json:"volume"`
+	Issue     string `json:"issue"`
+	Pages     string `json:"pages"`
+	PMID      string `json:"pmid"`
+	DOI       string `json:"doi"`
+	RealTitle string `json:"real_title"`
+	Status    string `json:"status"` // exact/partial/not_found
 }
 
 // Known journal abbreviations and their display names
 var journalAliases = map[string]string{
-	"J Hepatol":                 "J Hepatol",
-	"Hepatol Int":               "Hepatol Int",
-	"NEJM Evid":                 "NEJM Evid",
-	"J Clin Oncol":              "J Clin Oncol",
-	"Lancet Oncol":              "Lancet Oncol",
-	"N Engl J Med":              "N Engl J Med",
-	"JAMA Oncol":                "JAMA Oncol",
-	"Hepatology":                "Hepatology",
-	"Liver Cancer":              "Liver Cancer",
-	"Cancer Res":                "Cancer Res",
-	"Clin Cancer Res":           "Clin Cancer Res",
-	"Front Oncol":               "Front Oncol",
-	"Front Immunol":             "Front Immunol",
-	"Int J Mol Sci":             "Int J Mol Sci",
-	"Cell":                      "Cell",
-	"Immunity":                  "Immunity",
-	"Lancet":                    "Lancet",
-	"Medicine":                  "Medicine",
-	"Gastroenterology":          "Gastroenterology",
-	"J Immunol":                 "J Immunol",
-	"Oncotarget":                "Oncotarget",
-	"Ann Oncol":                 "Ann Oncol",
-	"J Natl Cancer Cent":        "J Natl Cancer Cent",
-	"Hepatobiliary Surg Nutr":   "Hepatobiliary Surg Nutr",
-	"Clin Transl Sci":           "Clin Transl Sci",
-	"Anticancer research":       "Anticancer research",
-	"J Hematol Oncol":           "J Hematol Oncol",
-	"Front Pharmacol":           "Front Pharmacol",
-	"Cancers":                   "Cancers",
-	"Adv Sci":                   "Adv Sci",
-	"Onco Targets Ther":         "Onco Targets Ther",
-	"Sci Rep":                   "Sci Rep",
-	"BMJ Open":                  "BMJ Open",
-	"Eur J Cancer":              "Eur J Cancer",
-	"Clin Kidney J":             "Clin Kidney J",
+	"J Hepatol":               "J Hepatol",
+	"Hepatol Int":             "Hepatol Int",
+	"NEJM Evid":               "NEJM Evid",
+	"J Clin Oncol":            "J Clin Oncol",
+	"Lancet Oncol":            "Lancet Oncol",
+	"N Engl J Med":            "N Engl J Med",
+	"JAMA Oncol":              "JAMA Oncol",
+	"Hepatology":              "Hepatology",
+	"Liver Cancer":            "Liver Cancer",
+	"Cancer Res":              "Cancer Res",
+	"Clin Cancer Res":         "Clin Cancer Res",
+	"Front Oncol":             "Front Oncol",
+	"Front Immunol":           "Front Immunol",
+	"Int J Mol Sci":           "Int J Mol Sci",
+	"Cell":                    "Cell",
+	"Immunity":                "Immunity",
+	"Lancet":                  "Lancet",
+	"Medicine":                "Medicine",
+	"Gastroenterology":        "Gastroenterology",
+	"J Immunol":               "J Immunol",
+	"Oncotarget":              "Oncotarget",
+	"Ann Oncol":               "Ann Oncol",
+	"J Natl Cancer Cent":      "J Natl Cancer Cent",
+	"Hepatobiliary Surg Nutr": "Hepatobiliary Surg Nutr",
+	"Clin Transl Sci":         "Clin Transl Sci",
+	"Anticancer research":     "Anticancer research",
+	"J Hematol Oncol":         "J Hematol Oncol",
+	"Front Pharmacol":         "Front Pharmacol",
+	"Cancers":                 "Cancers",
+	"Adv Sci":                 "Adv Sci",
+	"Onco Targets Ther":       "Onco Targets Ther",
+	"Sci Rep":                 "Sci Rep",
+	"BMJ Open":                "BMJ Open",
+	"Eur J Cancer":            "Eur J Cancer",
+	"Clin Kidney J":           "Clin Kidney J",
 }
 
 // Build regex pattern for journal detection
@@ -106,7 +106,7 @@ func extractAllSlideText(pptxPath string) (map[int]string, []int) {
 			continue
 		}
 		slideNum, _ := parseInt(m[1])
-		
+
 		rc, err := file.Open()
 		if err != nil {
 			continue
@@ -136,17 +136,17 @@ func extractAllSlideText(pptxPath string) (map[int]string, []int) {
 // Split a chunk of text into individual citations
 func splitIntoIndividualCitations(text string) []string {
 	text = strings.Join(strings.Fields(text), " ")
-	
+
 	// Find all journal positions
 	jp := journalPattern()
 	journalMatches := jp.FindAllIndex([]byte(text), -1)
-	
+
 	if len(journalMatches) == 0 {
 		return nil
 	}
 
 	citations := make([]string, 0, len(journalMatches))
-	
+
 	for i, idx := range journalMatches {
 		// Determine start of this citation
 		var start int
@@ -193,7 +193,7 @@ func splitIntoIndividualCitations(text string) []string {
 		citeText := strings.TrimSpace(text[start:end])
 		// Clean up
 		citeText = strings.Join(strings.Fields(citeText), " ")
-		
+
 		if len(citeText) > 20 && jp.MatchString(citeText) {
 			citations = append(citations, citeText)
 		}
@@ -213,9 +213,9 @@ func fetchPubMedPMID(term string) string {
 	params.Add("term", term)
 	params.Add("retmax", "3")
 	params.Add("retmode", "json")
-	
+
 	baseURL := "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + params.Encode()
-	
+
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
@@ -224,7 +224,7 @@ func fetchPubMedPMID(term string) string {
 	// Don't spam NIH
 	req.Header.Set("User-Agent", "via54Medit/1.0 (research)")
 	req.Header.Set("Accept", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return ""
@@ -263,9 +263,9 @@ func fetchPubMedTitle(pmid string) string {
 	params.Add("db", "pubmed")
 	params.Add("id", pmid)
 	params.Add("retmode", "json")
-	
+
 	baseURL := "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?" + params.Encode()
-	
+
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
@@ -273,7 +273,7 @@ func fetchPubMedTitle(pmid string) string {
 	}
 	req.Header.Set("User-Agent", "via54Medit/1.0 (research)")
 	req.Header.Set("Accept", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return ""
@@ -314,27 +314,27 @@ func fetchPubMedTitle(pmid string) string {
 
 func parseCitation(raw string, jp *regexp.Regexp) CitationEntry {
 	entry := CitationEntry{RawText: raw}
-	
+
 	// Extract authors
 	authorRe := regexp.MustCompile(`^([A-Z][a-z]+,?\s+[A-Z]?\.?\s*,?\s+et\s+al\.?|[A-Z]\.\s+[A-Z][a-z]+,\s+[A-Z]\.?\s*,?\s+et\s+al\.?|[A-Z][a-z]+,\s+[A-Z]\.\s*[A-Z]?\.\s*,?\s+et\s+al\.?|[A-Z][a-z]+\s*,?\s+([A-Z]\.\s*)+[A-Z][a-z]+,\s+et\s+al\.?|[A-Z][a-z]+,\s+et\s+al\.?)`)
 	am := authorRe.FindString(raw)
 	if am != "" {
 		entry.Authors = strings.TrimSpace(am)
 	}
-	
+
 	// Extract journal
 	jm := jp.FindString(raw)
 	if jm != "" {
 		entry.Journal = journalAliases[strings.ToLower(jm)]
 	}
-	
+
 	// Extract year
 	yearRe := regexp.MustCompile(`\b(20|19)\d{2}\b`)
 	ym := yearRe.FindString(raw)
 	if ym != "" {
 		entry.Year = ym
 	}
-	
+
 	// Extract volume(issue):pages pattern
 	vpRe := regexp.MustCompile(`\b(\d{1,4})(?:\((\d+)\))?:?\s*(\d{1,5}(?:-\d+|–\d+)?)(?:\.|$)`)
 	vm := vpRe.FindStringSubmatch(raw)
@@ -343,14 +343,14 @@ func parseCitation(raw string, jp *regexp.Regexp) CitationEntry {
 		entry.Issue = vm[2]
 		entry.Pages = vm[3]
 	}
-	
+
 	// Extract DOI
 	doiRe := regexp.MustCompile(`10\.\d{4,9}/[-._;()/:A-Za-z0-9]+`)
 	dm := doiRe.FindString(raw)
 	if dm != "" {
 		entry.DOI = dm
 	}
-	
+
 	// Extract PMID
 	pmidRe := regexp.MustCompile(`PMID\s*:\s*(\d{6,10})|(?<!\d)(\d{6,10})(?!\d)`)
 	pmm := pmidRe.FindStringSubmatch(raw)
@@ -364,7 +364,7 @@ func parseCitation(raw string, jp *regexp.Regexp) CitationEntry {
 			}
 		}
 	}
-	
+
 	return entry
 }
 
@@ -374,13 +374,13 @@ func parseCitation(raw string, jp *regexp.Regexp) CitationEntry {
 
 func main() {
 	pptxPath := "/Users/david/Downloads/标准答案/【原始文件】雷管方案：三重获益，引领uHCC一线治疗新标准_0622.pptx"
-	
+
 	jp := journalPattern()
-	
+
 	// Extract all slide text
 	slideTexts, slideOrder := extractAllSlideText(pptxPath)
 	fmt.Printf("Extracted %d slides with text\n", len(slideTexts))
-	
+
 	// Find all citation chunks in each slide
 	var allChunks []string
 	for _, slideNum := range slideOrder {
@@ -402,23 +402,23 @@ func main() {
 			allChunks = append(allChunks, chunk)
 		}
 	}
-	
+
 	fmt.Printf("Found %d citation chunks\n", len(allChunks))
-	
+
 	// Parse each chunk
 	var entries []CitationEntry
 	seen := make(map[string]bool)
-	
+
 	for _, chunk := range allChunks {
 		entry := parseCitation(chunk, jp)
-		
+
 		// Deduplicate by journal+year+pages
 		dedupKey := entry.Journal + "|" + entry.Year + "|" + entry.Pages
 		if dedupKey == "||" || seen[dedupKey] {
 			continue
 		}
 		seen[dedupKey] = true
-		
+
 		// Try PMID lookup via PubMed
 		if entry.PMID != "" {
 			entry.RealTitle = fetchPubMedTitle(entry.PMID)
@@ -440,7 +440,7 @@ func main() {
 			} else {
 				searchTerm.WriteString(entry.Journal + "[Journal] AND " + entry.Year + "[Publication Date]")
 			}
-			
+
 			pmid := fetchPubMedPMID(searchTerm.String())
 			if pmid != "" {
 				entry.PMID = pmid
@@ -449,22 +449,22 @@ func main() {
 			} else {
 				entry.Status = "unverified"
 			}
-			
+
 			// Rate limit
 			time.Sleep(300 * time.Millisecond)
 		}
-		
+
 		entries = append(entries, entry)
 	}
-	
+
 	// Sort by slide
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Slide < entries[j].Slide
 	})
-	
+
 	fmt.Printf("\nTotal unique citations: %d\n", len(entries))
 	fmt.Println(strings.Repeat("=", 80))
-	
+
 	for i, e := range entries {
 		fmt.Printf("[%d] Slide %d | %s %s | %s\n", i+1, e.Slide, e.Authors, e.Journal, e.Year)
 		if e.Volume != "" {
@@ -481,7 +481,7 @@ func main() {
 		}
 		fmt.Println()
 	}
-	
+
 	// Output JSON
 	output, _ := json.MarshalIndent(entries, "", "  ")
 	fmt.Printf("\n=== JSON OUTPUT ===\n%s\n", string(output))

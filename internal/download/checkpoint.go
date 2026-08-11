@@ -21,13 +21,13 @@ type Checkpoint struct {
 
 // CheckpointData is the serialisable checkpoint state.
 type CheckpointData struct {
-	Total      int                 `json:"total"`
-	Processed  int                 `json:"processed"`
-	Successes  int                 `json:"successes"`
-	Failures   int                 `json:"failures"`
-	Skipped    int                 `json:"skipped"`
-	Items      []CheckpointItem    `json:"items"`
-	Results    map[string]string   `json:"results"` // doi → path
+	Total     int               `json:"total"`
+	Processed int               `json:"processed"`
+	Successes int               `json:"successes"`
+	Failures  int               `json:"failures"`
+	Skipped   int               `json:"skipped"`
+	Items     []CheckpointItem  `json:"items"`
+	Results   map[string]string `json:"results"` // doi → path
 }
 
 // CheckpointItem records the status of one citation.

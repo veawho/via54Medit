@@ -141,7 +141,7 @@ func (s *AntfuSource) Search(ctx context.Context, q types.EBMQuestion, limit int
 	if err != nil {
 		return nil, fmt.Errorf("antfu: check login status: %w", err)
 	}
-	
+
 	// Debug logging
 	debugURL, _ := cdp.Evaluate(verifyCtx, "window.location.href")
 	debugTitle, _ := cdp.Evaluate(verifyCtx, "document.title")

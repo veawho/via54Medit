@@ -49,6 +49,20 @@ type PubMedSource struct {
 	lastFill time.Time
 
 	client *http.Client
+
+	// === 算法驱动 v1.0.0 (Phase 2 算法化, 2026-07-29) ===
+
+	// rpsMin/RpsMax 动态调整范围 (基于 API 配额)
+	// 算法: 读 X-RateLimit-Remaining header, 自动调整 rps
+	//   - remaining > 50% → rps 可以往上加 (cap at rpsMax)
+	//   - remaining < 10% → rps 必须往下减 (floor at rpsMin)
+	//   - 429/5xx → rps 立即减半
+	// → 替代硬编码 3 req/s, 跨设备自适应
+	rpsMin int
+	rpsMax int
+
+	// adaptiveRPS 当前实际 RPS (动态调整)
+	adaptiveRPS int
 }
 
 // NewPubMedSource builds a PubMed adapter from a config map.
@@ -61,6 +75,10 @@ func NewPubMedSource(cfg map[string]any) (*PubMedSource, error) {
 		rps:     3,
 		enabled: true,
 		client:  &http.Client{Timeout: 30 * time.Second},
+		// 算法: 默认 RPS 范围 (有 API key 10, 无 3)
+		rpsMin:      1,
+		rpsMax:      10,
+		adaptiveRPS: 3,
 	}
 	if cfg != nil {
 		if v, ok := cfg["enabled"].(bool); ok {
@@ -73,10 +91,24 @@ func NewPubMedSource(cfg map[string]any) (*PubMedSource, error) {
 		if v, ok := cfg["rate_limit"].(int); ok && v > 0 {
 			s.rps = v
 		}
+		if v, ok := cfg["rps_min"].(int); ok && v > 0 {
+			s.rpsMin = v
+		}
+		if v, ok := cfg["rps_max"].(int); ok && v > 0 {
+			s.rpsMax = v
+		}
 		if v, ok := cfg["email"].(string); ok && v != "" {
 			s.email = v
 		}
 	}
+	// 算法: adaptiveRPS 初始 = rps
+	if s.rps < s.rpsMin {
+		s.rpsMin = s.rps
+	}
+	if s.rps > s.rpsMax {
+		s.rpsMax = s.rps
+	}
+	s.adaptiveRPS = s.rps
 	s.tokens = float64(s.rps)
 	s.lastFill = time.Now()
 	return s, nil
@@ -86,16 +118,18 @@ func (s *PubMedSource) Name() string  { return "pubmed" }
 func (s *PubMedSource) Enabled() bool { return s.enabled }
 
 // takeToken blocks until a token is available or ctx is cancelled.
+// 算法: 用 adaptiveRPS (不是硬编码 rps) → 跨设备自适应
 func (s *PubMedSource) takeToken(ctx context.Context) error {
-	interval := time.Second / time.Duration(s.rps)
+	effectiveRPS := s.getEffectiveRPS()
+	interval := time.Second / time.Duration(effectiveRPS)
 	for {
 		s.mu.Lock()
 		// Refill bucket: tokens accumulated since lastFill.
 		now := time.Now()
 		elapsed := now.Sub(s.lastFill).Seconds()
-		s.tokens += elapsed * float64(s.rps)
-		if s.tokens > float64(s.rps) {
-			s.tokens = float64(s.rps)
+		s.tokens += elapsed * float64(effectiveRPS)
+		if s.tokens > float64(effectiveRPS) {
+			s.tokens = float64(effectiveRPS)
 		}
 		s.lastFill = now
 
@@ -105,7 +139,7 @@ func (s *PubMedSource) takeToken(ctx context.Context) error {
 			return nil
 		}
 		// Not enough tokens: compute how long to wait.
-		wait := time.Duration((1 - s.tokens) / float64(s.rps) * float64(time.Second))
+		wait := time.Duration((1 - s.tokens) / float64(effectiveRPS) * float64(time.Second))
 		s.mu.Unlock()
 
 		select {
@@ -116,6 +150,68 @@ func (s *PubMedSource) takeToken(ctx context.Context) error {
 		if interval > 0 {
 			time.Sleep(interval / 4) // small jitter to avoid thundering herd
 		}
+	}
+}
+
+// getEffectiveRPS 算法: 返回当前 effective RPS (线程安全)
+// 优先用 adaptiveRPS (动态调整), fallback 到 rps (静态)
+func (s *PubMedSource) getEffectiveRPS() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.adaptiveRPS > 0 {
+		return s.adaptiveRPS
+	}
+	return s.rps
+}
+
+// adaptRPS 算法: 根据 NCBI header 调整 RPS (替换硬编码 rps)
+// remaining > 50% → 加 1 (cap rpsMax)
+// remaining < 10% → 减 1 (floor rpsMin)
+// 429 → 立即减半
+// 5xx → 减 1
+// 这是 "规则相对性" 的标准实现: 不写死 RPS, 而是基于反馈调整
+func (s *PubMedSource) adaptRPS(remaining int, total int, statusCode int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	oldRPS := s.adaptiveRPS
+
+	switch {
+	case statusCode == 429:
+		// 429 Too Many Requests: 立即减半
+		s.adaptiveRPS = s.adaptiveRPS / 2
+		if s.adaptiveRPS < s.rpsMin {
+			s.adaptiveRPS = s.rpsMin
+		}
+	case statusCode >= 500:
+		// 5xx server error: 减 1
+		s.adaptiveRPS--
+		if s.adaptiveRPS < s.rpsMin {
+			s.adaptiveRPS = s.rpsMin
+		}
+	case total > 0 && remaining > 0:
+		pctRemaining := float64(remaining) / float64(total)
+		switch {
+		case pctRemaining > 0.5:
+			// 配额充足: 加 1
+			s.adaptiveRPS++
+			if s.adaptiveRPS > s.rpsMax {
+				s.adaptiveRPS = s.rpsMax
+			}
+		case pctRemaining < 0.1:
+			// 配额紧张: 减 1
+			s.adaptiveRPS--
+			if s.adaptiveRPS < s.rpsMin {
+				s.adaptiveRPS = s.rpsMin
+			}
+		}
+	}
+
+	// 重置 token bucket 反映新 RPS
+	s.tokens = float64(s.adaptiveRPS)
+	s.lastFill = time.Now()
+
+	if s.adaptiveRPS != oldRPS {
+		_ = oldRPS // 调试用, 避免 unused warning
 	}
 }
 

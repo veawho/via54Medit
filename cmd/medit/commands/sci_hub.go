@@ -28,10 +28,10 @@ import (
 )
 
 var (
-	sciHubMirrors  string        // comma-separated mirror URLs
-	sciHubTimeout  time.Duration
-	sciHubForce    bool          // override config and enable Sci-Hub for this run
-	sciHubNoWarn   bool          // suppress compliance warning
+	sciHubMirrors string // comma-separated mirror URLs
+	sciHubTimeout time.Duration
+	sciHubForce   bool // override config and enable Sci-Hub for this run
+	sciHubNoWarn  bool // suppress compliance warning
 )
 
 var sciHubCmd = &cobra.Command{

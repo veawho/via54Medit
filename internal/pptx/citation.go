@@ -4,11 +4,11 @@
 //
 // Pipeline (Phase 3):
 //
-//   1. Extract raw text from PPTX XML (slides/*.xml + notesSlides/*.xml)
-//   2. Regex-match citation lines (author, journal, year, PMID/DOI)
-//   3. Enrich with PubMed (PMID → metadata) + Crossref (DOI → publisher)
-//   4. Flag downloadability: Sci-Hub / OA / Nexus / unavailable
-//   5. Return []CitationEntry with verification status
+//  1. Extract raw text from PPTX XML (slides/*.xml + notesSlides/*.xml)
+//  2. Regex-match citation lines (author, journal, year, PMID/DOI)
+//  3. Enrich with PubMed (PMID → metadata) + Crossref (DOI → publisher)
+//  4. Flag downloadability: Sci-Hub / OA / Nexus / unavailable
+//  5. Return []CitationEntry with verification status
 package pptx
 
 import (
@@ -38,22 +38,22 @@ import (
 // CitationEntry is one citation found in a PPTX slide.
 type CitationEntry struct {
 	// Position
-	SlideIndex int    `json:"slide_index"`  // 1-based
-	SlideTitle string `json:"slide_title"`  // derived from first heading text
+	SlideIndex int    `json:"slide_index"` // 1-based
+	SlideTitle string `json:"slide_title"` // derived from first heading text
 
 	// Raw
 	RawText string `json:"raw_text"` // original citation line
 
 	// Extracted fields
-	Authors    string   `json:"authors,omitempty"`
-	Title      string   `json:"title,omitempty"`
-	Journal    string   `json:"journal,omitempty"`
-	Year       int      `json:"year"`
-	Volume     string   `json:"volume,omitempty"`
-	Issue      string   `json:"issue,omitempty"`
-	Pages      string   `json:"pages,omitempty"`
-	PMID       string   `json:"pmid,omitempty"`
-	DOI        string   `json:"doi,omitempty"`
+	Authors string `json:"authors,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Journal string `json:"journal,omitempty"`
+	Year    int    `json:"year"`
+	Volume  string `json:"volume,omitempty"`
+	Issue   string `json:"issue,omitempty"`
+	Pages   string `json:"pages,omitempty"`
+	PMID    string `json:"pmid,omitempty"`
+	DOI     string `json:"doi,omitempty"`
 
 	// Verified fields (from PubMed/Crossref)
 	VerifiedTitle string `json:"verified_title,omitempty"`
@@ -61,8 +61,8 @@ type CitationEntry struct {
 	VerifiedDOI   string `json:"verified_doi,omitempty"`
 
 	// Verification status
-	Status     string      `json:"status"` // "exact" | "partial" | "mismatch" | "not_found" | "unverifiable"
-	Verdict    string      `json:"verdict"`  // human-readable summary
+	Status     string      `json:"status"`  // "exact" | "partial" | "mismatch" | "not_found" | "unverifiable"
+	Verdict    string      `json:"verdict"` // human-readable summary
 	SourceHits []SourceHit `json:"source_hits,omitempty"`
 
 	// Downloadability (from full-text pipeline)
@@ -73,7 +73,7 @@ type CitationEntry struct {
 
 // SourceHit is one match from a single academic source.
 type SourceHit struct {
-	Source     string `json:"source"`     // "pubmed" | "crossref" | "doi"
+	Source     string `json:"source"` // "pubmed" | "crossref" | "doi"
 	PMID       string `json:"pmid,omitempty"`
 	DOI        string `json:"doi,omitempty"`
 	Title      string `json:"title,omitempty"`
@@ -323,10 +323,18 @@ func findCitationsByPatterns(text string) []string {
 		hasDOI := doiPat.MatchString(window)
 
 		score := 0
-		if hasYear { score += 1 }
-		if hasAuthor { score += 1 }
-		if hasVolPage { score += 1 }
-		if hasDOI { score += 1 }
+		if hasYear {
+			score += 1
+		}
+		if hasAuthor {
+			score += 1
+		}
+		if hasVolPage {
+			score += 1
+		}
+		if hasDOI {
+			score += 1
+		}
 		if score >= 2 {
 			// Trim window to first 100+ chars after journal start
 			cites = append(cites, window)
@@ -420,14 +428,14 @@ func isCitationLine(line string) bool {
 }
 
 var (
-	yearPat    = regexp.MustCompile(`\b(19|20)\d{2}\b`)
-// journalPat uses a single alternation. Short journal names like "JAMA"/"Lancet"
-// are followed by a word-boundary, but we must manually reject them when the
-// boundary is followed by more letters (e.g. "JAMA Oncol"). The caller handles
-// this with longestMatch() which checks that no journalPat match is a proper
-// substring of another candidate.
+	yearPat = regexp.MustCompile(`\b(19|20)\d{2}\b`)
+	// journalPat uses a single alternation. Short journal names like "JAMA"/"Lancet"
+	// are followed by a word-boundary, but we must manually reject them when the
+	// boundary is followed by more letters (e.g. "JAMA Oncol"). The caller handles
+	// this with longestMatch() which checks that no journalPat match is a proper
+	// substring of another candidate.
 	journalPat = regexp.MustCompile(`(?i)\b(JAMA Oncol|J Clin Oncol|Lancet Oncol|Lancet Transplant|Lancet Infect Dis|Lancet HIV|N Engl J Med|Nat Rev Drug Discov|Ann Intern Med|J Natl Cancer Cent|J Med Internet Res|J Med Virol|Annals of Oncology|Ann Oncol|Cancer Cell|Cancer Res|Front Immunol|Front Oncol|Int J Mol Sci|Liver Cancer|Eur J Cancer|Br J Cancer|BMJ Open|Sci Rep|Adv Sci|Hepatology|J Hepatol|Lancet\b|JAMA\b|NEJM\b|BMJ\b|Cell\b|Medicine\b)`)
-volPagePat = regexp.MustCompile(`\b\d{1,4}\((\d{1,3}|[A-Za-z])\):\s*\d{1,5}(?:-\d{1,5})?\b|\b\d{1,4}:\s*\d{1,5}(?:-\d{1,5})?\b`)
+	volPagePat = regexp.MustCompile(`\b\d{1,4}\((\d{1,3}|[A-Za-z])\):\s*\d{1,5}(?:-\d{1,5})?\b|\b\d{1,4}:\s*\d{1,5}(?:-\d{1,5})?\b`)
 	doiPat     = regexp.MustCompile(`10\.\d{4,9}/[-._;()/:A-Za-z0-9]+`)
 	pmidPat    = regexp.MustCompile(`PMID\s*:\s*\d{6,10}|\b\d{6,10}\b`)
 	authorPat  = regexp.MustCompile(`\b[A-Z][a-z]*,?\s+et al\.?|, et al\.?|, et\.\s*al\.?|[A-Z]\.\s*[A-Z][a-z]+,?\s+et al\.?`)
@@ -687,21 +695,21 @@ type DownloadChecker struct {
 // NewDownloadChecker creates a checker with known OA journal abbreviations.
 func NewDownloadChecker() *DownloadChecker {
 	oa := map[string]bool{
-		"Front Oncol":      true,
-		"Int J Mol Sci":    true,
-		"Adv Sci":          true,
-		"Sci Rep":          true,
-		"PLOS ONE":         true,
-		"PLOS":             true,
-		"BMC":              true,
-		"Mol Cancer":       true,
-		"Cancers":          true,
-		"Medicine":         true,
-		"Med (Baltimore)":  true,
+		"Front Oncol":        true,
+		"Int J Mol Sci":      true,
+		"Adv Sci":            true,
+		"Sci Rep":            true,
+		"PLOS ONE":           true,
+		"PLOS":               true,
+		"BMC":                true,
+		"Mol Cancer":         true,
+		"Cancers":            true,
+		"Medicine":           true,
+		"Med (Baltimore)":    true,
 		"J Med Internet Res": true,
-		"JHEP Rep":         true,
-		"Cell":             true, // Cell is hybrid but many articles are OA
-		"Nat":              true,
+		"JHEP Rep":           true,
+		"Cell":               true, // Cell is hybrid but many articles are OA
+		"Nat":                true,
 		"Annals of Oncology": true,
 	}
 	return &DownloadChecker{oaJournals: oa}
@@ -761,14 +769,14 @@ func (dc *DownloadChecker) Check(entry *CitationEntry) {
 
 // BatchResult holds the output of VerifyAll.
 type BatchResult struct {
-	Total          int             `json:"total"`
-	Exact          int             `json:"exact"`
-	Partial        int             `json:"partial"`
-	Mismatch       int             `json:"mismatch"`
-	NotFound       int             `json:"not_found"`
-	Unverifiable   int             `json:"unverifiable"`
-	Downloadable   int             `json:"downloadable"`
-	Entries        []CitationEntry `json:"entries"`
+	Total        int             `json:"total"`
+	Exact        int             `json:"exact"`
+	Partial      int             `json:"partial"`
+	Mismatch     int             `json:"mismatch"`
+	NotFound     int             `json:"not_found"`
+	Unverifiable int             `json:"unverifiable"`
+	Downloadable int             `json:"downloadable"`
+	Entries      []CitationEntry `json:"entries"`
 }
 
 // VerifyAll extracts, parses, verifies, and classifies all citations in a PPTX.

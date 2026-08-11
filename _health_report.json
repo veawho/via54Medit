@@ -1,0 +1,146 @@
+{
+  "pn_x_total": 192,
+  "manifest_ok": 192,
+  "main_pdf_ok": 185,
+  "highlight_ok": 92,
+  "ppt_csv_alignment": {
+    "total": 145,
+    "matched": 144,
+    "unmatched": 1,
+    "rate": 0.993103448275862,
+    "unmatched_list": [
+      [
+        10,
+        22,
+        "Zhang, Huajun et al. “Recent advances in systemic therapy fo"
+      ]
+    ]
+  },
+  "link_health_sample": {
+    "total": 4,
+    "results": [
+      {
+        "pn_x": "P10-1",
+        "url": "https://biomarkerres.biomedcentral.com/articles/10.1186/s40364-021-00350-4",
+        "code": "200"
+      },
+      {
+        "pn_x": "P10-2",
+        "url": "https://www.cancerbiomed.org/content/13/2/171",
+        "code": "200"
+      },
+      {
+        "pn_x": "P11-1",
+        "url": "https://evidence.nejm.org/doi/10.1056/EVIDoa2100070",
+        "code": "000"
+      },
+      {
+        "pn_x": "P12-1",
+        "url": "https://linkinghub.elsevier.com/retrieve/pii/S0923753425030443",
+        "code": "200"
+      }
+    ]
+  },
+  "issues": [
+    {
+      "pn_x": "P12-2",
+      "type": "highlight_issues",
+      "detail": "['P12-2_page4_highlight.jpg: 黄色像素 0.001% (过低)', 'P12-2_page2_highlight.jpg: 黄色像素 0.001% (过低)']"
+    },
+    {
+      "pn_x": "P16-2",
+      "type": "highlight_issues",
+      "detail": "['P16-2_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P16-2_P17-2_P24-5",
+      "type": "highlight_issues",
+      "detail": "['P24-5_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P17-2",
+      "type": "highlight_issues",
+      "detail": "['P17-2_page6_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P19-1",
+      "type": "highlight_issues",
+      "detail": "['P19-1_page7_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P19-2",
+      "type": "highlight_issues",
+      "detail": "['P19-2_page2_highlight.jpg: 黄色像素 0.004% (过低)', 'P19-2_page7_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P20-1",
+      "type": "highlight_issues",
+      "detail": "['P20-1_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P21-1",
+      "type": "highlight_issues",
+      "detail": "['P21-1_page6_highlight.jpg: 黄色像素 0.000% (过低)', 'P21-1_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P21-2",
+      "type": "highlight_issues",
+      "detail": "['P21-2_page1_highlight.jpg: 黄色像素 0.001% (过低)']"
+    },
+    {
+      "pn_x": "P22-2",
+      "type": "highlight_issues",
+      "detail": "['P22-2_page10_highlight.jpg: 黄色像素 0.000% (过低)', 'P22-2_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P22-3",
+      "type": "highlight_issues",
+      "detail": "['P22-3_page1_highlight.jpg: 黄色像素 0.001% (过低)']"
+    },
+    {
+      "pn_x": "P24-1",
+      "type": "highlight_issues",
+      "detail": "['P24-1_page1_highlight.jpg: 黄色像素 0.001% (过低)']"
+    },
+    {
+      "pn_x": "P24-10",
+      "type": "highlight_issues",
+      "detail": "['P24-10_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P24-11",
+      "type": "main_mismatch",
+      "detail": "{'status': 'mismatch', 'filename': None, 'content': {'mismatch_type': 'main PDF 是 Study Protocol 不是论文', 'expected': 'Lancet Oncol 2025 论文', 'actual': 'P24-11_main_Qin_LancetOncol_2025.pdf', 'note': \"m"
+    },
+    {
+      "pn_x": "P24-11",
+      "type": "highlight_issues",
+      "detail": "['P24-11_page16_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P24-12",
+      "type": "highlight_issues",
+      "detail": "['P24-12_page1_highlight.jpg: 黄色像素 0.000% (过低)', 'P24-12_page2_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P24-2",
+      "type": "highlight_issues",
+      "detail": "['P24-2_page4_highlight.jpg: 黄色像素 0.000% (过低)', 'P24-2_page1_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P24-6",
+      "type": "highlight_issues",
+      "detail": "['P24-6_page18_highlight.jpg: 黄色像素 0.000% (过低)']"
+    },
+    {
+      "pn_x": "P24-7",
+      "type": "highlight_issues",
+      "detail": "['P24-7_page1_highlight.jpg: 黄色像素 0.001% (过低)']"
+    },
+    {
+      "pn_x": "P24-8",
+      "type": "highlight_issues",
+      "detail": "['P24-8_page1_highlight.jpg: 黄色像素 0.000% (过低)', 'P24-8_page5_highlight.jpg: 黄色像素 0.000% (过低)']"
+    }
+  ]
+}

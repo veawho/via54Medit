@@ -41,7 +41,7 @@ nothing matches.`,
 }
 
 var (
-	picoJSON    bool
+	picoJSON bool
 )
 
 func init() {

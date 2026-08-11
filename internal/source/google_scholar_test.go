@@ -66,7 +66,7 @@ func TestGScholar_NewGScholarSource(t *testing.T) {
 
 	t.Run("custom user_agents", func(t *testing.T) {
 		cfg := map[string]any{
-			"enabled": true,
+			"enabled":     true,
 			"user_agents": "Mozilla/5.0 test, Custom/1.0",
 		}
 		s, err := NewGScholarSource(cfg)
@@ -372,9 +372,9 @@ func TestGScholar_CleanTitleText(t *testing.T) {
 
 func TestGScholar_ParseAuthorsVenue(t *testing.T) {
 	tests := []struct {
-		name string
-		in   string
-		wantAuth int  // len(authors)
+		name     string
+		in       string
+		wantAuth int // len(authors)
 		wantJrnl string
 		wantYear int
 	}{
@@ -472,7 +472,7 @@ func TestGScholar_TakeTokenAllowsThroughWhenTokensAvailable(t *testing.T) {
 
 func TestGScholar_NewRequestSetsRotatingUA(t *testing.T) {
 	cfg := map[string]any{
-		"enabled": true,
+		"enabled":     true,
 		"user_agents": "Agent1, Agent2, Agent3",
 	}
 	s, err := NewGScholarSource(cfg)

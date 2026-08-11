@@ -39,8 +39,8 @@ var queryCmd = stubCmd(
 	"Phase 2",
 )
 
-var anno2pptCmd = stubCmd(
-	"anno2ppt <package>",
-	"证据包 → antfu 样式 PPT",
+var anno2pptCmdStub = stubCmd(
+	"anno2ppt-old-stub <package>",
+	"Phase 3 placeholder (已被 anno2ppt.go 真实实现取代)",
 	"Phase 3",
 )
