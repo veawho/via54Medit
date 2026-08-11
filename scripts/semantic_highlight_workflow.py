@@ -173,7 +173,7 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
 2. matches: 列表, 每个元素:
    {{
      "bbox": [x1, y1, x2, y2],          // 像素坐标 (在图 2 上)
-     "content_type": "paragraph" / "figure" / "table" / "icon" / "image",
+     "content_type": "paragraph" / "figure" / "table" / "icon" / "image" / "title" / "author" / "reference" / "header" / "footer",
      "semantic_description": "图 2 该区域讲什么",
      "relevance": "图 2 该区域与 PPT 标号的关系"
    }}
@@ -240,11 +240,93 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
 
 
 # === Stage 3: Highlight using bbox (新版本) ===
+# 禁止高亮的 content_type (per user feedback 2026-08-11)
+FORBIDDEN_CONTENT_TYPES = {
+    "title",          # 文章标题
+    "author",         # 作者信息
+    "authors",
+    "affiliation",
+    "reference",      # PDF 末尾的文献引用部分 (References/Bibliography)
+    "references",
+    "bibliography",
+    "cited",
+    "literature",     # Literature cited
+    "acknowledgment",  # 致谢
+    "header",         # 页眉 (期刊名, 卷号等)
+    "footer",         # 页脚
+    "running_head",
+    "journal_info",   # 期刊信息
+}
+
+
+def _is_reference_or_bibliography_page(page, page_idx: int) -> bool:
+    """检测是否是 PDF 的 reference/bibliography 页 (整页都是引用)"""
+    try:
+        text = page.get_text().lower()
+    except Exception:
+        return False
+    # 关键 reference 信号
+    signals = [
+        "references", "bibliography", "literature cited",
+        "cited literature", "参考文献", "引用文献",
+    ]
+    for sig in signals:
+        if sig in text:
+            # 出现信号词 + 后跟大量 [数字] 引用格式, 判定为 reference 页
+            if re.search(r'\[\d+\]', text) or re.search(r'\d+\.\s+[A-Z][a-z]+', text):
+                return True
+    return False
+
+
+def _is_in_skip_zone(bbox_pdf: List[float], page, content_type: str,
+                     page_idx: int, total_pages: int) -> bool:
+    """判断 bbox 是否在禁止高亮区域 (title/author/reference/header/footer)"""
+    x1, y1, x2, y2 = bbox_pdf
+    page_h = page.rect.height
+    page_w = page.rect.width
+
+    # 1. sensenova 标了禁止 content_type
+    if content_type.lower() in FORBIDDEN_CONTENT_TYPES:
+        return True
+
+    # 2. 几何启发: page 0 top 22% 可能是 title+author 区域
+    if page_idx == 0 and y1 < page_h * 0.22:
+        return True
+
+    # 3. 几何启发: 任何页 bottom 8% 可能是 footer
+    if y1 > page_h * 0.92:
+        return True
+
+    # 4. 整页都是 reference (page_idx 在末尾 1/3, 文字特征匹配)
+    if page_idx >= total_pages - max(2, total_pages // 3):
+        if _is_reference_or_bibliography_page(page, page_idx):
+            return True
+
+    # 5. bbox 在最底部 30% + 是引用列表特征 (有 [n] 或 n. Author 格式)
+    if y1 > page_h * 0.70:
+        try:
+            text_in_bbox = page.get_text("text", clip=fitz.Rect(x1, y1, x2, y2)).strip()
+            # 短文本 (1-2 行) + 引用格式
+            if len(text_in_bbox) < 200 and (
+                re.search(r'\[\d+\]', text_in_bbox) or
+                re.search(r'^\s*\d+\.\s+[A-Z]', text_in_bbox) or
+                re.search(r'et al\.', text_in_bbox) or
+                re.search(r'\d{4}\)\.|\d{4}\.', text_in_bbox)
+            ):
+                # 但要排除 normal body 段 (有完整句子)
+                if not re.search(r'[a-z]{3,}\s+[a-z]{3,}', text_in_bbox):  # 不是 normal sentence
+                    return True
+        except Exception:
+            pass
+
+    return False
+
+
 def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
                           mode: str = "line") -> Dict:
     """
-    直接用 sensenova 返回的 bbox 画黄线, 不依赖 text search
-    mode: "line" (细黄线) 或 "fill" (黄色填充) 或 "both"
+    直接用 sensenova 返回的 bbox 画黄线, 不依赖 text search.
+    **禁止高亮**: title / author / affiliation / reference / bibliography / header / footer.
     """
     if not matches:
         return {"ok": False, "reason": "no_matches"}
@@ -260,41 +342,49 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
     except Exception as e:
         return {"ok": False, "reason": f"open_err: {e}"}
 
+    total_pages = doc.page_count
     highlight_count = 0
+    filtered_count = 0  # 被禁止区域过滤的
+    filter_reasons = []
+
     for m in matches:
         page_idx = m.get("page", 0)
-        if page_idx >= doc.page_count:
+        if page_idx >= total_pages:
             continue
         bbox = m.get("bbox_pdf", [])
         if not bbox or len(bbox) != 4:
             continue
         x1, y1, x2, y2 = bbox
-        # PDF bbox 必须 valid
-        page = doc[page_idx]
-        page_rect = page.rect
         if x1 >= x2 or y1 >= y2:
             continue
+        page = doc[page_idx]
+        page_rect = page.rect
         # 裁剪到页面范围
         x1 = max(0, min(x1, page_rect.x1))
         x2 = max(0, min(x2, page_rect.x1))
         y1 = max(0, min(y1, page_rect.y1))
         y2 = max(0, min(y2, page_rect.y1))
 
-        # 画黄线 (line mode = 细线) 或 填充
+        # 过滤禁止区域 (title/author/reference/header/footer)
+        content_type = m.get("content_type", "paragraph")
+        if _is_in_skip_zone(bbox, page, content_type, page_idx, total_pages):
+            filtered_count += 1
+            filter_reasons.append(f"page {page_idx} type={content_type} bbox=({x1:.0f},{y1:.0f})-({x2:.0f},{y2:.0f})")
+            continue
+
+        # 画黄线
         try:
             if mode == "line" or mode == "both":
-                # 文字下方细黄线: 画在 bbox 底部 +0.5pt
                 line_y = y2 + 0.5
                 page.draw_line(
                     fitz.Point(x1, line_y),
                     fitz.Point(x2, line_y),
-                    color=(1, 1, 0),  # yellow
+                    color=(1, 1, 0),
                     width=1.2,
                     overlay=True,
                 )
                 highlight_count += 1
             if mode == "fill" or mode == "both":
-                # 黄色填充 (高亮笔效果)
                 page.draw_rect(
                     fitz.Rect(x1, y1, x2, y2),
                     fill=(1, 1, 0),
@@ -308,7 +398,6 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
             print(f"  ⚠ draw err on page {page_idx}: {e}")
             continue
 
-    # 保存
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     try:
         doc.save(out_path)
@@ -317,11 +406,19 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
     finally:
         doc.close()
 
+    if highlight_count == 0 and filtered_count > 0:
+        reason = f"all_{filtered_count}_matches_in_forbidden_zones (title/author/reference)"
+    else:
+        reason = ""
+
     return {
         "ok": highlight_count > 0,
         "highlight_count": highlight_count,
+        "filtered_count": filtered_count,
         "method": "semantic_bbox_v11",
         "matches_used": len(matches),
+        "filter_reasons": filter_reasons[:5],
+        "reason": reason,
     }
 
 
@@ -353,7 +450,8 @@ def find_ppt_renders(project_root, slide_num):
     return None
 
 
-def _process_one(plan, project_root, out_dir, mode, idx, total, use_fallback=True):
+def _process_one(plan, project_root, out_dir, mode, idx, total):
+    """纯 semantic matching. 禁止 keyword 兜底. 禁止高亮 title/author/reference."""
     pn_x = plan.get("pn_x")
     slide = plan.get("slide")
     # 找 PDF
@@ -365,53 +463,15 @@ def _process_one(plan, project_root, out_dir, mode, idx, total, use_fallback=Tru
     ppt_render = find_ppt_renders(project_root, slide)
     if not ppt_render:
         return {"pn_x": pn_x, "ok": False, "reason": "no_ppt_render"}
-    # Stage 2: semantic search (sensenova vision)
+    # Stage 2: semantic search (sensenova vision) - 纯语义, 不 fallback
     print(f"  [{idx}/{total}] {pn_x}: stage 2 (sensenova vision)...", flush=True)
     matches = stage2_semantic_search(plan, ppt_render, max_pages=4, vision_timeout=30)
     method = "semantic_bbox_v11"
 
-    if not matches and use_fallback:
-        # Fallback: keyword matching via process_pn_x
-        print(f"    → no semantic match, fallback to keyword matching", flush=True)
-        # 抽 keywords from target_text + data_points
-        kws = list(plan.get("keywords", []) or [])
-        kws += list(plan.get("data_points", []) or [])
-        # 加从 target_text 拆的 2-4 字词
-        import re as re2
-        target = plan.get("target_text", "") or ""
-        kws += re2.findall(r'[\u4e00-\u9fff]{2,4}', target)
-        kws += re2.findall(r'[A-Za-z]{4,15}', target)
-        kws = list(dict.fromkeys(k for k in kws if k and len(k) > 1))[:15]
-
-        if kws:
-            from via54_highlight_fix_v10 import process_pn_x
-            out_pdf = os.path.join(out_dir, f"{pn_x}_semantic_highlight.pdf")
-            jpg_dir = os.path.join(out_dir, f"{pn_x}_jpgs")
-            os.makedirs(jpg_dir, exist_ok=True)
-            try:
-                # 暂时关闭 strict mode 让 title 区也可画
-                import via54_highlight_fix_v10 as v
-                orig = v.STRICT_SKIP_HEADER
-                v.STRICT_SKIP_HEADER = False
-                r = process_pn_x(
-                    pn_x, plan["pdf_path"], out_pdf, kws, jpg_dir,
-                    f"{pn_x}_page", mode=mode, use_glm=False,
-                )
-                v.STRICT_SKIP_HEADER = orig
-                print(f"    → fallback hits={r['total_hits']}, yellow={r['yellow_pct_estimate']:.3f}%")
-                return {
-                    "pn_x": pn_x, "ok": r.get("ok", False),
-                    "method": "keyword_fallback",
-                    "highlight_count": r.get("total_hits", 0),
-                    "matches": 0,
-                }
-            except Exception as e:
-                print(f"    → fallback err: {e}")
-
     if not matches:
-        return {"pn_x": pn_x, "ok": False, "reason": "no_semantic_match", "matches": 0}
+        return {"pn_x": pn_x, "ok": False, "reason": "no_semantic_match", "matches": 0, "method": method}
 
-    # Stage 3: bbox highlight
+    # Stage 3: bbox highlight (filter title/author/reference)
     out_pdf = os.path.join(out_dir, f"{pn_x}_semantic_highlight.pdf")
     result = stage3_highlight_bbox(plan, matches, out_pdf, mode=mode)
     print(f"    → matches={len(matches)}, highlight_count={result.get('highlight_count', 0)}, ok={result.get('ok')}")
@@ -450,7 +510,7 @@ def run_project(project_root, plans, out_dir, max_plans=0, mode="line", workers=
     results = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(_process_one, plan, project_root, out_dir, mode, i, len(valid_plans), use_fallback=True): plan
+            executor.submit(_process_one, plan, project_root, out_dir, mode, i, len(valid_plans)): plan
             for i, plan in enumerate(valid_plans, 1)
         }
         for future in as_completed(futures):
