@@ -327,6 +327,16 @@ _HEADER_FOOTER_PATTERNS = [
     r"^Vol\.?\s+\d+", r"^N\s+Engl\s+J\s+Med", r"^Page\s+\d+", r"^www\.",
     r"^Downloaded\s+from", r"^Copyright\s", r"^©",
 ]
+# Declaration / competing interests 文字特征 (不应 highlight)
+_DECLARATION_PATTERNS = [
+    r"^Competing\s+interests", r"^Declaration\s+of\s+(competing\s+)?interests",
+    r"^Conflicts?\s+of\s+interest", r"^Funding", r"^Funding\s+statement",
+    r"^Author\s+contributions", r"^Authors'\s+contributions",
+    r"^Data\s+availability", r"^Data\s+availability\s+statement",
+    r"^Additional\s+information", r"^Supplementary\s+",
+    r"^Ethics\s+(approval|statement|consent)",
+    r"^Patient\s+consent", r"^Informed\s+consent",
+]
 
 
 def _is_forbidden_text(text: str, content_type: str, page_idx: int, page_rect) -> tuple:
@@ -379,6 +389,11 @@ def _is_forbidden_text(text: str, content_type: str, page_idx: int, page_rect) -
         # doi + journal 格式
         if re.search(r"doi:\s*10\.\d+", text, re.IGNORECASE) and re.search(r"\d{4}\s*;\s*\d+", text):
             return True, "text_pattern=doi_journal_format"
+
+        # Declaration / Competing interests / Funding / Author contributions 段
+        for p in _DECLARATION_PATTERNS:
+            if re.search(p, text, re.MULTILINE | re.IGNORECASE):
+                return True, f"text_pattern=declaration_{p[:20]}"
 
         # Header/footer 文字特征
         # page header 典型: "N Engl J Med" / "Vol. 344" / "www.nejm.org"
@@ -603,7 +618,9 @@ def find_ppt_renders(project_root, slide_num):
 
 
 def _process_one(plan, project_root, out_dir, mode, idx, total):
-    """纯 semantic matching. 禁止 keyword 兜底. 禁止高亮 title/author/reference."""
+    """纯 semantic matching. 禁止 keyword 兜底. 禁止高亮 title/author/reference.
+    v1.4.1: 在 stage 2 之前注入 PDF 摘要反向抽英文 keyword (TMA 4 轮验证 +33x hit 率)
+    """
     pn_x = plan.get("pn_x")
     slide = plan.get("slide")
     # 找 PDF
@@ -615,10 +632,26 @@ def _process_one(plan, project_root, out_dir, mode, idx, total):
     ppt_render = find_ppt_renders(project_root, slide)
     if not ppt_render:
         return {"pn_x": pn_x, "ok": False, "reason": "no_ppt_render"}
+
+    # === v1.4.1: 注入 PDF 摘要反向抽英文 keyword (TMA 4 轮验证) ===
+    # 复用 vision_stage3_keyword_boost._extract_keywords_from_pdf
+    if plan.get("pdf_path") and os.path.isfile(plan["pdf_path"]):
+        try:
+            from vision_stage3_keyword_boost import _extract_keywords_from_pdf
+            pdf_kw = _extract_keywords_from_pdf(plan["pdf_path"])
+            if pdf_kw:
+                # PDF keyword 优先 (前置, 优先被 sensenova 看到)
+                existing_kw = plan.get("keywords", []) or []
+                # 合并去重, PDF 关键词在前
+                merged = list(dict.fromkeys(pdf_kw + existing_kw))[:30]
+                plan["keywords"] = merged
+        except Exception as e:
+            print(f"  ⚠ kw inject err {pn_x}: {e}", flush=True)
+
     # Stage 2: semantic search (sensenova vision) - 纯语义, 不 fallback
     print(f"  [{idx}/{total}] {pn_x}: stage 2 (sensenova vision)...", flush=True)
     matches = stage2_semantic_search(plan, ppt_render, max_pages=8, vision_timeout=30)
-    method = "semantic_bbox_v14"
+    method = "semantic_bbox_v141"
 
     if not matches:
         return {"pn_x": pn_x, "ok": False, "reason": "no_semantic_match", "matches": 0, "method": method}
