@@ -175,9 +175,9 @@ def stage2_semantic_search(plan: Dict, ppt_render_path: str,
     n_pages = min(max_pages, doc.page_count)
     matches = []
 
-    # 准备临时文件
-    tmp_dir = f"/tmp/_semantic_{plan['pn_x']}"
-    os.makedirs(tmp_dir, exist_ok=True)
+    # 准备临时文件 (加 process id 避免多线程 race)
+    import tempfile
+    tmp_dir = tempfile.mkdtemp(prefix=f"_semantic_{plan['pn_x']}_{os.getpid()}_")
 
     for p in range(n_pages):
         pdf_img = os.path.join(tmp_dir, f"page_{p}.png")
@@ -279,7 +279,10 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
     doc.close()
     try:
         for f in os.listdir(tmp_dir):
-            os.remove(os.path.join(tmp_dir, f))
+            try:
+                os.remove(os.path.join(tmp_dir, f))
+            except Exception:
+                pass
         os.rmdir(tmp_dir)
     except Exception:
         pass
