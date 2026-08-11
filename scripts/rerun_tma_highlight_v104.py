@@ -168,7 +168,7 @@ def main():
             fail += 1
             continue
 
-        mark = "✓" if r["yellow_pct_estimate"] > 0.01 else "❌"
+        mark = "✓" if r["yellow_pct_estimate"] > 0.001 else "❌"
         summary.append({
             "pn_x": pn,
             "kws_csv_n": len(kws_csv),
@@ -194,7 +194,7 @@ def main():
             writer.writeheader()
             writer.writerows(summary)
     print(f"\n=== 完成 ===")
-    print(f"  成功 (yellow > 0.01%): {success}/{len(summary)}")
+    print(f"  成功 (yellow > 0.001%): {success}/{len(summary)}")
     print(f"  失败: {fail}")
     print(f"  Output: {args.out_dir}")
 
