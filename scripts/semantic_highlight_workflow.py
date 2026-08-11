@@ -32,10 +32,48 @@ THREAD_WORKERS = 4  # sensenova 并发数
 
 
 # === sensenova 统一调用 ===
+import hashlib
+
+_sensenova_cache = {}
+_cache_path = "/tmp/_sensenova_cache.json"
+
+
+def _cache_key(image_paths, prompt):
+    """生成 cache key: 图像 paths + prompt hash"""
+    img_part = "|".join(sorted(image_paths))
+    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()[:16]
+    img_hash = hashlib.md5(img_part.encode()).hexdigest()[:16]
+    return f"{prompt_hash}_{img_hash}"
+
+
+def _load_cache():
+    global _sensenova_cache
+    if not _sensenova_cache and os.path.isfile(_cache_path):
+        try:
+            with open(_cache_path) as f:
+                _sensenova_cache = json.load(f)
+        except Exception:
+            _sensenova_cache = {}
+    return _sensenova_cache
+
+
+def _save_cache():
+    try:
+        with open(_cache_path, "w") as f:
+            json.dump(_sensenova_cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 def sensenova_call(image_paths, prompt, json_mode=True, timeout=30):
-    """支持单图或多图"""
+    """支持单图或多图. 加 cache 保证 consistency."""
     if isinstance(image_paths, str):
         image_paths = [image_paths]
+    cache = _load_cache()
+    key = _cache_key(image_paths, prompt)
+    if key in cache:
+        return cache[key]
+
     api_key = get_api_key()
     if not api_key:
         return ""
@@ -50,7 +88,7 @@ def sensenova_call(image_paths, prompt, json_mode=True, timeout=30):
     data = {
         "model": "sensenova-6.7-flash-lite",
         "messages": messages,
-        "temperature": 0.1,
+        "temperature": 0.05,  # 更低温度, 更稳定
     }
     if json_mode:
         data["response_format"] = {"type": "json_object"}
@@ -66,7 +104,10 @@ def sensenova_call(image_paths, prompt, json_mode=True, timeout=30):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             result = json.loads(r.read().decode())
-        return result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content_str = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        cache[key] = content_str
+        _save_cache()
+        return content_str
     except Exception as e:
         return ""
 
@@ -153,8 +194,9 @@ def stage2_semantic_search(plan: Dict, ppt_render_path: str,
         else:
             actual_zoom = RENDER_ZOOM
 
-        prompt = f"""你是医学/生物学文献语义匹配专家。
+        prompt = f"""你是医学/生物学文献**视觉语义匹配**专家。
 
+【任务】
 PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
 关键数据: {data_points}
 关键词: {keywords}
@@ -163,26 +205,32 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
 - 图 1: PPT slide 渲染图 (标号 {plan.get('mark', '?')} 在哪)
 - 图 2: PDF 第 {p+1} 页渲染图 (宽高 {img.size[0]}x{img.size[1]})
 
-请判断图 2 (PDF 第 {p+1} 页) 是否包含与 PPT 标号 {plan.get('mark', '?')} 语义对应的内容。
-"语义对应" 意味着: PDF 段落/图/表 的主题/数据/结论 与 PPT 引用的内容匹配 (即使文字不直接重叠)。
+请**只**在图 2 (PDF 第 {p+1} 页) 中找与 PPT 标号 {plan.get('mark', '?')} 语义对应的内容 (段落/图/表)。
 
-⚠️ 是找 PDF 第 {p+1} 页 (图 2) 里的内容, 不是 PPT (图 1) 里的.
+⚠️ 是找 PDF (图 2) 里的内容, 不是 PPT (图 1) 里的.
 
-如果图 2 包含, 给出:
+**严格禁止高亮以下区域** (你必须用 content_type 标识, 不返回 bbox):
+- "title" / "article_title" / "section_title" - 文章标题 / 章节标题
+- "author" / "authors" / "affiliation" - 作者名 / 单位 / 通信作者
+- "reference" / "references" / "bibliography" / "cited" - PDF 末尾的文献引用列表
+- "header" / "footer" / "running_head" / "journal_info" - 页眉页脚 (期刊名/卷号/页码)
+- "acknowledgment" / "acknowledgements" - 致谢
+
+如果图 2 包含与 PPT 标号语义对应的 body 段落, 给出:
 1. found: true
 2. matches: 列表, 每个元素:
    {{
-     "bbox": [x1, y1, x2, y2],          // 像素坐标 (在图 2 上)
-     "content_type": "paragraph" / "figure" / "table" / "icon" / "image" / "title" / "author" / "reference" / "header" / "footer",
-     "semantic_description": "图 2 该区域讲什么",
-     "relevance": "图 2 该区域与 PPT 标号的关系"
+     "bbox": [x1, y1, x2, y2],          // 像素坐标 (在图 2 上), 覆盖完整匹配区域
+     "content_type": "paragraph" (段落/正文) | "figure" (图) | "table" (表) | "image" (图) | "icon" (图标),
+     "semantic_description": "该区域讲什么 (1 句)",
+     "relevance": "该区域与 PPT 标号的关系 (1 句)"
    }}
 3. overall_confidence: 0.0-1.0
 
-如果图 2 不包含, 给出:
+如果图 2 没有 body 段落与 PPT 标号语义对应 (或所有匹配都在禁止区域), 给出:
 {{
   "found": false,
-  "reason": "图 2 未找到与 PPT 标号语义对应的内容"
+  "reason": "图 2 (PDF 第 {p+1} 页) 没有 body 段落与 PPT 标号语义对应"
 }}
 
 请严格用 JSON 输出:
@@ -239,99 +287,36 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
     return matches
 
 
-# === Stage 3: Highlight using bbox (新版本) ===
-# 禁止高亮的 content_type (per user feedback 2026-08-11)
+# === Stage 3: Highlight using bbox (严格位置 + 按 content_type 分样式) ===
+# 禁止高亮的 content_type (per user 严肃要求 2026-08-11)
+# 完全靠 sensenova 自己标, 不做任何几何 heuristic
 FORBIDDEN_CONTENT_TYPES = {
-    "title",          # 文章标题
-    "author",         # 作者信息
-    "authors",
-    "affiliation",
-    "reference",      # PDF 末尾的文献引用部分 (References/Bibliography)
-    "references",
-    "bibliography",
-    "cited",
-    "literature",     # Literature cited
-    "acknowledgment",  # 致谢
-    "header",         # 页眉 (期刊名, 卷号等)
-    "footer",         # 页脚
-    "running_head",
-    "journal_info",   # 期刊信息
+    "title", "article_title", "section_title",  # 标题
+    "author", "authors", "affiliation", "correspondence",  # 作者
+    "reference", "references", "bibliography", "cited", "literature_cited",  # 引用
+    "header", "footer", "running_head", "journal_info",  # 页眉页脚
+    "acknowledgment", "acknowledgements",  # 致谢
 }
 
-
-def _is_reference_or_bibliography_page(page, page_idx: int) -> bool:
-    """检测是否是 PDF 的 reference/bibliography 页 (整页都是引用)"""
-    try:
-        text = page.get_text().lower()
-    except Exception:
-        return False
-    # 关键 reference 信号
-    signals = [
-        "references", "bibliography", "literature cited",
-        "cited literature", "参考文献", "引用文献",
-    ]
-    for sig in signals:
-        if sig in text:
-            # 出现信号词 + 后跟大量 [数字] 引用格式, 判定为 reference 页
-            if re.search(r'\[\d+\]', text) or re.search(r'\d+\.\s+[A-Z][a-z]+', text):
-                return True
-    return False
-
-
-def _is_in_skip_zone(bbox_pdf: List[float], page, content_type: str,
-                     page_idx: int, total_pages: int) -> bool:
-    """判断 bbox 是否在禁止高亮区域 (title/author/reference/header/footer)"""
-    x1, y1, x2, y2 = bbox_pdf
-    page_h = page.rect.height
-    page_w = page.rect.width
-
-    # 1. sensenova 标了禁止 content_type
-    if content_type.lower() in FORBIDDEN_CONTENT_TYPES:
-        return True
-
-    # 2. 几何启发: page 0 top 22% 可能是 title+author 区域
-    if page_idx == 0 and y1 < page_h * 0.22:
-        return True
-
-    # 3. 几何启发: 任何页 bottom 8% 可能是 footer
-    if y1 > page_h * 0.92:
-        return True
-
-    # 4. 整页都是 reference (page_idx 在末尾 1/3, 文字特征匹配)
-    if page_idx >= total_pages - max(2, total_pages // 3):
-        if _is_reference_or_bibliography_page(page, page_idx):
-            return True
-
-    # 5. bbox 在最底部 30% + 是引用列表特征 (有 [n] 或 n. Author 格式)
-    if y1 > page_h * 0.70:
-        try:
-            text_in_bbox = page.get_text("text", clip=fitz.Rect(x1, y1, x2, y2)).strip()
-            # 短文本 (1-2 行) + 引用格式
-            if len(text_in_bbox) < 200 and (
-                re.search(r'\[\d+\]', text_in_bbox) or
-                re.search(r'^\s*\d+\.\s+[A-Z]', text_in_bbox) or
-                re.search(r'et al\.', text_in_bbox) or
-                re.search(r'\d{4}\)\.|\d{4}\.', text_in_bbox)
-            ):
-                # 但要排除 normal body 段 (有完整句子)
-                if not re.search(r'[a-z]{3,}\s+[a-z]{3,}', text_in_bbox):  # 不是 normal sentence
-                    return True
-        except Exception:
-            pass
-
-    return False
+# 段落类 (用下划线)
+PARAGRAPH_TYPES = {"paragraph", "body", "text", "section", "subsection"}
+# 图表类 (用边框)
+FIGURE_TYPES = {"figure", "image", "diagram", "chart", "table", "icon", "graph", "illustration"}
 
 
 def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
                           mode: str = "line") -> Dict:
     """
-    直接用 sensenova 返回的 bbox 画黄线, 不依赖 text search.
-    **禁止高亮**: title / author / affiliation / reference / bibliography / header / footer.
+    严格按 sensenova content_type 处理:
+    - 段落下划线: page.add_highlight_annot(rect) (PDF 原生下划线, 位置精确)
+    - 图表黄线框: page.draw_rect(rect, stroke=yellow, width=2) (无 fill)
+    - 禁高亮区: sensenova 标的 title/author/reference/header/footer 直接跳过
+
+    位置 0 偏移: add_highlight_annot 自动用 PDF 文字 baseline 定位.
     """
     if not matches:
         return {"ok": False, "reason": "no_matches"}
 
-    # 过滤 confidence 太低的
     matches = [m for m in matches if m.get("confidence", 0) >= 0.4]
     if not matches:
         return {"ok": False, "reason": "all_low_confidence"}
@@ -344,8 +329,10 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
 
     total_pages = doc.page_count
     highlight_count = 0
-    filtered_count = 0  # 被禁止区域过滤的
+    filtered_count = 0
     filter_reasons = []
+    processed_bboxes = []  # 记录已处理的 bbox, 避免同 bbox 重复高亮
+    demoted_count = 0
 
     for m in matches:
         page_idx = m.get("page", 0)
@@ -359,55 +346,85 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
             continue
         page = doc[page_idx]
         page_rect = page.rect
-        # 裁剪到页面范围
+        # 裁剪到页面范围 (不引入 -1 边界)
         x1 = max(0, min(x1, page_rect.x1))
         x2 = max(0, min(x2, page_rect.x1))
         y1 = max(0, min(y1, page_rect.y1))
         y2 = max(0, min(y2, page_rect.y1))
-
-        # 过滤禁止区域 (title/author/reference/header/footer)
-        content_type = m.get("content_type", "paragraph")
-        if _is_in_skip_zone(bbox, page, content_type, page_idx, total_pages):
-            filtered_count += 1
-            filter_reasons.append(f"page {page_idx} type={content_type} bbox=({x1:.0f},{y1:.0f})-({x2:.0f},{y2:.0f})")
+        if x1 >= x2 or y1 >= y2:
             continue
 
-        # 画黄线
+        # 去重: 同 bbox (精度 1pt) 已处理过就跳过
+        bbox_key = (page_idx, round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1))
+        if bbox_key in processed_bboxes:
+            continue
+        processed_bboxes.append(bbox_key)
+
+        # sensenova 标了禁高亮区 → 跳过
+        content_type = m.get("content_type", "paragraph").lower()
+        if content_type in FORBIDDEN_CONTENT_TYPES:
+            filtered_count += 1
+            filter_reasons.append(f"page {page_idx} type={content_type}")
+            continue
+
+        rect = fitz.Rect(x1, y1, x2, y2)
         try:
-            if mode == "line" or mode == "both":
-                line_y = y2 + 0.5
-                page.draw_line(
-                    fitz.Point(x1, line_y),
-                    fitz.Point(x2, line_y),
-                    color=(1, 1, 0),
-                    width=1.2,
-                    overlay=True,
-                )
-                highlight_count += 1
-            if mode == "fill" or mode == "both":
+            # sanity check: 如果 sensenova 标 figure 但 bbox 内有大量文字, demote 到 text
+            if content_type in FIGURE_TYPES:
+                text_in_bbox = page.get_text("text", clip=rect).strip()
+                if len(text_in_bbox) > 80:  # >80 chars 几乎肯定是正文而非图
+                    # demote 到 text 类别
+                    content_type = "paragraph"
+                    demoted_count += 1
+                    # log demotion
+                    filter_reasons.append(
+                        f"page {page_idx} demoted figure→paragraph ({len(text_in_bbox)} chars text in bbox)"
+                    )
+
+            if content_type in FIGURE_TYPES:
+                # 图表: 黄色边框, 无 fill, 2pt 粗
                 page.draw_rect(
-                    fitz.Rect(x1, y1, x2, y2),
-                    fill=(1, 1, 0),
-                    color=(1, 1, 0),
-                    width=0,
+                    rect,
+                    color=(1, 1, 0),  # 黄色
+                    fill=None,
+                    width=2,
                     overlay=True,
-                    fill_opacity=0.3,
                 )
                 highlight_count += 1
+            else:
+                # 段落: PDF 原生下划线 highlight 注释 (位置精确, 跟文字 baseline)
+                # add_highlight_annot 会在 rect 内所有文字下方画线
+                annot = page.add_highlight_annot(rect)
+                if annot:
+                    annot.set_colors(stroke=(1, 1, 0))  # 黄色
+                    annot.update()
+                    highlight_count += 1
+                else:
+                    # fallback: draw_line under text
+                    line_y = y2 + 0.5
+                    page.draw_line(
+                        fitz.Point(x1, line_y),
+                        fitz.Point(x2, line_y),
+                        color=(1, 1, 0),
+                        width=1.2,
+                        overlay=True,
+                    )
+                    highlight_count += 1
         except Exception as e:
             print(f"  ⚠ draw err on page {page_idx}: {e}")
             continue
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     try:
-        doc.save(out_path)
+        # 用 garbage=4 清理, deflate=True 压缩
+        doc.save(out_path, garbage=4, deflate=True)
     except Exception as e:
         return {"ok": False, "reason": f"save_err: {e}"}
     finally:
         doc.close()
 
     if highlight_count == 0 and filtered_count > 0:
-        reason = f"all_{filtered_count}_matches_in_forbidden_zones (title/author/reference)"
+        reason = f"all_{filtered_count}_matches_in_forbidden_zones"
     else:
         reason = ""
 
@@ -415,7 +432,8 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
         "ok": highlight_count > 0,
         "highlight_count": highlight_count,
         "filtered_count": filtered_count,
-        "method": "semantic_bbox_v11",
+        "demoted_count": demoted_count,
+        "method": "semantic_bbox_v13_strict",
         "matches_used": len(matches),
         "filter_reasons": filter_reasons[:5],
         "reason": reason,
