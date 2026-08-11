@@ -35,6 +35,8 @@ _AUTHOR_TEXT_PATTERNS = [
     r'^[A-Z][a-z]+\s+[A-Z]\.[\s\.]*$',  # 短 author 名 "Erin E."
     r'^[A-Z][a-z]+,\s+[A-Z]\.',  # "Smith, J."
     r'^[A-Z]\.\s*[A-Z]\.\s+[A-Z][a-z]+',  # "J. K. Smith"
+    r'^[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+',  # Author 全名 "Erin E. West"
+    r'^[A-Z][a-z]+\s+[A-Z]\s+[A-Z][a-z]+',  # "Erin E West"
     # 中文
     r'通信作者', r'通讯作者', r'第一作者',
     r'基金项目', r'基金资助', r'作者简介',
@@ -42,6 +44,34 @@ _AUTHOR_TEXT_PATTERNS = [
     r'大学', r'医学院', r'医院', r'研究所',
     r'医学会', r'学组', r'工作组', r'协作组',
     r'E-?mail[\s:：]',
+]
+
+# 文字特征 - CITATION 段 (page 0 侧栏, 重复 article title)
+_CITATION_TEXT_PATTERNS = [
+    r'^Citation\b',  # "Citation" 标题
+    r'^[A-Z][a-z]+ [A-Z],\s+[A-Z][a-z]+ [A-Z]\.?,?\s+[A-Z][a-z]+',  # "Jiang A, Liu Y, ..."
+    r'Received:\s+\d',  # "Received: 17 February 2012" (Wiley manuscript header)
+    r'^Received\s+\d',  # "Received May 2020"
+    r'Revised:\s+\d',  # "Revised: 24 March 2012"
+    r'Accepted:\s+\d',  # "Accepted: 1 April 2012"
+    r'^Accepted\s+\d',  # "Accepted May 2020"
+    r'Published\s+online:\s+\d',  # "Published online: 23 May 2012"
+    r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\.?\s+\d{4}\s*[;,:]',  # "Nature 2020; ..."
+    r'Volume\s+\d+', r'Issue\s+\d+', r'pp\.\s*\d+',  # 期刊卷号
+    r'^Article\s+[Ss]ubmission', r'^First\s+published',
+    r'For\s+all\s+correspondence',  # CITATION 段介绍
+]
+
+# 文字特征 - Keywords 段 (PDF metadata)
+_KEYWORDS_TEXT_PATTERNS = [
+    r'^【?关键词】?',
+    r'^关键词[:：]?',
+    r'^\[关键词\]',
+    r'^Key\s*words?[\s:：]',
+    r'^Keywords?[\s:：]',
+    r'^\[Key\s*words?\]',
+    r'^List of abbreviations',  # Azoulay 2017 等
+    r'^Abbreviations[\s:：]',
 ]
 
 # 文字特征 - reference list (英文 + 中文)
@@ -62,11 +92,15 @@ _REFERENCE_TEXT_PATTERNS = [
 
 # 文字特征 - declaration (作者信息冲突)
 _DECLARATION_TEXT_PATTERNS = [
-    r'Competing interests?', r'Conflict[s]? of interest',
+    r'Competing\b',  # 截断兼容 "Competing i", "Competing interest"
+    r'Conflict[s]? of interest',
     r'^Funding\b', r'^Author contributions?',
     r'^Data availability', r'^Ethics',
     r'^Patient consent', r'^Supplementary',
     r'^Acknowledg', r'Consent for publication',
+    r'Competing\s+financial',  # 截断兼容
+    r'unedited manuscript',  # Elsevier Accepted Manuscript 版权段
+    r'copyediting,?\s+typesetting',  # Elsevier 版权说明
     # 中文
     r'利益冲突', r'作者贡献', r'数据可用性',
     r'知情同意', r'补充材料',
@@ -104,10 +138,10 @@ def _matches_any_patterns(text: str, patterns: list) -> Optional[str]:
 
 
 def is_forbidden_zone(page, rect: fitz.Rect, page_idx: int,
-                       allow_first_page_top: float = 0.25) -> Tuple[bool, str]:
+                       allow_first_page_top: float = 0.30) -> Tuple[bool, str]:
     """检测 annot rect 是否在禁高亮区
     返回 (is_forbidden, reason)
-    中文 PDF 的 author/affiliation 区域比英文大, 用 0.25 默认
+    中文 PDF 的 author/affiliation 区域比英文大, 默认 0.30 (放宽, 处理 article title 跨多行)
     """
     page_h = page.rect.height
     page_w = page.rect.width
@@ -137,6 +171,29 @@ def is_forbidden_zone(page, rect: fitz.Rect, page_idx: int,
         if pat:
             return True, f'author_text:{pat}'
 
+    # 6.5 文字 - CITATION 段 (侧栏重复 article title + 期刊信息)
+    if text:
+        pat = _matches_any_patterns(text, _CITATION_TEXT_PATTERNS)
+        if pat:
+            return True, f'citation_text:{pat}'
+
+    # 6.6 文字 - Keywords 段
+    if text:
+        pat = _matches_any_patterns(text, _KEYWORDS_TEXT_PATTERNS)
+        if pat:
+            return True, f'keywords_text:{pat}'
+
+    # 6.7 文字 - Abbreviations 列表 (X: definition 多行)
+    # 检测: rect 上下 200px 范围内, 连续多行匹配 [A-Z][A-Za-z0-9]*: [a-zA-Z]
+    if text:
+        expanded_text = page.get_textbox(fitz.Rect(
+            max(0, rect.x0 - 5), max(0, rect.y0 - 200),
+            min(page_w, rect.x1 + 5), min(page_h, rect.y1 + 200)
+        )).strip()
+        abbr_lines = re.findall(r'^[A-Z][A-Za-z0-9]{0,10}:\s+\w', expanded_text, re.MULTILINE)
+        if len(abbr_lines) >= 3:
+            return True, 'abbreviation_list'
+
     # 7. 文字 - reference
     if text:
         pat = _matches_any_patterns(text, _REFERENCE_TEXT_PATTERNS)
@@ -148,6 +205,15 @@ def is_forbidden_zone(page, rect: fitz.Rect, page_idx: int,
         pat = _matches_any_patterns(text, _DECLARATION_TEXT_PATTERNS)
         if pat:
             return True, f'declaration_text:{pat}'
+        # 8.1 扩大范围: rect 上方 400px 或直到 page top, 找 declaration 标题
+        if rect.y0 > 80:  # 不是 page top, 可能有上方 header
+            expanded = page.get_textbox(fitz.Rect(
+                max(0, rect.x0 - 5), 0,
+                min(page_w, rect.x1 + 5), min(page_h, rect.y0 + 5)
+            )).strip()
+            decl_pat = _matches_any_patterns(expanded, _DECLARATION_TEXT_PATTERNS)
+            if decl_pat:
+                return True, f'declaration_section:{decl_pat}'
 
     # 9. 文字 - figure/table caption
     if text:
@@ -316,7 +382,7 @@ def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
         page = doc[page_idx]
 
         if mode == "phrase":
-            rect = find_phrase_rect(page, phrase)
+            rect = find_phrase_rect(page, phrase, page_idx)
         elif mode == "sentence":
             rect = find_sentence_rect(page, phrase, end_phrase)
         elif mode == "line":

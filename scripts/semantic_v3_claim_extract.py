@@ -281,7 +281,8 @@ def main():
     out_dir = args.out_dir or os.path.join(project_root, '_3_highlight_semantic_v3')
     os.makedirs(out_dir, exist_ok=True)
 
-    plans = json.load(open(plans_path))['plans']
+    data = json.load(open(plans_path))
+    plans = data['plans'] if isinstance(data, dict) else data
 
     # 找 missing (包括 v2 的产出)
     existing_dirs = [

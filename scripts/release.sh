@@ -12,12 +12,14 @@
 # Output: dist/<version>/<platform>/medit.{zip,tar.gz}
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo "dev")}
 PLATFORMS=("windows-amd64" "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64")
 
-mkdir -p dist/${VERSION}
+DIST_DIR="$ROOT/dist/${VERSION}"
+mkdir -p "$DIST_DIR"
 echo "==> Building via54Medit ${VERSION}"
 echo ""
 
@@ -31,32 +33,31 @@ for p in "${PLATFORMS[@]}"; do
             ext=".exe"
         fi
 
-        outdir="dist/${VERSION}/${p}"
-        mkdir -p "${outdir}"
+        OUTDIR="$DIST_DIR/${p}"
+        mkdir -p "$OUTDIR"
 
         echo "  [${p}] building..."
         CGO_ENABLED=0 GOOS=${os} GOARCH=${arch} \
             go build -ldflags "-s -w \
                 -X 'github.com/veawho/via54Medit/internal/version.Version=${VERSION}' \
                 -X 'github.com/veawho/via54Medit/internal/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)'" \
-            -o "${outdir}/medit${ext}" ./cmd/medit
+            -o "${OUTDIR}/medit${ext}" ./cmd/medit
 
         CGO_ENABLED=0 GOOS=${os} GOARCH=${arch} \
             go build -ldflags "-s -w" \
-            -o "${outdir}/medit-mcp${ext}" ./cmd/medit-mcp
+            -o "${OUTDIR}/medit-mcp${ext}" ./cmd/medit-mcp
 
         # Copy shared assets.
-        cp -r configs "${outdir}/" 2>/dev/null || true
-        cp LICENSE-AGPL-3.0 "${outdir}/" 2>/dev/null || true
-        cp LICENSE-MIT "${outdir}/" 2>/dev/null || true
-        cp README.md "${outdir}/" 2>/dev/null || true
-        cp README.zh-CN.md "${outdir}/" 2>/dev/null || true
+        cp -r "$ROOT/configs" "$OUTDIR/" 2>/dev/null || true
+        cp "$ROOT/LICENSE-AGPL-3.0" "$OUTDIR/" 2>/dev/null || true
+        cp "$ROOT/LICENSE-MIT" "$OUTDIR/" 2>/dev/null || true
+        cp "$ROOT/README.md" "$OUTDIR/" 2>/dev/null || true
+        cp "$ROOT/README.zh-CN.md" "$OUTDIR/" 2>/dev/null || true
 
-        # Pack.
-        cd "${outdir}/.."
+        # Pack from the dist directory.
+        cd "$DIST_DIR"
         archive="medit-${VERSION}-${p}"
         if [ "$os" = "windows" ]; then
-            # zip needs PowerShell on Windows or zip on Unix.
             if command -v zip > /dev/null 2>&1; then
                 zip -qr "${archive}.zip" "${p}"
             else
@@ -68,10 +69,10 @@ for p in "${PLATFORMS[@]}"; do
 
         # Compute sha256.
         if [ -f "${archive}.zip" ]; then
-            sha256sum "${archive}.zip" > "${archive}.zip.sha256"
+            shasum -a 256 "${archive}.zip" > "${archive}.zip.sha256"
         fi
         if [ -f "${archive}.tar.gz" ]; then
-            sha256sum "${archive}.tar.gz" > "${archive}.tar.gz.sha256"
+            shasum -a 256 "${archive}.tar.gz" > "${archive}.tar.gz.sha256"
         fi
 
         echo "    ✓ ${archive}.{zip,tar.gz}"
@@ -81,9 +82,9 @@ wait
 
 echo ""
 echo "==> Release artifacts:"
-ls -la dist/${VERSION}/
+ls -la "$DIST_DIR/"
 echo ""
 echo "==> Total:"
-du -sh dist/${VERSION}/
+du -sh "$DIST_DIR/"
 echo ""
 echo "Next: upload to GitHub Releases or push to scoop bucket."

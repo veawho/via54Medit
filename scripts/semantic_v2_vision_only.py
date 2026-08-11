@@ -306,7 +306,8 @@ def main():
     out_dir = args.out_dir or os.path.join(project_root, '_3_highlight_semantic_v2')
     os.makedirs(out_dir, exist_ok=True)
 
-    plans = json.load(open(plans_path))['plans']
+    data = json.load(open(plans_path))
+    plans = data['plans'] if isinstance(data, dict) else data
 
     # 找 missing
     v141_dir = os.path.join(project_root, '_3_highlight_semantic_v141')
