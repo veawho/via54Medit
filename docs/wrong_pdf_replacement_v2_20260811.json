@@ -1,0 +1,224 @@
+[
+  {
+    "pn_x": "P4-5",
+    "ppt": "近端补体活化产物主要参与免疫复合物的清除和微生物的调理吞噬作用4-6",
+    "candidates": [
+      {
+        "pmid": "22999705",
+        "title": "Complement, interferon and lupus.",
+        "journal": "Curr Opin Immunol",
+        "year": "2012",
+        "doi": "10.1016/j.coi.2012.08.004"
+      },
+      {
+        "pmid": "16417452",
+        "title": "Immunology of apoptosis and necrosis.",
+        "journal": "Biochemistry (Mosc)",
+        "year": "2005",
+        "doi": "10.1007/s10541-005-0263-4"
+      },
+      {
+        "pmid": "31989596",
+        "title": "Utilization of complement receptors in immune cell-microbe interaction.",
+        "journal": "FEBS Lett",
+        "year": "2020",
+        "doi": "10.1002/1873-3468.13743"
+      },
+      {
+        "pmid": "329684",
+        "title": "Phagocytosis. Clinical disorders of recognition and ingestion.",
+        "journal": "Am J Pathol",
+        "year": "1977",
+        "doi": ""
+      },
+      {
+        "pmid": "14585169",
+        "title": "Innate immunity and brain inflammation: the key role of complement.",
+        "journal": "Expert Rev Mol Med",
+        "year": "2003",
+        "doi": "10.1017/S1462399403006252"
+      }
+    ]
+  },
+  {
+    "pn_x": "P12-2",
+    "ppt": "血小板减少是由于破坏增强所致",
+    "candidates": [
+      {
+        "pmid": "8488374",
+        "title": "[Emergency blood picture].",
+        "journal": "Schweiz Med Wochenschr",
+        "year": "1993",
+        "doi": ""
+      }
+    ]
+  },
+  {
+    "pn_x": "P15-1",
+    "ppt": "引起TMA的病因众多,包括原发性病变或因感染、自身免疫疾病等因素引起的继发性病变;部分患者为特发性",
+    "candidates": [
+      {
+        "pmid": "37949684",
+        "title": "HUS and TTP: traversing the disease and the age spectrum.",
+        "journal": "Semin Nephrol",
+        "year": "2023",
+        "doi": "10.1016/j.semnephrol.2023.151436"
+      },
+      {
+        "pmid": "33102952",
+        "title": "Complement in Secondary Thrombotic Microangiopathy.",
+        "journal": "Kidney Int Rep",
+        "year": "2021",
+        "doi": "10.1016/j.ekir.2020.10.009"
+      },
+      {
+        "pmid": "33996107",
+        "title": "Making the Correct Diagnosis in Thrombotic Microangiopathy: A Narrative Review.",
+        "journal": "Can J Kidney Health Dis",
+        "year": "2021",
+        "doi": "10.1177/20543581211008707"
+      },
+      {
+        "pmid": "7858524",
+        "title": "Thrombotic microangiopathy following bone marrow transplantation.",
+        "journal": "Bone Marrow Transplant",
+        "year": "1994",
+        "doi": ""
+      },
+      {
+        "pmid": "23513771",
+        "title": "[Thrombotic microangiopathies].",
+        "journal": "Rev Prat",
+        "year": "2013",
+        "doi": ""
+      }
+    ]
+  },
+  {
+    "pn_x": "P17-1",
+    "ppt": "血栓性血小板减少性紫癜(TTP),是由于血管性血友病因子(vWF)裂解酶(ADAMTS13)活性缺乏",
+    "candidates": [
+      {
+        "pmid": "40388146",
+        "title": "Immune Thrombotic Thrombocytopenic Purpura: A Review.",
+        "journal": "JAMA",
+        "year": "2025",
+        "doi": "10.1001/jama.2025.3807"
+      },
+      {
+        "pmid": "33540569",
+        "title": "Thrombotic Thrombocytopenic Purpura: Pathophysiology, Diagnosis, and Management.",
+        "journal": "J Clin Med",
+        "year": "2021",
+        "doi": "10.3390/jcm10030536"
+      },
+      {
+        "pmid": "39125707",
+        "title": "ADAMTS13 in the New Era of TTP.",
+        "journal": "Int J Mol Sci",
+        "year": "2024",
+        "doi": "10.3390/ijms25158137"
+      },
+      {
+        "pmid": "40608084",
+        "title": "Thrombotic thrombocytopenic purpura: early diagnosis and effective treatment in 2025.",
+        "journal": "Intensive Care Med",
+        "year": "2025",
+        "doi": "10.1007/s00134-025-07981-3"
+      },
+      {
+        "pmid": "37949684",
+        "title": "HUS and TTP: traversing the disease and the age spectrum.",
+        "journal": "Semin Nephrol",
+        "year": "2023",
+        "doi": "10.1016/j.semnephrol.2023.151436"
+      }
+    ]
+  },
+  {
+    "pn_x": "P20-1",
+    "ppt": "STEC-HUS临床表现:高血压、心脏、神经、胃肠道和内分泌并发症",
+    "candidates": [
+      {
+        "pmid": "40722309",
+        "title": "Neurological Manifestations of Hemolytic Uremic Syndrome: A Comprehensive Review.",
+        "journal": "Brain Sci",
+        "year": "2025",
+        "doi": "10.3390/brainsci15070717"
+      }
+    ]
+  },
+  {
+    "pn_x": "P23-22",
+    "ppt": "TMA的诊断挑战和临床异质性",
+    "candidates": [
+      {
+        "pmid": "39918340",
+        "title": "Recommendations for diagnosis and treatment of Atypical Hemolytic Uremic Syndrome (aHUS): an expert consensus statement ",
+        "journal": "J Bras Nefrol",
+        "year": "2025",
+        "doi": "10.1590/2175-8239-JBN-2024-0087en"
+      },
+      {
+        "pmid": "26266325",
+        "title": "Construction of tissue microarrays from core needle biopsies - a systematic literature review.",
+        "journal": "Histopathology",
+        "year": "2016",
+        "doi": "10.1111/his.12802"
+      },
+      {
+        "pmid": "42105902",
+        "title": "The gut-brain axis and trimethylamine N-oxide: an emergent biomarker in neurological diseases.",
+        "journal": "Neuroscience",
+        "year": "2026",
+        "doi": "10.1016/j.neuroscience.2026.05.005"
+      }
+    ]
+  },
+  {
+    "pn_x": "P25-7",
+    "ppt": "aHUS 补体抑制剂 治疗",
+    "candidates": [
+      {
+        "pmid": "39254734",
+        "title": "Complement system activation: bridging physiology, pathophysiology, and therapy.",
+        "journal": "Intensive Care Med",
+        "year": "2024",
+        "doi": "10.1007/s00134-024-07611-4"
+      },
+      {
+        "pmid": "40354320",
+        "title": "Advancements in complement inhibition for PNH and primary complement-mediated thrombotic microangiopathy.",
+        "journal": "Blood Adv",
+        "year": "2025",
+        "doi": "10.1182/bloodadvances.2024015777"
+      },
+      {
+        "pmid": "30767127",
+        "title": "Ravulizumab: First Global Approval.",
+        "journal": "Drugs",
+        "year": "2019",
+        "doi": "10.1007/s40265-019-01068-2"
+      },
+      {
+        "pmid": "41347985",
+        "title": "Long-term outcome and management of complement-mediated thrombotic microangiopathy/aHUS.",
+        "journal": "Hematology Am Soc Hematol Educ Program",
+        "year": "2025",
+        "doi": "10.1182/hematology.2025000700C"
+      },
+      {
+        "pmid": "37733095",
+        "title": "Complement inhibitors in pediatric kidney diseases: new therapeutic opportunities.",
+        "journal": "Pediatr Nephrol",
+        "year": "2024",
+        "doi": "10.1007/s00467-023-06120-8"
+      }
+    ]
+  },
+  {
+    "pn_x": "P28-3",
+    "ppt": "未及时接受治疗的TTP患者死亡",
+    "candidates": []
+  }
+]
