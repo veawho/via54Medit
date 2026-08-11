@@ -22,6 +22,34 @@ TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
 LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
 
 
+def _find_pdf(project_root: str, pn_x: str, pdf_dir: str = "_2_pdfs") -> Optional[str]:
+    """兼容 flat + nested, 自动检测项目 PDF 目录"""
+    # 优先 _2_pdfs (TMA flat)
+    candidates = [pdf_dir, "step3_pdf下载_160目录", "step3_pdf", "_pdfs_real"]
+    seen = set()
+    for d in candidates:
+        if d in seen:
+            continue
+        seen.add(d)
+        full = os.path.join(project_root, d)
+        if not os.path.isdir(full):
+            continue
+        # flat: Pn-x_main.pdf
+        for f in os.listdir(full):
+            if f.startswith(pn_x + "_") and f.lower().endswith(".pdf"):
+                return os.path.join(full, f)
+            if f == f"{pn_x}.pdf":
+                return os.path.join(full, f)
+        # nested: Pn-x/main.pdf 或 Pn-x/Pn-x_main_*.pdf
+        nested_dir = os.path.join(full, pn_x)
+        if os.path.isdir(nested_dir):
+            # main.pdf
+            for f in os.listdir(nested_dir):
+                if f.lower() == "main.pdf" or (f.startswith(pn_x + "_main") and f.lower().endswith(".pdf")):
+                    return os.path.join(nested_dir, f)
+    return None
+
+
 def _read_pdf_abstract(pdf_path: str, max_pages: int = 2, max_chars: int = 3000) -> str:
     """读 PDF 前 N 页作为摘要, 截断到 max_chars"""
     doc = fitz.open(pdf_path)
@@ -64,11 +92,29 @@ def boost_plans_with_pdf_keywords(plan_path: str, out_path: Optional[str] = None
     n_no_pdf = 0
     n_no_kw = 0
 
+    # 检测 project_root 从 plan_path 推断
+    plan_path_norm = os.path.abspath(plan_path)
+    # 路径格式: <root>/_3_highlight_vision/_highlight_plans.json
+    if "_3_highlight_vision" in plan_path_norm:
+        project_root = plan_path_norm.split("_3_highlight_vision")[0].rstrip("/")
+    else:
+        project_root = os.path.dirname(os.path.dirname(plan_path_norm))
+
+    pdf_dir = "_2_pdfs"  # default
+
     for plan in plans:
+        # 优先用 plan.pdf_path, 否则自己找
         pdf_path = plan.get("pdf_path")
+        if not pdf_path or not os.path.isfile(pdf_path):
+            pn_x = plan.get("pn_x", "")
+            pdf_path = _find_pdf(project_root, pn_x, pdf_dir)
+            if pdf_path:
+                plan["pdf_path"] = pdf_path
+
         if not pdf_path or not os.path.isfile(pdf_path):
             n_no_pdf += 1
             continue
+
         # 抽 PDF keyword
         pdf_keywords = _extract_keywords_from_pdf(pdf_path)
         if not pdf_keywords:
