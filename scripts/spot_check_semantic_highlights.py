@@ -32,15 +32,15 @@ def list_highlights_in_pdf(pdf_path: str) -> dict:
         page = doc[pno]
         page_h = page.rect.height
 
-        # Highlight annotations (PDF native)
+        # Highlight annotations (PDF native) + Underline annotations (v1.4)
         highlights = []
         for annot in page.annots() or []:
-            if annot.type[0] == fitz.PDF_ANNOT_HIGHLIGHT:  # 8
+            if annot.type[0] in (fitz.PDF_ANNOT_HIGHLIGHT, fitz.PDF_ANNOT_UNDERLINE):  # 8 / 9
                 rect = annot.rect
                 # 取 rect 内文字
                 text = page.get_text("text", clip=rect).strip()
                 highlights.append({
-                    "type": "highlight_annot",
+                    "type": annot.type[1],  # "Highlight" 或 "Underline"
                     "bbox": [rect.x0, rect.y0, rect.x1, rect.y1],
                     "y_position": f"top {rect.y0/page_h*100:.1f}% - bottom {rect.y1/page_h*100:.1f}%",
                     "text": text[:200],
@@ -111,16 +111,16 @@ def check_alignment(plan: dict, highlight_pdf: str, original_pdf: str) -> dict:
 
 
 def render_spot_check(pdf_path: str, out_dir: str, max_pages: int = 5):
-    """渲染有 highlight 的页为 jpg, 供人工 spot check"""
+    """渲染有 highlight 的页为 jpg, 供人工 spot check (v1.4 支持 UNDERLINE)"""
     os.makedirs(out_dir, exist_ok=True)
     doc = fitz.open(pdf_path)
     rendered = 0
     for pno in range(min(max_pages, doc.page_count)):
         page = doc[pno]
-        # 是否有 highlight
+        # 是否有 highlight 或 underline
         has_hl = False
         for annot in page.annots() or []:
-            if annot.type[0] == fitz.PDF_ANNOT_HIGHLIGHT:
+            if annot.type[0] in (fitz.PDF_ANNOT_HIGHLIGHT, fitz.PDF_ANNOT_UNDERLINE):
                 has_hl = True
                 break
         if not has_hl:

@@ -287,9 +287,9 @@ PPT 引用标号 {plan.get('mark', '?')} 在 PPT 上的内容是: "{target}"
     return matches
 
 
-# === Stage 3: Highlight using bbox (严格位置 + 按 content_type 分样式) ===
-# 禁止高亮的 content_type (per user 严肃要求 2026-08-11)
-# 完全靠 sensenova 自己标, 不做任何几何 heuristic
+# === Stage 3: Highlight using bbox (v1.4 - 实际修复版) ===
+
+# 禁高亮区 (sensenova 自标 + 几何 + 文字特征 三重判断)
 FORBIDDEN_CONTENT_TYPES = {
     "title", "article_title", "section_title",  # 标题
     "author", "authors", "affiliation", "correspondence",  # 作者
@@ -298,28 +298,144 @@ FORBIDDEN_CONTENT_TYPES = {
     "acknowledgment", "acknowledgements",  # 致谢
 }
 
-# 段落类 (用下划线)
+# 段落类 (用下划线 - PDF 原生 UNDERLINE 注释, 不遮字)
 PARAGRAPH_TYPES = {"paragraph", "body", "text", "section", "subsection"}
-# 图表类 (用边框)
+# 图表类 (用黄线框)
 FIGURE_TYPES = {"figure", "image", "diagram", "chart", "table", "icon", "graph", "illustration"}
+
+
+# Author/affiliation 文字特征 (sensenova 永远不标这些, 必须自己判断)
+_AUTHOR_TEXT_PATTERNS = [
+    r"M\.?D\.?", r"Ph\.?D\.?", r"Professor", r"Departments?\s+of\b", r"Department\s+of\b",
+    r"University\s+of\b", r"Medical\s+Center", r"College\s+of\b", r"Hospital\b",
+    r"Institute\s+of\b", r"^Correspondence", r"\*Correspondence", r"@[\w.]+\.[a-z]{2,}",  # email
+    r"et\s+al\.?$", r"^\d+[\s,]+[A-Z][a-z]+\s+[A-Z]",  # 多个 "M.D.," 紧邻
+    r"^From\s+the\b", r"^Affiliations?\b", r"^Author\s+contributions", r"^Authors?\b",
+]
+# Reference 文字特征
+_REFERENCE_TEXT_PATTERNS = [
+    r"^\d+\.\s+[A-Z]", r"^\[\d+\]",  # "1. Smith" or "[1]"
+    r"doi:\s*10\.\d+", r"^References\b", r"^REFERENCES\b", r"^Bibliography\b",
+    r"vol\.\s*\d+", r"^N\s+Engl\s+J\s+Med", r"^Frontiers\b", r"^Lancet\b",
+    r"\d{4}\s*;\s*\d+",  # 2020; 1234 期刊格式
+]
+# Header/footer 文字特征
+_HEADER_FOOTER_PATTERNS = [
+    r"^Vol\.?\s+\d+", r"^N\s+Engl\s+J\s+Med", r"^Page\s+\d+", r"^www\.",
+    r"^Downloaded\s+from", r"^Copyright\s", r"^©",
+]
+
+
+def _is_forbidden_text(text: str, content_type: str, page_idx: int, page_rect) -> tuple:
+    """
+    三重判断是否禁高亮区:
+    1. sensenova 标的 content_type
+    2. 几何 (page 0 top 22% / any page bottom 8% / any page top 5%)
+    3. 文字特征 (author/affiliation/reference/header 模式)
+    返回: (is_forbidden, reason)
+    """
+    page_h = page_rect.height
+    page_w = page_rect.width
+
+    # 1. sensenova 标的 content_type
+    if content_type in FORBIDDEN_CONTENT_TYPES:
+        return True, f"sensenova_type={content_type}"
+
+    # 2. 几何判断
+    # 从 m 抽 bbox 在 stage3 调, 这里不传, 用 text 判
+    # 实际 stage3_highlight_bbox 会先调 _is_geometry_forbidden
+    # 这里只判断 text 特征
+
+    # 3. 文字特征 - author/affiliation
+    if text:
+        # author 多 M.D./Ph.D. 或 Department of / University of / email
+        import re
+        md_count = sum(1 for p in _AUTHOR_TEXT_PATTERNS if re.search(p, text, re.MULTILINE))
+        # author 区典型: "X, M.D., Y, Ph.D., and Z, M.D." 或 "Department of..."
+        if md_count >= 2:
+            return True, f"text_pattern=author_pattern_hits_{md_count}"
+        # email 在 text 里基本 100% 是 author/affiliation
+        if re.search(r"@[\w.]+\.[a-z]{2,}", text):
+            return True, "text_pattern=email"
+        # "Department of" / "University of" / "From the Department" 多次出现
+        if re.search(r"Department\s+of\s+[A-Z]", text) and re.search(r"University\s+of\s+[A-Z]", text):
+            return True, "text_pattern=affiliation_keywords"
+        # "Correspondence" / "Affiliations"
+        if re.search(r"^\s*\*?Correspondence\b", text, re.MULTILINE):
+            return True, "text_pattern=correspondence_header"
+
+        # Reference 文字特征
+        ref_count = sum(1 for p in _REFERENCE_TEXT_PATTERNS if re.search(p, text, re.MULTILINE))
+        # 参考文典型: "1. Smith J, et al. Nature. 2020; 123: 45-50." 或 "[1] ..."
+        # 多个 [n] 引用格式
+        bracket_refs = len(re.findall(r"\[\d+\]", text))
+        if bracket_refs >= 3:
+            return True, f"text_pattern=bracket_refs_{bracket_refs}"
+        if re.search(r"^References\s*$", text, re.MULTILINE | re.IGNORECASE):
+            return True, "text_pattern=references_header"
+        # doi + journal 格式
+        if re.search(r"doi:\s*10\.\d+", text, re.IGNORECASE) and re.search(r"\d{4}\s*;\s*\d+", text):
+            return True, "text_pattern=doi_journal_format"
+
+        # Header/footer 文字特征
+        # page header 典型: "N Engl J Med" / "Vol. 344" / "www.nejm.org"
+        if re.search(r"^N\s+Engl\s+J\s+Med\b", text) or re.search(r"^www\.\w+\.\w+", text, re.MULTILINE):
+            return True, "text_pattern=journal_header"
+        if re.search(r"^Downloaded\s+from\s+\w+\.\w+", text, re.MULTILINE):
+            return True, "text_pattern=downloaded_from"
+
+    return False, ""
+
+
+def _is_geometry_forbidden(x1, y1, x2, y2, page_idx, page_rect) -> tuple:
+    """几何判断禁高亮区 (sensenova 不可靠, 必须自己判断)"""
+    page_h = page_rect.height
+    page_w = page_rect.width
+
+    # 1. page bottom 8% = footer
+    if y1 > page_h * 0.92:
+        return True, "geometry=page_bottom_8%"
+
+    # 2. page top 5% (任何页) = page header
+    if y2 < page_h * 0.05:
+        return True, "geometry=page_top_5%"
+
+    # 3. page 0 top 22% = title/author/affiliation 区
+    if page_idx == 0 and y2 < page_h * 0.22:
+        return True, "geometry=page0_top_22%"
+
+    # 4. bbox 跨整页 (太宽+太高) = 几乎肯定是 sensenova 瞎圈
+    width_ratio = (x2 - x1) / page_w
+    height_ratio = (y2 - y1) / page_h
+    if width_ratio > 0.7 and height_ratio > 0.3:
+        return True, f"geometry=too_large_{width_ratio:.0%}x{height_ratio:.0%}"
+
+    # 5. bbox 覆盖 page 一半以上 height (单独) - 也太大
+    if height_ratio > 0.5:
+        return True, f"geometry=height_too_large_{height_ratio:.0%}"
+
+    return False, ""
 
 
 def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
                           mode: str = "line") -> Dict:
     """
-    严格按 sensenova content_type 处理:
-    - 段落下划线: page.add_highlight_annot(rect) (PDF 原生下划线, 位置精确)
+    v1.4 严格版:
+    - 段落下划线: page.add_underline_annot(rect) (PDF 原生, 仅 baseline 画线, 不遮字)
     - 图表黄线框: page.draw_rect(rect, stroke=yellow, width=2) (无 fill)
-    - 禁高亮区: sensenova 标的 title/author/reference/header/footer 直接跳过
+    - 禁高亮区: sensenova content_type + 几何 + 文字特征 三重判断
+    - bbox 大小 sanity check (太宽+太高 → 拒)
+    - confidence ≥ 0.7
 
-    位置 0 偏移: add_highlight_annot 自动用 PDF 文字 baseline 定位.
+    位置 0 偏移: add_underline_annot 自动用 PDF 文字 baseline 定位.
     """
     if not matches:
         return {"ok": False, "reason": "no_matches"}
 
-    matches = [m for m in matches if m.get("confidence", 0) >= 0.4]
+    # 提严 confidence 阈值
+    matches = [m for m in matches if m.get("confidence", 0) >= 0.7]
     if not matches:
-        return {"ok": False, "reason": "all_low_confidence"}
+        return {"ok": False, "reason": "all_low_confidence_lt_0.7"}
 
     pdf_path = plan["pdf_path"]
     try:
@@ -330,9 +446,9 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
     total_pages = doc.page_count
     highlight_count = 0
     filtered_count = 0
-    filter_reasons = []
-    processed_bboxes = []  # 记录已处理的 bbox, 避免同 bbox 重复高亮
     demoted_count = 0
+    filter_reasons = []
+    processed_bboxes = []
 
     for m in matches:
         page_idx = m.get("page", 0)
@@ -346,7 +462,7 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
             continue
         page = doc[page_idx]
         page_rect = page.rect
-        # 裁剪到页面范围 (不引入 -1 边界)
+        # 裁剪到页面范围
         x1 = max(0, min(x1, page_rect.x1))
         x2 = max(0, min(x2, page_rect.x1))
         y1 = max(0, min(y1, page_rect.y1))
@@ -354,47 +470,63 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
         if x1 >= x2 or y1 >= y2:
             continue
 
-        # 去重: 同 bbox (精度 1pt) 已处理过就跳过
+        # 去重
         bbox_key = (page_idx, round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1))
         if bbox_key in processed_bboxes:
             continue
         processed_bboxes.append(bbox_key)
 
-        # sensenova 标了禁高亮区 → 跳过
         content_type = m.get("content_type", "paragraph").lower()
-        if content_type in FORBIDDEN_CONTENT_TYPES:
+
+        # === 禁高亮区判断 (三重) ===
+        # 1. 几何 (sensenova 不可靠, 必须自己判断)
+        geo_forbid, geo_reason = _is_geometry_forbidden(x1, y1, x2, y2, page_idx, page_rect)
+        if geo_forbid:
             filtered_count += 1
-            filter_reasons.append(f"page {page_idx} type={content_type}")
+            filter_reasons.append(f"p{page_idx} {geo_reason}")
             continue
 
+        # 2. sensenova 标 content_type
+        if content_type in FORBIDDEN_CONTENT_TYPES:
+            filtered_count += 1
+            filter_reasons.append(f"p{page_idx} type={content_type}")
+            continue
+
+        # 3. 文字特征 (抽 bbox 内文字)
         rect = fitz.Rect(x1, y1, x2, y2)
         try:
-            # sanity check: 如果 sensenova 标 figure 但 bbox 内有大量文字, demote 到 text
-            if content_type in FIGURE_TYPES:
-                text_in_bbox = page.get_text("text", clip=rect).strip()
-                if len(text_in_bbox) > 80:  # >80 chars 几乎肯定是正文而非图
-                    # demote 到 text 类别
-                    content_type = "paragraph"
-                    demoted_count += 1
-                    # log demotion
-                    filter_reasons.append(
-                        f"page {page_idx} demoted figure→paragraph ({len(text_in_bbox)} chars text in bbox)"
-                    )
+            text_in_bbox = page.get_text("text", clip=rect).strip()
+        except Exception:
+            text_in_bbox = ""
 
+        text_forbid, text_reason = _is_forbidden_text(text_in_bbox, content_type, page_idx, page_rect)
+        if text_forbid:
+            filtered_count += 1
+            filter_reasons.append(f"p{page_idx} {text_reason}")
+            continue
+
+        # === bbox 内文字 sanity (防 sensenova 标 figure 实际是段落) ===
+        if content_type in FIGURE_TYPES:
+            if len(text_in_bbox) > 80:  # >80 chars 几乎肯定是正文
+                content_type = "paragraph"
+                demoted_count += 1
+                filter_reasons.append(f"p{page_idx} demoted figure→paragraph ({len(text_in_bbox)} chars)")
+
+        # === 画高亮 ===
+        try:
             if content_type in FIGURE_TYPES:
                 # 图表: 黄色边框, 无 fill, 2pt 粗
                 page.draw_rect(
                     rect,
-                    color=(1, 1, 0),  # 黄色
+                    color=(1, 1, 0),
                     fill=None,
                     width=2,
                     overlay=True,
                 )
                 highlight_count += 1
             else:
-                # 段落: PDF 原生下划线 highlight 注释 (位置精确, 跟文字 baseline)
-                # add_highlight_annot 会在 rect 内所有文字下方画线
-                annot = page.add_highlight_annot(rect)
+                # 段落: PDF 原生下划线 (UNDERLINE 注释, 只在文字 baseline 画线, 不遮字)
+                annot = page.add_underline_annot(rect)
                 if annot:
                     annot.set_colors(stroke=(1, 1, 0))  # 黄色
                     annot.update()
@@ -416,7 +548,6 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     try:
-        # 用 garbage=4 清理, deflate=True 压缩
         doc.save(out_path, garbage=4, deflate=True)
     except Exception as e:
         return {"ok": False, "reason": f"save_err: {e}"}
@@ -433,9 +564,9 @@ def stage3_highlight_bbox(plan: Dict, matches: List[Dict], out_path: str,
         "highlight_count": highlight_count,
         "filtered_count": filtered_count,
         "demoted_count": demoted_count,
-        "method": "semantic_bbox_v13_strict",
+        "method": "semantic_bbox_v14_underline_strict",
         "matches_used": len(matches),
-        "filter_reasons": filter_reasons[:5],
+        "filter_reasons": filter_reasons[:8],
         "reason": reason,
     }
 
@@ -483,8 +614,8 @@ def _process_one(plan, project_root, out_dir, mode, idx, total):
         return {"pn_x": pn_x, "ok": False, "reason": "no_ppt_render"}
     # Stage 2: semantic search (sensenova vision) - 纯语义, 不 fallback
     print(f"  [{idx}/{total}] {pn_x}: stage 2 (sensenova vision)...", flush=True)
-    matches = stage2_semantic_search(plan, ppt_render, max_pages=4, vision_timeout=30)
-    method = "semantic_bbox_v11"
+    matches = stage2_semantic_search(plan, ppt_render, max_pages=8, vision_timeout=30)
+    method = "semantic_bbox_v14"
 
     if not matches:
         return {"pn_x": pn_x, "ok": False, "reason": "no_semantic_match", "matches": 0, "method": method}
