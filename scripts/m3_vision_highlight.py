@@ -194,12 +194,25 @@ def _line_index_containing(all_lines: List, anchor: fitz.Rect) -> int:
                key=lambda i: abs((all_lines[i].y0 + all_lines[i].y1)/2 - (anchor.y0 + anchor.y1)/2))
 
 
-def find_phrase_rect(page, phrase: str) -> Optional[fitz.Rect]:
-    """phrase 模式: 只标 search 命中的实际 bbox 宽度 (不展宽)"""
-    rects = find_text_rects(page, phrase, max_hits=1)
+def find_phrase_rect(page, phrase: str, page_idx: int = 0) -> Optional[fitz.Rect]:
+    """phrase 模式: 只标 search 命中的实际 bbox 宽度 (不展宽)
+    PyMuPDF search_for 可能返回 partial match hit (只匹配 phrase 一部分),
+    filter 掉 title/author/ref 区域, 在剩下的里取最宽的 (最完整)
+    """
+    rects = find_text_rects(page, phrase, max_hits=5)
     if not rects:
         return None
-    return rects[0]
+    # filter 掉禁高亮区
+    valid = []
+    for r in rects:
+        is_bad, _ = is_forbidden_zone(page, r, page_idx)
+        if not is_bad:
+            valid.append(r)
+    if not valid:
+        # 全部都在禁高亮区, 返回 None (caller 用 filter 拒)
+        return None
+    # 取最宽 (最可能是完整 phrase)
+    return max(valid, key=lambda r: r.width)
 
 
 def find_line_rect(page, phrase: str) -> Optional[fitz.Rect]:
