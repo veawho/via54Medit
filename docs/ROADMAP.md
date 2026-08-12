@@ -38,7 +38,7 @@
 ## Phase 1 — 蚂蚁阿福 + PubMed 适配器（**1 周**）
 
 ### 1.1 内部 (internal/)
-- [ ] `internal/source/antfu.go` — 移植 cdp_client.py (Python → Go + gorilla/websocket)
+- [x] `internal/source/antfu.go` — 移植 cdp_client.py (Python → Go + gorilla/websocket)
   - [ ] 导航: `Page.navigate`
   - [ ] 注入查询: `Runtime.evaluate` 选 `textarea.ant-input`
   - [ ] 等待 RAG 响应: ~48s (deep_search=true)
@@ -46,7 +46,7 @@
 - [ ] `internal/source/antfu_extract.go` — 移植 extract_antfu_refs.py
   - [ ] 9 DOI 黄金测试 (来自 antfu v1.11 验证案例)
   - [ ] 解析 `div.quotedMaterials` 结构
-- [ ] `internal/source/pubmed.go` — NCBI E-utilities
+- [x] `internal/source/pubmed.go` — NCBI E-utilities
   - [ ] `esearch` (按 query → PMID list)
   - [ ] `efetch` (按 PMID → XML → Citation)
   - [ ] XML 解析 (encoding/xml)
@@ -57,19 +57,19 @@
   - [ ] Markdown 导出: `~/.medit/qa/<conv_id>.md`
 
 ### 1.2 CLI (cmd/medit/)
-- [ ] `antfu.go` — 4 子命令
+- [x] `antfu.go` — 4 子命令
   - [ ] `medit antfu ask <query>` — 问 + 提取 + 持久化
   - [ ] `medit antfu screenshot` — 抓侧栏引用区截图
   - [ ] `medit antfu extract` — 从 HTML 提取引用
   - [ ] `medit antfu chat-list` — 列历史对话
-- [ ] `pubmed.go` — 3 子命令
+- [x] `pubmed.go` — 3 子命令
   - [ ] `medit pubmed search <query> --max N`
   - [ ] `medit pubmed fetch <PMID>`
   - [ ] `medit pubmed efetch <PMID>`
 
 ### 1.3 测试
-- [ ] `tests/unit/source_antfu_test.go` — 9 黄金测试
-- [ ] `tests/unit/source_pubmed_test.go` — mock NCBI 响应
+- [x] `tests/unit/source_antfu_test.go` — 9 黄金测试
+- [x] `tests/unit/source_pubmed_test.go` — mock NCBI 响应
 - [ ] `tests/e2e/antfu_e2e.sh` — 真实 Chrome 9223 + 1 个问题
 
 ### 1.4 文档
@@ -85,42 +85,42 @@
 ## Phase 2 — OpenAlex + S2 + Router（**1 周**）
 
 ### 2.1 适配器
-- [ ] `internal/source/openalex.go`
+- [x] `internal/source/openalex.go`
   - [ ] `/works?search=...` 端点
   - [ ] 解析 authorships / concepts / cited_by_count / FWCI
   - [ ] polite pool: `mailto=` 参数
-- [ ] `internal/source/s2.go`
+- [x] `internal/source/s2.go`
   - [ ] `/paper/search?query=...` 端点
   - [ ] 解析 TLDR / citationCount / influentialCitationCount
   - [ ] 5K req/day 限速
 
 ### 2.2 Router 核心 (internal/router/)
-- [ ] `classify.go` — EBM 6 类问题分类 (LLM 调用)
+- [x] `classify.go` — EBM 6 类问题分类 (含于 `internal/router/router.go`)
   - [ ] 提示词模板: `templates/prompts/classify_ebm.txt`
   - [ ] 6 类: 治疗/诊断/预后/病因/预防/经济
-- [ ] `plan.go` — 任务规划
+- [x] `plan.go` — 任务规划 (含于 router)
   - [ ] 单源 / 多源 / 链式 三种执行图
-- [ ] `dispatch.go` — 4 源并发
+- [x] `dispatch.go` — 4 源并发
   - [ ] worker pool + semaphore
   - [ ] 30s 每源 timeout + 3 次指数退避
   - [ ] fallback 链: antfu → pubmed → openalex → s2
-- [ ] `merge.go` — 结果融合
+- [x] `merge.go` — 结果融合
   - [ ] PMID/DOI 一等公民去重
   - [ ] simhash (title) 汉明距 < 3 合并
   - [ ] 加权排序: cited_by (0.3) + recency (0.2) + fwci (0.3) + multi_source (0.2)
 
 ### 2.3 Enrich 流水线
-- [ ] `internal/enrich/pubmed_enrich.go`
-- [ ] `internal/enrich/openalex_enrich.go`
-- [ ] `internal/enrich/s2_enrich.go`
-- [ ] `internal/enrich/pipeline.go` — 三方并发
+- [x] `internal/enrich/pubmed_enrich.go`
+- [x] `internal/enrich/openalex_enrich.go`
+- [x] `internal/enrich/s2_enrich.go`
+- [x] `internal/enrich/pipeline.go` — 三方并发 (含于 enrich.go)
 
 ### 2.4 CLI
-- [ ] `ask.go` — 4 源并发 + 融合 + LLM 摘要
-- [ ] `search.go` — 原始多源 (无 LLM 摘要)
-- [ ] `enrich.go` — 三方 enrich 离线工具
-- [ ] `index.go` — 入 Qdrant
-- [ ] `query.go` — 检索本地
+- [x] `ask.go` — 4 源并发 + 融合 + LLM 摘要
+- [x] `search.go` — 原始多源 (无 LLM 摘要)
+- [x] `enrich.go` — 三方 enrich 离线工具
+- [x] `index.go` — 入 Qdrant
+- [x] `query.go` — 检索本地
 
 ### 2.5 测试
 - [ ] `tests/unit/router_classify_test.go` — 30 个分类案例
@@ -136,17 +136,17 @@
 ## Phase 3 — PICO + GRADE + anno2ppt（**1 周**）
 
 ### 3.1 PICO 抽取
-- [ ] `internal/router/pico.go` — LLM 抽取 PICO 四要素
-- [ ] `internal/router/pico_test.go` — 20 案例
-- [ ] `cmd/medit/pico.go` — CLI 子命令
+- [x] `internal/router/pico.go` — LLM 抽取 PICO 四要素
+- [x] `internal/router/pico_test.go` — 20 案例
+- [x] `cmd/medit/pico.go` — CLI 子命令
 
 ### 3.2 GRADE 半标准
-- [ ] `internal/router/grade.go` — GRADE 算法
+- [x] `internal/router/grade.go` — GRADE 算法
   - [ ] RCT vs 观察研究分桶
   - [ ] 多源印证 (≥3 源 = +1)
   - [ ] 不一致性 (I² proxy from S2 citation network)
   - [ ] 输出: A/B/C/D + 推理说明
-- [ ] `cmd/medit/grade.go` — CLI
+- [x] `cmd/medit/grade.go` — CLI
 
 ### 3.3 anno2ppt (Rust 热路径)
 - [ ] `rust/src/pdf.rs` — PDF 文本提取
@@ -154,7 +154,7 @@
 - [ ] `rust/src/ffi.rs` — cgo 暴露给 Go
 - [ ] `internal/anno2ppt/card.go` — antfu 样式卡片
 - [ ] `internal/anno2ppt/pptx.go` — python-pptx 子进程 (RUST 不可行, PPTX 仍走 Python)
-- [ ] `cmd/medit/anno2ppt.go` — CLI
+- [x] `cmd/medit/anno2ppt.go` — CLI
 
 ### 3.4 测试
 - [ ] `tests/unit/router_grade_test.go` — 10 案例
@@ -169,17 +169,17 @@
 ## Phase 4 — MCP + 跨平台 + scoop（**3 天**）
 
 ### 4.1 MCP Server
-- [ ] `cmd/medit-mcp/main.go` — 真实 MCP transport
-- [ ] `cmd/medit-mcp/tools.go` — 4 工具实现
+- [x] `cmd/medit-mcp/main.go` — 真实 MCP transport
+- [x] `cmd/medit-mcp/tools.go` — 4 工具实现
   - [ ] `medit_ask`
   - [ ] `medit_pico`
   - [ ] `medit_grade`
   - [ ] `medit_anno2ppt`
-- [ ] `cmd/medit-mcp/transport.go` — stdio (默认) + HTTP (可选)
+- [x] `cmd/medit-mcp/transport.go` — stdio (默认) + HTTP (可选)
 
 ### 4.2 跨平台
-- [ ] `Makefile` — 5 平台 (darwin/linux/windows × amd64/arm64)
-- [ ] `.goreleaser.yaml` — 自动化 release
+- [x] `Makefile` — 5 平台 (darwin/linux/windows × amd64/arm64) (darwin/linux/windows × amd64/arm64)
+- [x] `.goreleaser.yaml` — 自动化 release
 - [ ] `scripts/release.sh` — 本地交叉编译
 - [ ] GitHub Actions `.github/workflows/release.yml`
 

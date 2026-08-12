@@ -6,6 +6,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/veawho/via54Medit/internal/version"
@@ -38,6 +40,18 @@ Phase 6 (2026-07-31): Feishu (飞书) 集成
 // Execute is the main entry point called by cmd/medit/main.go.
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+// versionCmd prints the multi-line build metadata. The single-line
+// short form is exposed by cobra's --version flag (rootCmd.Version).
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print full version info (commit, build date, go version, license)",
+	Long:  "Prints multi-line build metadata for via54Medit. The short form (`medit --version`) prints only semver + commit.",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		fmt.Fprintln(cmd.OutOrStdout(), version.Full())
+	},
 }
 
 var (
@@ -131,6 +145,6 @@ func registerAll() {
 	// --- Citation 算法核心 (Phase 6, 2026-07-31) ---
 	rootCmd.AddCommand(citationCmd) // citation <match|test-extract|replayer> [args...]
 
-	// --- Meta (1, already in root.Version) ---
-	// rootCmd.AddCommand(versionCmd) is implicit via root.Version
+	// --- Meta (1, --version is via root.Version; "version" subcommand for multi-line Full()) ---
+	rootCmd.AddCommand(versionCmd)
 }

@@ -164,17 +164,21 @@ func SortSourcesByPriority(sources []EvidenceSource) []EvidenceSource {
 	return sources
 }
 
-// TODO (用户 2026-08-01 沉淀 优先级):
-//   - NCT 完整数据 fetch (scripts/nct_fetcher.py 已存在, 此处只需接口)
-//   - OA 仓库自动探测 (UCL Discovery / PubMed Central / Europe PMC)
-//   - 双源 highlight 标注驱动 (主 + fallback 各自一张图)
+// 已沉淀 (2026-08-12 状态更新):
+//   - ✓ DualSourceManifest schema (line 37)
+//   - ✓ ShouldTriggerFallback 触发条件 (line 78)
+//   - ✓ FindNCTRegistry 已知映射 (line 94)
+//   - ✓ SourcePriority 优先级 (line 133)
+//   - ✓ SortSourcesByPriority 排序 (line 145)
 //
-// 已沉淀:
-//   - ✓ DualSourceManifest schema
-//   - ✓ ShouldTriggerFallback 触发条件
-//   - ✓ FindNCTRegistry 已知映射
-//   - ✓ SourcePriority 优先级
-//   - ✓ SortSourcesByPriority 排序
+// 后续 TODO (Phase 5+):
+//   - [ ] NCT 完整数据 fetch — scripts/nct_fetcher.py 暂未建 (P2)
+//         优先建 Python 脚本 (clinicaltrials.gov API → JSON),
+//         此处用 os/exec 调子进程,数据进 DualSourceManifest.PrimaryNCTData
+//   - [ ] OA 仓库自动探测 (UCL Discovery / PubMed Central / Europe PMC)
+//         实现: 内嵌 OARepository 列表 + HEAD 探测 + 优先级降级
+//   - [ ] 双源 highlight 标注驱动 (主 + fallback 各自一张图)
+//         在 AnnoCard 模板上同时渲染两张 jpg 拼版
 
 // String 便于 manifest 输出
 func (e EvidenceSource) String() string {
