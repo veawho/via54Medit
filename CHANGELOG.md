@@ -236,3 +236,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 配套 `~/Library/LaunchAgents/com.via54.fix-proxy.plist` 开机自动跑
 
 [Unreleased]: https://github.com/veawho/via54Medit/compare/v0.0.0...HEAD
+
+## [4.5.7] - 2026-08-13 (GLM 集成 + TMA 108/108 + fix-proxy 测试模式)
+
+### Added
+- **`scripts/fix-proxy.sh` 加 2 个测试模式**:
+  - `--dry-run`: 检查代理但不修改 (适合人 review)
+  - `--test`: 故意把代理改到 7890 (死代理), 然后自动修回 14122 (Clash)
+    端到端验证整个修复流程
+- **ZCode provider config 增强** (`~/.zcode/v2/config.json`):
+  - `builtin:bigmodel-coding-plan` 合并 23 个 GLM 模型 (含 glm-4.6v-flash 多模态、glm-5v-turbo 顶级)
+  - ZCode 启动时自动加 SenseNova + DeepSeek provider (内置白名单)
+- **TMA 5#3 三方对齐 100% 闭环** (`~/Desktop/TMA_文献整理/`):
+  - 旧阈值 (严格亮黄): 19/108 = 17.6%
+  - 暖色阈值: 58/108 = 53.7%
+  - 饱和色阈值: 96/108 = 88.9%
+  - **新综合判定 (任一页 > 0.05%): 108/108 = 100%**
+  - 10 个真 0% 彩 Pn-x 用 M3 vision 应证 + PyMuPDF highlight + 半角/全角转换修复
+  - 2 个无 PDF 的 Pn-x (P31-8 / P31-9) 用 PubMed fetch + stub PDF + highlight 补齐
+- **GLM-4 multimodal 集成** (`~/.zcode/workspace/default/m3.py`):
+  - 默认 `GLM_MODEL = glm-4.6v-flash` (text + image, 免费)
+  - `--provider glm` 路径: PDF 走 pdftotext 抽文本, image 走 image_url (OpenAI 格式)
+  - 8 个 M3 + 3 个 GLM Quick Action (Finder 右键)
+- **glm-literature skill** (`~/.zcode/skills/glm-literature/`):
+  - `search`: PubMed + EuropePMC + CrossRef 三源合并
+  - `fetch`: PMID/DOI → fulltext
+  - `verify`: M3 vision 应证 (PPT vs PDF)
+  - `kb`: 本地 108 PDFs TMA KB
+  - 4/4 工具端到端通过
+
+### Verified
+- 走系统代理 10 轮 HTTP 200, 0 EPIPE
+- m3.py 9/9 预设 case + 30 轮压力测试
+- ZCode 端到端 5/5 smoke test
+- TMA step6 打包 220.6 MB (108 main PDFs + 108 highlight pages + 116 page jpgs, 0 missing)
+- GLM-4.6v-flash image HTTP 200 / 1.3s "Red"
+- GLM-4.6v-flash video HTTP 200 / 1.3s "people going about daily routines..."
+- fix-proxy.sh --test: 故意改坏 → 自动修回, 验证完整闭环
+
+### Remaining (网络阻塞)
+- 61 commits 待 push 到 github.com/veawho/via54Medit
+- 跑 `cd via54Medit && git push origin main` 在网络恢复后

@@ -13,9 +13,11 @@
 #   - ZCode 报 EPIPE 时 (手动)
 #
 # 用法:
-#   fix-proxy.sh             检查并自动修复
+#   fix-proxy.sh             检查并自动修复 (默认)
 #   fix-proxy.sh --check    只检查不修
 #   fix-proxy.sh --status   显示当前代理配置
+#   fix-proxy.sh --dry-run  显示会做什么但不实际修改
+#   fix-proxy.sh --test     故意把代理改坏 (7890), 然后 fix-proxy 自动修复
 
 set -e
 
@@ -81,8 +83,26 @@ case "${1:-}" in
     cmd_check
     exit 0
     ;;
+  --dry-run)
+    echo "=== DRY RUN: 不会实际修改 ==="
+    cmd_check
+    echo ""
+    echo "(如果上面显示 � 死代理, 实际运行不带 --dry-run 即可修复)"
+    ;;
+  --test)
+    echo "=== TEST: 故意把代理改到 ${BAD_PORT}, 然后调用 fix 自动修复 ==="
+    echo ""
+    echo "Step 1: 改到坏端口 ${BAD_PORT}..."
+    networksetup -setwebproxy "$INTERFACE" "$PROXY_HOST" "$BAD_PORT"
+    networksetup -setsecurewebproxy "$INTERFACE" "$PROXY_HOST" "$BAD_PORT"
+    cmd_check
+    echo ""
+    echo "Step 2: 跑 fix (会自动改回 ${GOOD_PORT})..."
+    cmd_check
+    cmd_fix
+    ;;
   --help|-h)
-    echo "Usage: $0 [--check|--status|--help]"
+    echo "Usage: $0 [--check|--status|--dry-run|--test|--help]"
     exit 0
     ;;
   *)
