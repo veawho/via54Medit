@@ -273,7 +273,7 @@ def main():
     print(f"📋 找到 {len(pn_x)} 个 Pn-x highlight PDF")
 
     # 排除 0 字节 / 已知不救
-    SKIP_PN = {'P12-3'}  # 留缺
+    SKIP_PN = set()  # 不跳 P12-3, 全部 107 个 audit
     results = {}
     total_violations = 0
     total_no_highlight = 0
@@ -287,7 +287,7 @@ def main():
             no_audit.append(pn)
             continue
         size = os.path.getsize(step4_pdf)
-        if size < 5000:  # 太小可能错 PDF
+        if size < 2500:  # 太小可能错 PDF (P12-3 placeholder 4738 bytes 含 MAHA/0.5% 等)
             no_audit.append(pn)
             continue
 
