@@ -198,3 +198,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - §19.6 GitHub 公开: 维持 private,Phase 5 再开
 
 [Unreleased]: https://github.com/veawho/via54Medit/compare/v0.0.0...HEAD
+
+## [4.5.6] - 2026-08-12 (macOS EPIPE 根因修复 + ROADMAP 同步)
+
+### Fixed
+- **macOS "7890 死代理" EPIPE 根因修复** (`scripts/fix-proxy.sh`)
+  - 根因: macOS Ethernet 接口配置 HTTP/HTTPS 代理 = `127.0.0.1:7890`,
+    但 7890 没有进程在 LISTEN (死代理). 走系统代理的所有 HTTPS 流量
+    在 Node.js 拿 `Cannot connect to API: write EPIPE`.
+  - 修复: 代理指向 Clash 实际端口 `127.0.0.1:14122`
+  - `scripts/fix-proxy.sh` 检测+自动修复, 配 `launchd` plist 自动恢复.
+- **`medit version` 子命令缺失** (`cmd/medit/commands/root.go`)
+  - ROADMAP Phase 0 标的 "medit version 可跑" 但实际只有 `--version` flag.
+  - 加 `versionCmd` 子命令, 走 `version.Full()` 输出 5 字段
+    (commit / build date / go version / license / repo).
+  - `bin/medit` 重新编译, `bin/medit-mcp` 同步.
+
+### Changed
+- **ROADMAP 复选框同步** (`docs/ROADMAP.md`)
+  - 勾选 32 项已实际完成 (Phase 1-4 大部分子项):
+    - `internal/source/{antfu,pubmed,openalex,s2}.go`
+    - `internal/router/{pico,grade,router}.go`
+    - `internal/enrich/*.go`
+    - `internal/anno2ppt/*.go`
+    - `cmd/medit-mcp/*` (4 工具)
+    - `Makefile` + `.goreleaser.yaml`
+  - 实际 `go test ./...` 25 包全 ok, 命令实测 15+ 个.
+- **`internal/anno2ppt/dual_source.go` TODO 重整理**
+  - 旧 TODO 注释里 "scripts/nct_fetcher.py 已存在" 不符, 实际未建.
+  - 改成 "已沉淀" (5 项 ✓) + "后续 Phase 5+ TODO" (3 项, 带 P2 优先级).
+
+### Added
+- **`scripts/fix-proxy.sh`** (2646 bytes) — macOS 代理自动修复脚本
+  - 检查 `7890 NOT LISTEN` 状态
+  - 切代理到实际在跑的 `14122`
+  - 三种模式: 默认(检查+修) / `--check` / `--status`
+  - 配套 `~/Library/LaunchAgents/com.via54.fix-proxy.plist` 开机自动跑
+
+[Unreleased]: https://github.com/veawho/via54Medit/compare/v0.0.0...HEAD
