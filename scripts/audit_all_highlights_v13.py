@@ -181,15 +181,18 @@ def audit_one_highlight(page, rect, pno, total_pages, page_text_blocks) -> Dict:
     text = get_annot_text(page, rect)
     violations = []
 
+    # 扫描大图检测: page_h > 1500 (single page super tall 扫描)
+    is_scanned_tall = page_h > 1500
+
     # 1. 几何 forbidden zones
-    if pno == 0 and rect.y0 < page_h * 0.08:
+    if pno == 0 and rect.y0 < page_h * (0.01 if is_scanned_tall else 0.08):
         violations.append(("page0_top_8%_title", f"y0={rect.y0:.0f}/{page_h:.0f}={rect.y0/page_h*100:.1f}%"))
-    if pno == 0 and rect.y0 < page_h * 0.15:
+    if pno == 0 and rect.y0 < page_h * (0.02 if is_scanned_tall else 0.15):
         # 标题区 (8%-15% 多数是 author/affiliation)
         if not any(v[0].startswith("page0_top_8%") for v in violations):
             violations.append(("page0_top_15%_title_or_author", f"y0={rect.y0:.0f}/{page_h:.0f}={rect.y0/page_h*100:.1f}%"))
-    if pno == 0 and rect.y0 < page_h * 0.30:
-        # 中文 author/affiliation 区
+    if pno == 0 and rect.y0 < page_h * (0.05 if is_scanned_tall else 0.30):
+        # 中文 author/affiliation 区 (扫描大图阈值收紧到 5%)
         if not any(v[0].startswith("page0_top_8%") or v[0].startswith("page0_top_15%") for v in violations):
             # 仅当中文 PDF 或长 author 列表时算违规, 英文短 author OK
             text_first_50 = text[:50]
@@ -197,7 +200,7 @@ def audit_one_highlight(page, rect, pno, total_pages, page_text_blocks) -> Dict:
                 violations.append(("page0_top_30%_CN_author", f"y0={rect.y0:.0f}/{page_h:.0f}={rect.y0/page_h*100:.1f}%"))
     if rect.y0 > page_h * 0.92:
         violations.append(("bottom_8%_footer", f"y0={rect.y0:.0f}"))
-    if rect.y1 < page_h * 0.05:
+    if rect.y1 < page_h * (0.005 if is_scanned_tall else 0.05):
         violations.append(("top_5%_header", f"y1={rect.y1:.0f}"))
     if rect.width / page_w > 0.85 and rect.height / page_h > 0.25:
         violations.append(("too_wide_and_tall", f"w={rect.width/page_w*100:.0f}%, h={rect.height/page_h*100:.0f}%"))
