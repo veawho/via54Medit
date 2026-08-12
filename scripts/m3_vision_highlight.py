@@ -375,15 +375,19 @@ MAX_QUOTE_LEN = 200  # 放宽上限, 学术 anchor 可以长一点
 
 
 def validate_quote_in_pdf(doc, quote: str, page_idx: int = None, min_len: int = MIN_QUOTE_LEN, max_len: int = MAX_QUOTE_LEN):
-    """检查 quote 是否在 PDF 里真实出现 (case-insensitive, whitespace-normalized).
+    """检查 quote 是否在 PDF 里真实出现 (case-insensitive, whitespace + Unicode normalized).
+
+    严格模式: 整段 quote 必须 verbatim 出现 (whitespace normalized).
+    宽松模式 (fallback): 去掉 ALL whitespace 后, quote 是 page 紧凑 text 的子串. 处理:
+    - 中文字符间意外插入/删除空白 (如 "罕见的后天" vs "罕见的 后天")
+    - Unicode ligature 差异 (如 'ﬁ' ligature vs 'fi')
+    - GLM 微小 normalize 错误
 
     Returns: (is_valid: bool, reason: str | None)
     - False + "quote_too_short": quote 字符数 < min_len
     - False + "quote_too_long": quote 字符数 > max_len
-    - False + "quote_not_in_pdf": quote 不在 PDF 里
+    - False + "quote_not_in_pdf": quote 不在 PDF 里 (严格 + 宽松都不匹配)
     - True + None: OK
-
-    借鉴 ReconAI prompt-injection hardening + verbatim quote validation 设计.
     """
     if not quote:
         return False, "quote_empty"
@@ -392,15 +396,22 @@ def validate_quote_in_pdf(doc, quote: str, page_idx: int = None, min_len: int = 
         return False, f"quote_too_short ({len(q)}<{min_len})"
     if len(q) > max_len:
         return False, f"quote_too_long ({len(q)}>{max_len})"
-    # normalize: case + whitespace
-    norm = _re.sub(r"\s+", " ", q.lower()).strip()
-    if not norm:
-        return False, "quote_empty_normalized"
+    # Unicode NFKC normalize (把 'ﬁ' ligature 等转成 'fi', 全角转半角)
+    import unicodedata
+    q_norm = unicodedata.normalize("NFKC", q).lower()
     # 在指定 page (或所有 page) text 里搜
     pages = [doc[page_idx]] if page_idx is not None else doc
     for p in pages:
-        page_text = _re.sub(r"\s+", " ", p.get_text().lower())
-        if norm in page_text:
+        page_text_raw = p.get_text()
+        # 严格模式: whitespace normalized + NFKC
+        page_text_strict = unicodedata.normalize("NFKC", _re.sub(r"\s+", " ", page_text_raw.lower())).strip()
+        norm = _re.sub(r"\s+", " ", q_norm).strip()
+        if norm and norm in page_text_strict:
+            return True, None
+        # 宽松模式: 去掉所有 whitespace (处理中文间意外空白)
+        page_text_compact = _re.sub(r"\s+", "", page_text_strict)
+        norm_compact = _re.sub(r"\s+", "", norm)
+        if norm_compact and norm_compact in page_text_compact:
             return True, None
     return False, "quote_not_in_pdf"
 
