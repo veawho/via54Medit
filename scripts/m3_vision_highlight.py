@@ -342,18 +342,67 @@ def find_paragraph_rect(page, anchor_phrase, end_phrase=None, max_lines=8):
     return find_line_rect(page, anchor_phrase)
 
 
-def apply_underline(page, rect, color=(1, 1, 0), expand=0, anchor_text=None):
-    """应用 underline 到 rect. 可选 anchor_text 写进 PDF 注释 content stream (任何 PDF reader 点 highlight 都能看到原文)."""
+def apply_underline(page, rect, color=(1, 1, 0), expand=0, anchor_text=None, reason=None):
+    """应用 underline 到 rect.
+
+    可选参数:
+    - anchor_text: 写进 PDF 注释 content stream, 阅读器点 highlight 看到 quote
+    - reason: 写进 PDF 注释 subject, 解释为什么 highlight 这段
+    """
     r = fitz.Rect(rect.x0 - expand, rect.y0, rect.x1 + expand, rect.y1)
     annot = page.add_underline_annot(r)
     if annot:
         annot.set_colors(stroke=color)
-        if anchor_text:
-            # set_info(content=...) 写进 PDF 注释元数据, 阅读器点 highlight 会显示这段文字
+        # set_info() 同时写 content + subject:
+        # - content: quote (PDF reader popup 显示)
+        # - subject: [reason: <为什么选>] (PDF metadata)
+        if anchor_text and reason:
+            annot.set_info(content=anchor_text, subject=f"[reason: {reason}]")
+        elif anchor_text:
             annot.set_info(content=anchor_text)
+        elif reason:
+            annot.set_info(content="", subject=f"[reason: {reason}]")
         annot.update()
         return True
     return False
+
+
+import re as _re
+
+# Verbatim quote length 限制 (借鉴 ReconAI 设计: 5-40 字符太短不够独特, 太长可能是幻觉)
+MIN_QUOTE_LEN = 5
+MAX_QUOTE_LEN = 200  # 放宽上限, 学术 anchor 可以长一点
+
+
+def validate_quote_in_pdf(doc, quote: str, page_idx: int = None, min_len: int = MIN_QUOTE_LEN, max_len: int = MAX_QUOTE_LEN):
+    """检查 quote 是否在 PDF 里真实出现 (case-insensitive, whitespace-normalized).
+
+    Returns: (is_valid: bool, reason: str | None)
+    - False + "quote_too_short": quote 字符数 < min_len
+    - False + "quote_too_long": quote 字符数 > max_len
+    - False + "quote_not_in_pdf": quote 不在 PDF 里
+    - True + None: OK
+
+    借鉴 ReconAI prompt-injection hardening + verbatim quote validation 设计.
+    """
+    if not quote:
+        return False, "quote_empty"
+    q = quote.strip()
+    if len(q) < min_len:
+        return False, f"quote_too_short ({len(q)}<{min_len})"
+    if len(q) > max_len:
+        return False, f"quote_too_long ({len(q)}>{max_len})"
+    # normalize: case + whitespace
+    norm = _re.sub(r"\s+", " ", q.lower()).strip()
+    if not norm:
+        return False, "quote_empty_normalized"
+    # 在指定 page (或所有 page) text 里搜
+    pages = [doc[page_idx]] if page_idx is not None else doc
+    for p in pages:
+        page_text = _re.sub(r"\s+", " ", p.get_text().lower())
+        if norm in page_text:
+            return True, None
+    return False, "quote_not_in_pdf"
 
 
 def rect_to_normalized(page, rect):
@@ -391,30 +440,55 @@ def normalized_to_rect(page, norm):
 def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
                               entries: List[Tuple],
                               max_pages: int = 8,
-                              enforce_forbidden: bool = True) -> dict:
+                              enforce_forbidden: bool = True,
+                              validate_quote: bool = True) -> dict:
     """
     在 PDF 中 search 并 underline 每个 entry.
     enforce_forbidden=True 时, 跳过 title/author/ref/declaration/figure caption
+    validate_quote=True 时, 验证 quote 在 PDF 里真实出现 (case-insensitive, whitespace-normalized)
+
+    Entry 格式 (向后兼容):
+    - 2-tuple: (page_idx, phrase) - 默认 mode=line, 无 end_phrase, 无 reason
+    - 3-tuple: (page_idx, phrase, mode) - 无 end_phrase, 无 reason
+    - 4-tuple: (page_idx, phrase, mode, end_phrase) - 无 reason
+    - 5-tuple: (page_idx, phrase, mode, end_phrase, reason) - 全字段
     """
     doc = fitz.open(pdf_path)
     n_total = 0
     n_skipped = 0
+    n_invalid = 0
     results = []
     for entry in entries:
         if len(entry) == 2:
             page_idx, phrase = entry
             mode = "line"
             end_phrase = None
+            reason = None
         elif len(entry) == 3:
             page_idx, phrase, mode = entry
             end_phrase = None
-        else:
+            reason = None
+        elif len(entry) == 4:
             page_idx, phrase, mode, end_phrase = entry
+            reason = None
+        else:
+            page_idx, phrase, mode, end_phrase, reason = entry
 
         if page_idx >= doc.page_count:
             results.append({"phrase": phrase[:50], "mode": mode, "ok": False, "reason": "page_oor"})
             continue
         page = doc[page_idx]
+
+        # v12 新增: verbatim quote validation (借鉴 ReconAI)
+        if validate_quote and phrase:
+            is_valid, v_reason = validate_quote_in_pdf(doc, phrase, page_idx=page_idx)
+            if not is_valid:
+                n_invalid += 1
+                results.append({
+                    "phrase": phrase[:50], "mode": mode, "ok": False,
+                    "reason": f"validate:{v_reason}",
+                })
+                continue
 
         if mode == "phrase":
             rect = find_phrase_rect(page, phrase, page_idx)
@@ -432,17 +506,17 @@ def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
 
         # v4 新增: 禁高亮 filter
         if enforce_forbidden:
-            is_bad, reason = is_forbidden_zone(page, rect, page_idx)
+            is_bad, fb_reason = is_forbidden_zone(page, rect, page_idx)
             if is_bad:
                 n_skipped += 1
                 results.append({
                     "phrase": phrase[:50], "mode": mode, "ok": False,
-                    "reason": f"forbidden:{reason}",
+                    "reason": f"forbidden:{fb_reason}",
                     "rect": [rect.x0, rect.y0, rect.x1, rect.y1],
                 })
                 continue
 
-        if apply_underline(page, rect, anchor_text=phrase):
+        if apply_underline(page, rect, anchor_text=phrase, reason=reason):
             n_total += 1
             results.append({
                 "phrase": phrase[:50],
@@ -451,13 +525,14 @@ def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
                 "ok": True,
                 "rect": [rect.x0, rect.y0, rect.x1, rect.y1],
                 "rect_normalized": rect_to_normalized(page, rect),
+                "reason": reason,
             })
         else:
             results.append({"phrase": phrase[:50], "mode": mode, "ok": False, "reason": "annot_failed"})
 
     doc.save(out_path)
     doc.close()
-    return {"ok": n_total, "skipped": n_skipped, "total": len(entries), "details": results}
+    return {"ok": n_total, "skipped": n_skipped, "invalid": n_invalid, "total": len(entries), "details": results}
 
 
 def main():
