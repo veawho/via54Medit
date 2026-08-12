@@ -342,15 +342,50 @@ def find_paragraph_rect(page, anchor_phrase, end_phrase=None, max_lines=8):
     return find_line_rect(page, anchor_phrase)
 
 
-def apply_underline(page, rect, color=(1, 1, 0), expand=0):
-    """应用 underline 到 rect"""
+def apply_underline(page, rect, color=(1, 1, 0), expand=0, anchor_text=None):
+    """应用 underline 到 rect. 可选 anchor_text 写进 PDF 注释 content stream (任何 PDF reader 点 highlight 都能看到原文)."""
     r = fitz.Rect(rect.x0 - expand, rect.y0, rect.x1 + expand, rect.y1)
     annot = page.add_underline_annot(r)
     if annot:
         annot.set_colors(stroke=color)
+        if anchor_text:
+            # set_info(content=...) 写进 PDF 注释元数据, 阅读器点 highlight 会显示这段文字
+            annot.set_info(content=anchor_text)
         annot.update()
         return True
     return False
+
+
+def rect_to_normalized(page, rect):
+    """把 fitz.Rect (absolute coords) 转成 0-1 归一化坐标 (类似 react-pdf-highlighter ScaledPosition).
+
+    输出格式: {x1, y1, x2, y2, width, height, pageNumber}
+    - 跨 viewport/DPI 一致, 可序列化成 JSON 存 server
+    - pageNumber 用 1-indexed (跟 PDF.js 一致)
+    """
+    pw = page.rect.width
+    ph = page.rect.height
+    return {
+        "x1": rect.x0 / pw,
+        "y1": rect.y0 / ph,
+        "x2": rect.x1 / pw,
+        "y2": rect.y1 / ph,
+        "width": (rect.x1 - rect.x0) / pw,
+        "height": (rect.y1 - rect.y0) / ph,
+        "pageNumber": page.number + 1,
+    }
+
+
+def normalized_to_rect(page, norm):
+    """ScaledPosition 0-1 归一化坐标 → fitz.Rect (absolute coords)"""
+    pw = page.rect.width
+    ph = page.rect.height
+    return fitz.Rect(
+        norm["x1"] * pw,
+        norm["y1"] * ph,
+        norm["x2"] * pw,
+        norm["y2"] * ph,
+    )
 
 
 def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
@@ -407,13 +442,15 @@ def highlight_phrase_in_pdf(pdf_path: str, out_path: str,
                 })
                 continue
 
-        if apply_underline(page, rect):
+        if apply_underline(page, rect, anchor_text=phrase):
             n_total += 1
             results.append({
                 "phrase": phrase[:50],
+                "phrase_full": phrase,
                 "mode": mode,
                 "ok": True,
                 "rect": [rect.x0, rect.y0, rect.x1, rect.y1],
+                "rect_normalized": rect_to_normalized(page, rect),
             })
         else:
             results.append({"phrase": phrase[:50], "mode": mode, "ok": False, "reason": "annot_failed"})
