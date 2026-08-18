@@ -598,7 +598,7 @@ via54Medit 的 highlight 工具配套 skill 在 `~/.hermes/skills/devops/via54-h
 | `via54_highlight_fix_v10.py` | `scripts/via54_highlight_fix_v10.py` | Step 4 | v10.1 line 模式 highlight (40 tests) |
 | `glm_integration.py` | `scripts/glm_integration.py` | Step 3/4/5 | GLM 5 能力兜底 (verify/supplement/extract/find_highlight_coordinates/semantic_align) |
 | `step5_alignment.py` | `scripts/step5_alignment.py` | Step 5 | 三方对齐 (5 子检查, GLM 救 5#3 0%→17.6%) |
-| `literature_v8_fix_merge_dirs.py` | `scripts/literature_v8_fix_merge_dirs.py` | Step 6 | 合并同 DOI Pn-x 目录 (`Pn1-x1Pn2-x2` 格式) |
+| `literature_v8_fix_merge_dirs.py` | `scripts/literature_v8_fix_merge_dirs.py` | Step 6 | 合并同 DOI Pn-x 目录(⚠️ 旧格式 `Pn1-x1Pn2-x2`, 仅历史; 新标准见 `docs/8列标准与合并规则_2026-08-14.md`, 命名 `P3-1_P4-1`) |
 | `multi_project_diff.py` | `scripts/multi_project_diff.py` | 跨项目 | 双项目对比报告 |
 
 ### via54.py 子命令速查
@@ -629,12 +629,12 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 6 步规则核心要点 (摘要)
 
-- **Step 1**: 3 个目录 (PPT/PDF/Highlight), PPT 扩页保证内容可见
-- **Step 2**: 视觉+文字提取 citation_marks, 输出 `_vision_report.json`
-- **Step 3**: D 列引文 = 唯一真值, DOI 交叉校验, 5 维 L0 验真 + 5 维 L4 抽词
-- **Step 4**: **细黄线** (line 模式), 跳 header/author, 多引文展开, 多页应证
+- **Step 1**: 3 个目录 (PPT/PDF/Highlight), PPT 扩页保证内容可见; 新流程 `scripts/hl_v3_final/step1_export_slides.py`(soffice→PDF→JPG)
+- **Step 2**: 视觉+文字提取 citation_marks, 输出 `_vision_report.json`; 新流程 `scripts/hl_v3_final/step2_extract_refs.py`(106 条全量回归)
+- **Step 3**: D 列引文 = 唯一真值, DOI 交叉校验, 5 维 L0 验真 + 5 维 L4 抽词; 新流程 `scripts/hl_v3_final/step3_download.py`(CrossRef/OpenAlex/Unpaywall/S2 四级降级 + 下载后校验)
+- **Step 4**: **v3 FINAL rect 模式**(opacity 0.45, RGB 255,217,0, 逐行精确 rect)—— 新交付唯一标准; v10.1 line 细线为旧模式(仅历史参考)
 - **Step 5**: 5 子检查 (PPT/CSV/PDF/Highlight/H 列), GLM 救 5#3
-- **Step 6**: 相同 DOI Pn-x 合并 `Pn1-x1Pn2-x2`, 1 目录 = 1 文献
+- **Step 6**: 同文献合并 `P3-1_P4-1`(下划线按序连接, 旧格式 `Pn1-x1Pn2-x2` 已废弃), 1 目录 = 1 文献
 
 ### 6 步规则 vs 8 列 CSV (双项目验证)
 
@@ -646,5 +646,46 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 已知错论文 (GLM 已识别, 需手工从 Google Patents / 替代源补)
 
-- **TMA 16 个**: P12-1, P13-1, P14-3, P23-22, P23-26, P23-3, P23-6, P24-1, P25-5, P25-6, P25-7, P28-2, P28-3, P30-3, P5-1, P8-2
+- **TMA 16 个 (2026-08-10 识别)**: P12-1, P13-1, P14-3, P23-22, P23-26, P23-3, P23-6, P24-1, P25-5, P25-6, P25-7, P28-2, P28-3, P30-3, P5-1, P8-2
+- **2026-08-13/14 全量修正后剩余**: 仅 P13-1(待用户提供焦扬论文 DOI 10.3969/j.issn.1672-4992.2023.10.021)、P12-3(UpToDate 占位)、P31-6(2025 AANEM 摘要待提供); 其余 13 个已重下正确 PDF
 - **雷管方案 1 个**: P40-10 (WO 专利不是期刊文章, 走 Google Patents PDF)
+
+---
+
+## 🚀 v3 FINAL 权威机制 (2026-08-13/14 定稿, 新交付唯一标准)
+
+> 用户验收通过的全量交付基线(106 Pn-x 全量重做、1325/1325 像素验证、90 合并目录、8 列表、142 URL 验证)。
+> **本仓库权威文件**:
+> - 规范全文: `docs/HIGHLIGHT机制与算法规范_v3_FINAL.md`
+> - 8 列标准 + 合并规则: `docs/8列标准与合并规则_2026-08-14.md`
+> - 工具链: `scripts/hl_v3_final/`(hl_lib.py + render_fitz.py + rerun_all.py + pipeline 脚本 + 105 句子脚本示例)
+
+### Step 4 Highlight — v3 FINAL rect 模式(取代 v10.1 line)
+
+| 项 | 唯一权威值 | 旧值(废弃) |
+|---|---|---|
+| annot 类型 | `add_rect_annot`(PDF Square) | `add_highlight_annot`(扩展 ~3.7pt) / 内容流画线 |
+| 颜色 | RGB(255, 217, 0) = (1.0, 0.85, 0.0) | RGB(255,230,100) |
+| 透明度 | **0.45** | 0.8 压暗 / 细线 |
+| 行级覆盖 | 每行一个 rect(行距法, 最小 8pt) | 大段色块 |
+| 渲染 | fitz `get_pixmap()` 零补偿 | pdftoppm(偏移 ~8pt) / offset 参数 |
+| 验证 | 直接迭代 `page.annots()` | `list(annots())`(假损坏误报) |
+
+```bash
+# 完整流程 (每个 Pn-x 一个句子脚本, 禁止复制其他 Pn-x)
+python3 scripts/hl_v3_final/rerun_all.py          # 幂等重跑(先清旧 annots)
+python3 scripts/hl_v3_final/render_fitz.py <hl.pdf> <pages_dir> 100
+python3 scripts/hl_v3_final/copy_hl_images.py     # 根目录只留高亮页
+/usr/bin/python3 scripts/hl_v3_final/test_hl_lib.py   # 25 passed
+```
+
+### 8 列标准表(本地+在线与雷管方案完全一致)
+
+- 本地表: PN | 幻灯片 | 引用序号 | 引用 | PDF大小 | 已Highlight | MD5 | 页数
+- 在线表(飞书): PPT页 | 第几条 | 引用语义（上下文） | PPT中的文献引用 完整字段 | DOI | 类型 | 对应PDF文件 | 来源链接 → 阅读全文(H 列卡片)
+- 生成: `scripts/hl_v3_final/align_tables.py` → `scripts/hl_v3_final/leiguan_table.py --write`
+
+### 同文献合并(取代旧 `Pn1-x1Pn2-x2`)
+
+- 合并判定 = 引用文本指向同一文献(不能只看 MD5: 同一文献不同下载版本 MD5 不同仍要合并)
+- 新目录名 = 成员按数字顺序下划线连接: `P3-1_P4-1`; TMA 106→90 目录(12 组合并, 28 个 Pn-x)

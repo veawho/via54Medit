@@ -1,8 +1,16 @@
-# 6 步文献整理 SOP (2026-08-10 用户版)
+# 6 步文献整理 SOP (2026-08-10 用户版, 2026-08-14 v3 FINAL 对齐)
 
 > 任何 PPT + 文献场景（医药/学术/商业）, 按这 6 步走, 输出合规的 `_3_highlight_v10/` 目录 + 8 列标准 CSV + 三方对齐报告。
 >
 > **本文件是执行手册**, 规则文本定义在 `scripts/via54_rules.py` 的 `RULES_TEXT` 里, 校验工具是 `python3 scripts/via54_rules.py check <project_dir>`。
+>
+> **⚠️ 2026-08-14 v3 FINAL 对齐(重要变更)**:
+> - **Step 4 新标准 = v3 FINAL rect 模式**(`scripts/hl_v3_final/hl_lib.py`, opacity 0.45, RGB 255,217,0, 逐行精确 rect);
+>   v10.1 line 细线模式降级为历史参考。完整规范: `docs/HIGHLIGHT机制与算法规范_v3_FINAL.md`
+> - **Step 6 合并格式变更**: `Pn1-x1Pn2-x2`(无下划线) → **`P3-1_P4-1`**(下划线按序连接);
+>   合并判定 = 引用文本指向同一文献(不能只看 MD5)。详见 `docs/8列标准与合并规则_2026-08-14.md`
+> - **Step 3 新下载链**: `scripts/hl_v3_final/step3_download.py`(CrossRef/OpenAlex/Unpaywall/S2 四级降级, TMA 实测 90-95% 成功率)
+> - 新 PPT 三步流程: `scripts/hl_v3_final/step1_export_slides.py` → `step2_extract_refs.py` → `step3_download.py`
 
 ---
 
@@ -193,7 +201,7 @@ python3 scripts/via54_pdf_download.py <d_citation> --out <Pn-x_dir>
 
 ## 4. Step 4 — Highlight PDF (按 slide 顺序)
 
-**目标**: 按 PPT 视觉分析结果, 在 PDF 中画细黄线 highlight 应证内容。
+**目标**: 按 PPT 视觉分析结果, 在 PDF 中画**半透明黄色 rect** highlight 应证内容(整句/整段)。
 
 ### 4.1 算法选型
 
@@ -201,30 +209,38 @@ python3 scripts/via54_pdf_download.py <d_citation> --out <Pn-x_dir>
 |---|---|---|---|
 | v9.7 add_highlight_annot | fill | 矩形 annotation, 颜色经常丢 | ❌ |
 | v9.7 fill | fill | 矩形填充, 位置错 | ❌ |
-| **v10.1 line** | **line** | **文字下方细黄线, 跳 header/author** | **✅ 默认 (6 步规则)** |
-| v10.1 both | line + fill | 同时画, 重叠 | 备用 |
+| v10.1 line | line | 文字下方细黄线 | 历史参考(已降级) |
+| **v3 FINAL rect** | **rect** | **opacity 0.45 半透明逐行 rect, 精确对齐, 用户验收通过** | **✅ 唯一标准** |
 
-### 4.2 跑 highlight
+### 4.2 跑 highlight (v3 FINAL, 2026-08-13 定稿)
 
 ```bash
-# 4.2 一键跑全 (use_glm 调 GLM 应证)
-python3 scripts/via54_highlight_fix_v10.py <project_dir> --mode line --use-glm
-# 或 via54.py:
-python3 scripts/via54.py highlight --project 雷管方案 --mode line
+# 每个 Pn-x 一个句子脚本(按 slide 视觉选整句, 禁止复制其他 Pn-x):
+#   模板: scripts/hl_v3_final/examples/hl_p11-1.py (105 个示例)
+# 批量重跑(幂等: 先清旧 annots 再加) + fitz 渲染 + 根目录只留高亮页
+python3 scripts/hl_v3_final/rerun_all.py
+python3 scripts/hl_v3_final/copy_hl_images.py
+# 单元测试
+/usr/bin/python3 scripts/hl_v3_final/test_hl_lib.py   # 25 passed
 ```
 
-**关键修复 (v10)**:
-1. **annotation 颜色丢失** → 改用内容流画黄 (fill 不靠 annotation)
-2. **位置错** → 按 bbox 找文字下沿画细线
-3. **single page** → 自动扩展到多页 (mOS 23.7 在 page 9)
-4. **fuzzy 兜底** → 5 维相似度匹配, 找不到 100% 字面也能画
+**样式唯一权威值**:
+1. fill/stroke RGB(255, 217, 0) = (1.0, 0.85, 0.0)
+2. opacity **0.45**(0.8 压暗文字, 禁止)
+3. `add_rect_annot`(PDF Square, border 0); **禁止 `add_highlight_annot`**(自动扩展 ~3.7pt)
+4. 每行一个 rect, 行高 = 行距法(下一行 y0 - 本行 y0 - 1, 最小 8pt)
+5. 句首尾精确对齐 + 引用编号保护(不盖 `[1,2]`)
+6. 渲染 = fitz `get_pixmap()` 零补偿; **禁止 pdftoppm**(cropbox≠0 偏移 ~8pt)和 offset 参数
+7. 验证 = 直接迭代 `page.annots()`(`list(annots())` 报假损坏)
 
 **Step 4 关键规则**:
-- 6 步规则 #4: "**文字下方细黄线**", 不是矩形覆盖
-- 多引文 (1,2 / 1-3) 展开为多个, 各自应证
-- 跳 header / footer / author 段, 只画正文应证
+- 高亮 = 支持 slide 的**完整句子/段落/图表说明**, 禁止关键词/单一数字
+- 禁止: 标题/作者/文献信息/页眉页脚/引用编号/参考文献列表
+- 同一文献的不同 Pn-x 必须按各自 slide 选句, 禁止复制 highlight
+- 页面重复文本用 `(text, occurrence)` 元组消歧
+- 句子被图表/双栏打断时, 选连续物理布局的子段
 
-**Step 4 完成标志**: highlight 目录 = PPT 引用序号条数个 Pn-x 目录, 每目录 1 个 highlight PDF + 多张 page jpg (line 模式黄色细线可见)。
+**Step 4 完成标志**: highlight 目录 = PPT 引用序号条数个 Pn-x 目录, 每目录 1 个 highlight PDF + 根目录仅高亮页图 + `verify.json`。
 
 ### 4.3 GLM 增强 (v10.2, 可选但推荐)
 
@@ -278,27 +294,33 @@ python3 scripts/step5_alignment.py --project TMA --use-glm
 
 ## 6. Step 6 — 合并目录 + 打包
 
-**目标**: 相同文献 (DOI 相同) 的 Pn-x 合并为 `Pn1-x1Pn2-x2` 格式目录。
+**目标**: 相同文献 (引用文本一致, 或同 DOI) 的 Pn-x 合并为 **`P3-1_P4-1`** 格式目录(下划线按序连接)。
 
-### 6.1 合并
+### 6.1 合并 (2026-08-14 定稿规则)
 
 ```bash
-# 6.1 合并 nested 目录
-python3 scripts/literature_v8_fix_merge_dirs.py <highlight_dir>
-# 规则: 相同 DOI 的 Pn-x 合并为 Pn1-x1Pn2-x2
-# 验证: 每目录 1 篇文献, 1 文献 = 1 目录
+# 合并判定: 引用文本指向同一文献 (⚠️ 不能只看 MD5: 同一文献不同下载版本 MD5 不同仍要合并)
+# 新目录名: 成员 Pn-x 按数字顺序下划线连接
+#   P3-1 + P4-1 → P3-1_P4-1
+#   P11-2 + P12-1 + P22-2 + P25-8 → P11-2_P12-1_P22-2_P25-8
+# 旧格式 Pn1-x1Pn2-x2 (无下划线) 已废弃
+# TMA 全量清单 (12 组合并, 106→90 目录): docs/8列标准与合并规则_2026-08-14.md
 ```
 
 **合并后结构**:
 ```
 step4_highlight_v10/
 ├── P11-1/                     # 唯一文献
-├── P11-2P11-3/                # 合并 (DOI 相同)
-│   ├── main.pdf
-│   └── page_001.jpg
+├── P3-1_P4-1/                 # 合并 (同文献)
+│   ├── P3-1_highlight.pdf     # 各成员文件全部保留
+│   ├── P4-1_highlight.pdf
+│   ├── P3-1_main.pdf
+│   └── P4-1_main.pdf
 ├── P40-10/                    # 唯一
-└── P5-1P5-2P5-3/              # 合并 3 个
+└── P11-2_P12-1_P22-2_P25-8/   # 合并 4 个
 ```
+
+**合并后检查**: 各成员 highlight.pdf / main.pdf / verify.json 齐全; 打包前全量验证 annots > 0、根目录图片页号一致; 本地表/在线表仍按 106 Pn-x 逐行(合并只影响目录)。
 
 ### 6.2 最终检查
 
@@ -306,7 +328,7 @@ step4_highlight_v10/
 - [ ] 扩尺寸 PPT ✓
 - [ ] 扩尺寸 PPT 图片 ✓
 - [ ] 下载目录 (nested: Pn-x/main.pdf) ✓
-- [ ] highlight 目录 (merged: Pn1-x1Pn2-x2/main.pdf) ✓
+- [ ] highlight 目录 (merged: P3-1_P4-1/main.pdf, 下划线格式) ✓
 - [ ] PPT-文献逐页引用表 (8 列 CSV) ✓
 - [ ] 三方对齐报告 (Step 5) ✓
 
@@ -349,7 +371,8 @@ python3 scripts/via54.py diff                                       # 双项目�
 | Step 3 PDF 下载 | `process_all_pn_x.py` + `via54_pdf_download.py` | ✓ 雷管 160, TMA 106 |
 | Step 3 L0 错论文 | `l0_paper_match.py` (5 维) | ✓ 16 个 wrong paper 识别 |
 | Step 3 L4 关键词 | `l4_keyword_extract.py` (5 维) | ✓ 通用词问题修复 |
-| Step 4 Highlight v10.1 | `via54_highlight_fix_v10.py` | ✓ 雷管 99.4% / TMA 85.8% |
+| Step 4 Highlight v10.1 | `via54_highlight_fix_v10.py` | 历史参考 (雷管 99.4% / TMA 85.8%) |
+| Step 4 Highlight v3 FINAL | `hl_v3_final/rerun_all.py` + `hl_lib.py` | ✅ **唯一标准** (TMA 106/106, 1325/1325 像素验证) |
 | Step 4 GLM 应证 | `glm_integration.py` | ✓ TMA 5#3 0%→17.6% |
 | Step 5 三方对齐 | `step5_alignment.py` | ✓ 雷管 100/100/99.4%, TMA 98/98/0% (GLM 后 17.6%) |
 | Step 6 目录合并 | `literature_v8_fix_merge_dirs.py` | ✓ 雷管 1 个 (P4-1P36-1) |
@@ -366,9 +389,10 @@ python3 scripts/via54.py diff                                       # 双项目�
 | Step 2 ❌ "无 _vision_report.json" | 没跑 `ppt_vision_analyze.py` | 跑一遍 |
 | Step 3 ❌ "Pn-x 缺 PDF" | 下载失败 | 跑 `l0_paper_match.py` 验错论文, 用 `auto_redownload.py` 兜底 |
 | Step 4 ❌ "0 hits" | 关键词太通用 | 跑 `l4_keyword_extract.py` 加医学术语 |
-| Step 4 ❌ "highlight 标错位置" | 还在 v9.7 | 切到 v10.1 line 模式 |
+| Step 4 ❌ "highlight 标错位置" | 还在 v9.7/v10.1 line | 切到 v3 FINAL rect 模式 (`scripts/hl_v3_final/`) |
+| Step 4 ❌ "无高亮色块/空 rect" | 句末标点漏 ASCII `.` / 句号跳位 | 用 hl_lib(已修复); 批量后重跑一遍 |
 | Step 5#3 0% | slide 6+ 没 docling 应证 | 加 `--use-glm` 跑 GLM 语义对齐 |
-| Step 6 ❌ "合并冲突" | DOI 解析不同 | 看 manifest, 强制按文件名合并 |
+| Step 6 ❌ "合并冲突" | DOI 解析不同 | 按**引用文本一致**判定(非 MD5/DOI 文件名), 新命名 `P3-1_P4-1` |
 
 ---
 
@@ -378,7 +402,12 @@ python3 scripts/via54.py diff                                       # 双项目�
 |---|---|
 | `scripts/via54.py` | 统一入口 (8 子命令) |
 | `scripts/via54_rules.py` | 6 步规则 + 校验 (23 tests) |
-| `scripts/via54_highlight_fix_v10.py` | v10.1 line 模式 highlight (40 tests) |
+| `scripts/via54_highlight_fix_v10.py` | v10.1 line 模式 highlight (40 tests, 历史参考) |
+| `scripts/hl_v3_final/hl_lib.py` | ⭐ v3 FINAL 精确逐行 rect 算法 (25 tests) |
+| `scripts/hl_v3_final/rerun_all.py` | 批量重跑 (幂等 + fitz 渲染) |
+| `scripts/hl_v3_final/step1/2/3_*.py` | 新 PPT 三步流程 (导出/提取引用/下载) |
+| `scripts/hl_v3_final/align_tables.py` | 8 列本地表 + 在线表同构生成 |
+| `scripts/hl_v3_final/leiguan_table.py` | 雷管方案在线表 + H 列卡片 + 写飞书 |
 | `scripts/glm_integration.py` | GLM 5 能力兜底层 |
 | `scripts/l0_paper_match.py` | 5 维论文匹配 (根治错论文) |
 | `scripts/l4_keyword_extract.py` | 5 维关键词 (根治通用词) |
@@ -392,6 +421,6 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ---
 
-**最后更新**: 2026-08-10
+**最后更新**: 2026-08-14
 **维护者**: Devin 魏宇浩 + Mavis
-**版本**: v10.2 (含 GLM 兜底)
+**版本**: v3 FINAL (Step 4 rect 模式 + Step 6 新合并格式 + 8 列标准, 取代 v10.2 line)

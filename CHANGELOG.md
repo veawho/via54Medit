@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [4.6.0] - 2026-08-18 (v3 FINAL 全量经验注入: highlight rect 模式 + 8列表 + 合并规则)
+
+### Added
+- **docs/HIGHLIGHT机制与算法规范_v3_FINAL.md**: 106 Pn-x 全量交付权威规范(逐行 rect 算法/渲染/质检/复现)
+- **docs/8列标准与合并规则_2026-08-14.md**: 雷管方案 8 列表(本地+在线同构) + H 列卡片 + 同文献合并规则
+- **scripts/hl_v3_final/**: hl_lib.py(精确逐行 rect, 25 用例) + render_fitz.py + rerun_all.py + copy_hl_images.py + vision_check.py + 新 PPT 三步流程(step1/2/3) + align_tables/leiguan_table + 105 句子脚本示例
+
+### Changed
+- **AGENTS.md**: Step 4 唯一标准 = v3 FINAL rect 模式(opacity 0.45, RGB 255,217,0, 禁 add_highlight_annot/pdftoppm); Step 6 合并格式 `Pn1-x1Pn2-x2` → `P3-1_P4-1`(下划线按序); 错论文状态更新(仅剩 P13-1/P12-3/P31-6)
+- **docs/6_step_sop.md**: Step 4/6 重写对齐 v3 FINAL; 故障排查/工具索引/版本号同步
+
+### 验证
+- hl_lib 单元测试 25/25 passed
+- 仓库与 skill 侧工具链 diff 一致
+- TMA 交付基线: 106 Pn-x 高亮 1325/1325 像素验证, 90 合并目录, 142 URL 0 失效
+
 ## [4.5.5] - 2026-06-30 (可重放性文档 + 3 个规则)
 
 ### Added
