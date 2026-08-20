@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scripts/tma_highlight_by_slide.py (新)**: 按 slide 分组驱动 highlight — ①导出全部 slide 图 _ppt_renders/ (python-pptx 近似渲染) ②逐页视觉提取 (文本/表格/图片形状, 融合 vision report) ③对照该页所有 PDF ④**文字段落 + 表格 (find_tables) + 图表/图片 (get_image_info) 四类应证 highlight** (v3 FINAL rect + 9 铁律, xref 层规避 PyMuPDF 1.28.2 annot.rect 原生崩溃 bug + clean-resave 兼容)
 - **via54.py hl-batch 默认按 slide 分组** (tma_highlight_by_slide.py), --legacy 走旧文字-only 模式
 - **test_tma_pipeline.py 扩至 61 用例**: T11 by-slide (slide_terms / find_table_matches / find_image_matches) + T10 更新 (hl-batch 默认/legacy)
+- **scripts/ppt_render_engine.py (新)**: PPT → 图片多引擎自动渲染 — ①PowerPoint COM (ProgID PowerPoint.Application) ②WPS 演示 COM (KWPP.Application) ③python-pptx 近似兜底; 检测到 COM 引擎缺 pywin32 自动安装; DispatchEx 强制新实例 (修复 Dispatch 连接残留); 任一引擎失败自动降级
+- **tma_highlight_by_slide.py Step 0 接入 ppt_render_engine**: 全量 slide 图改用系统 PowerPoint 真实渲染 (本机实测: 非白像素 14-35% vs 近似渲染 1-11%)
+- **test_tma_pipeline.py 扩至 65 用例**: T12 渲染引擎 (ProgID 探测 / 兜底渲染 / COM 失败降级)
 
 ### Fixed
 - TMA 下载器 Windows stdout GBK UnicodeEncodeError 崩溃 (sys.stdout.reconfigure utf-8)

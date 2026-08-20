@@ -450,5 +450,58 @@ class TestFindImageMatches(unittest.TestCase):
         self.assertEqual(matches, [])
 
 
+# ---------- T12: PPT 渲染引擎自动接入 (ppt_render_engine) ----------
+import ppt_render_engine as pre
+from unittest import mock
+
+
+class TestRenderEngine(unittest.TestCase):
+    def test_progid_available_false_for_garbage(self):
+        # 不存在的 ProgID 必须返回 False (不误报)
+        self.assertFalse(pre._progid_available("No.Such.ProgID.12345"))
+
+    def test_detect_engines_always_has_fallback(self):
+        engines = pre.detect_engines()
+        self.assertTrue(any(k == "python_pptx" for _, k, _ in engines))
+
+    def test_render_python_pptx_fallback(self):
+        # 构造一个简单 pptx, 验证 python-pptx 兜底渲染输出 PNG
+        try:
+            from pptx import Presentation
+        except ImportError:
+            self.skipTest("python-pptx 缺失")
+        tmp = tempfile.mkdtemp()
+        pptx = os.path.join(tmp, "t.pptx")
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        tb = slide.shapes.add_textbox(72, 72, 400, 60)
+        tb.text = "TMA 补体通路"
+        prs.save(pptx)
+        out = os.path.join(tmp, "out")
+        n = pre.render_via_python_pptx(pptx, out)
+        self.assertEqual(n, 1)
+        self.assertTrue(os.path.exists(os.path.join(out, "slide_001.png")))
+
+    def test_render_auto_falls_back_when_com_fails(self):
+        # COM 全失败 → 必须降级 python-pptx 且不抛异常
+        try:
+            from pptx import Presentation
+        except ImportError:
+            self.skipTest("python-pptx 缺失")
+        tmp = tempfile.mkdtemp()
+        pptx = os.path.join(tmp, "t.pptx")
+        prs = Presentation()
+        prs.slides.add_slide(prs.slide_layouts[6])
+        prs.save(pptx)
+        out = os.path.join(tmp, "out2")
+        with mock.patch.object(pre, "detect_engines", return_value=[
+            ("fake", "com", "No.Such.ProgID.999"),
+            ("python-pptx", "python_pptx", ""),
+        ]):
+            n, engine = pre.render_ppt_slides_auto(pptx, out)
+        self.assertGreaterEqual(n, 1)
+        self.assertEqual(engine, "python-pptx")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

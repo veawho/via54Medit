@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hl_
 import fitz
 from hl_lib import highlight_sentences
 from via54_ppt_visual_to_pdf import find_pdf_visual_match
+from ppt_render_engine import render_ppt_slides_auto
 
 # ============ TMA 核心术语表 (中英) ============
 TERMS = [
@@ -51,73 +52,6 @@ def project_root(ns):
 
 
 # ============ Step 0: 导出 PPT slide 图 ============
-def render_ppt_slides(pptx_path, out_dir):
-    """python-pptx + Pillow 近似渲染每页 slide 为 PNG (存档/视觉核对用)"""
-    os.makedirs(out_dir, exist_ok=True)
-    try:
-        from pptx import Presentation
-        from pptx.enum.shapes import MSO_SHAPE_TYPE
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as e:
-        print("  [warn] render 依赖缺失: %s (跳过 slide 图导出)" % e)
-        return 0
-    font_path = None
-    for cand in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc", r"C:\Windows\Fonts\simhei.ttf"]:
-        if os.path.exists(cand):
-            font_path = cand
-            break
-    prs = Presentation(pptx_path)
-    EMU_IN = 914400.0
-    DPI = 120
-    n = 0
-    for idx, slide in enumerate(prs.slides, start=1):
-        w = int(prs.slide_width / EMU_IN * DPI)
-        h = int(prs.slide_height / EMU_IN * DPI)
-        img = Image.new("RGB", (max(w, 1), max(h, 1)), "white")
-        draw = ImageDraw.Draw(img)
-        for shape in slide.shapes:
-            try:
-                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                    bio = io.BytesIO(shape.image.blob)
-                    im = Image.open(bio).convert("RGB")
-                    x0 = int(shape.left / EMU_IN * DPI); y0 = int(shape.top / EMU_IN * DPI)
-                    x1 = int((shape.left + shape.width) / EMU_IN * DPI)
-                    y1 = int((shape.top + shape.height) / EMU_IN * DPI)
-                    if x1 > x0 and y1 > y0:
-                        img.paste(im.resize((x1 - x0, y1 - y0)), (x0, y0))
-                elif shape.has_table:
-                    tbl = shape.table
-                    x0 = int(shape.left / EMU_IN * DPI); y0 = int(shape.top / EMU_IN * DPI)
-                    x1 = int((shape.left + shape.width) / EMU_IN * DPI)
-                    y1 = int((shape.top + shape.height) / EMU_IN * DPI)
-                    draw.rectangle([x0, y0, x1, y1], outline="black")
-                    rows = len(tbl.rows); cols = len(tbl.columns)
-                    rh = (y1 - y0) / rows if rows else 0
-                    cw = (x1 - x0) / cols if cols else 0
-                    for ri in range(rows):
-                        for ci in range(cols):
-                            cell = tbl.cell(ri, ci)
-                            txt = (cell.text or "").strip()[:40]
-                            cx0 = x0 + ci * cw; cy0 = y0 + ri * rh
-                            draw.rectangle([cx0, cy0, cx0 + cw, cy0 + rh], outline="black")
-                            if txt:
-                                fnt = ImageFont.truetype(font_path, max(int(rh * 0.5), 8)) if font_path else ImageFont.load_default()
-                                draw.text((cx0 + 2, cy0 + 2), txt, fill="black", font=fnt)
-                elif shape.has_text_frame:
-                    txt = (shape.text_frame.text or "").strip()
-                    if not txt:
-                        continue
-                    x0 = int(shape.left / EMU_IN * DPI); y0 = int(shape.top / EMU_IN * DPI)
-                    fnt = ImageFont.truetype(font_path, 12) if font_path else ImageFont.load_default()
-                    draw.text((x0 + 2, y0 + 2), txt[:200], fill="black", font=fnt)
-            except Exception:
-                continue
-        out = os.path.join(out_dir, "slide_%03d.png" % idx)
-        img.save(out)
-        n += 1
-    return n
-
-
 # ============ Step 1: slide 视觉提取 ============
 def extract_slide_visual(pptx_path, slide_num, vision=None):
     """python-pptx 提取 slide 文本块/表格/图片 + 融合 _vision_report.json"""
@@ -355,11 +289,11 @@ def main():
         print("错误: 无 _2_pdfs")
         return 1
 
-    # Step 0: 导出 slide 图
+    # Step 0: 导出全部 slide 图 (自动接入系统 PowerPoint/WPS COM, 兜底 python-pptx 近似渲染)
     if not ns.no_render:
         renders = os.path.join(root, "_ppt_renders")
-        n = render_ppt_slides(pptx_path, renders)
-        print("[0] 导出 slide 图: %d 页 → %s" % (n, renders), flush=True)
+        n, engine = render_ppt_slides_auto(pptx_path, renders, width_px=1600)
+        print("[0] 导出 slide 图: %d 页, 引擎=%s → %s" % (n, engine, renders), flush=True)
 
     # vision report
     vpath = os.path.join(root, "_vision_report.json")
