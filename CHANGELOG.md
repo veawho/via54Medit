@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to via54Medit will be documented in this file.
 
@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [4.6.1] - 2026-08-20 (TMA highlight 全流水线集成: 89 引用级联下载 + 内容核验 + 批量 highlight)
+
+### Added
+- **scripts/tma_cascade_download.py**: 多级 OA 级联下载 (OpenAlex/Unpaywall/EuropePMC/NCBI PMC/doi.org), 项目根经 `TMA_PROJECT` 环境变量覆盖
+- **scripts/tma_download_round2.py + tma_scihub.py**: CrossRef 重解析 DOI + 首页内容三维核验 (期刊整词/年份/作者) + Sci-Hub 兜底; 修复 DOI 表 3 处错配 (S9_1/S11_6/S31_1)
+- **scripts/tma_verify_pdfs.py**: 下载后逐 PDF 内容核验 (期刊缩写展开表 40+ 条)
+- **scripts/tma_batch_highlight.py**: 每 Pn-x 按所在 slide 视觉定位批量 v3 FINAL highlight (嵌套目录, 修复旧 batch 无 --slide 过宽匹配)
+- **scripts/tma_verify_highlights.py**: annot/黄色像素/图片完整性/pages 子目录四维验证
+- **scripts/tma_package.py / tma_final_report.py / tma_manual_list.py**: 89 行 8 列 CSV + 交付报告 + 人工下载清单
+- **docs/tma_delivery_2026-08-20/**: TMA 交付物 (对照表/CSV/人工清单/核验报告) + 流水线 README
+
+### Fixed
+- TMA 下载器 Windows stdout GBK UnicodeEncodeError 崩溃 (sys.stdout.reconfigure utf-8)
+- Pn-S27_1 嵌套输出缺失 + Pn-S23_5 0 字节 p5.png (全量重跑 batch 解决)
+- 错配下载 24 篇隔离至项目 `_2_pdfs_wrong/` (含 ojs.omniscient.sg/hanspub 等低质 OA 源)
+- S20_2 (MDPI) / S31_2 (Frontiers) 手动直链修复
+
+### Stats
+- TMA_test: 89 引用, 52 篇有 PDF+highlight (58%), 37 篇付费墙/中文期刊 → `_人工下载清单.md` (含访问链接, 下载按用户要求 1 小时截止)
 ## [4.6.0] - 2026-08-18 (v3 FINAL 全量经验注入: highlight rect 模式 + 8列表 + 合并规则)
 
 ### Added
@@ -293,3 +313,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Remaining (网络阻塞)
 - 61 commits 待 push 到 github.com/veawho/via54Medit
 - 跑 `cd via54Medit && git push origin main` 在网络恢复后
+

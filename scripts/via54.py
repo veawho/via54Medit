@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-via54.py — via54Medit 统一入口 (2026-08-10)
+via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
 
 整合所有 v10 工具, 一个 CLI 全跑.
 
 子命令:
   rules           6 步规则校验
   step5           Step 5 三方对齐
-  highlight       Highlight 重新生成 (v10.1)
+  highlight       Highlight 重新生成 (默认 visual-v3: PPT 视觉 API + v3 FINAL + 9 铁律)
   paper-match     L0 错论文校验
   keyword         L4 关键词抽取
   ppt             PPT 扩页 + 审计 + 渲染
@@ -17,7 +17,10 @@ via54.py — via54Medit 统一入口 (2026-08-10)
 用法:
   python3.11 via54.py rules <project_dir> [--verbose]
   python3.11 via54.py step5 --project 雷管方案
-  python3.11 via54.py highlight --project TMA --mode line
+  python3.11 via54.py highlight --project TMA                    # 默认 visual-v3 (推荐)
+  python3.11 via54.py highlight --project TMA --mode plan-v3      # 用预存 vision plan 快速跑
+  python3.11 via54.py highlight --project TMA --mode legacy-v10  # 旧 v10.1 line 模式 (历史)
+  python3.11 via54.py highlight --project TMA --no-vision        # 不用 vision API
   python3.11 via54.py paper-match <pdf> <citation>
   python3.11 via54.py keyword "<citation>" "[context]"
   python3.11 via54.py ppt audit <input.pptx>
@@ -70,20 +73,112 @@ def cmd_step5(args):
 
 
 def cmd_highlight(args):
+    """
+    Highlight 重新生成 (v3 FINAL + 9 铁律 + 视觉驱动)
+
+    默认流程 (新):
+      via54_ppt_visual_to_pdf.py - PPT 视觉 API 实时识别 + PDF 应证 + v3 FINAL 高亮
+    快速流程 (有预存 vision plan 时):
+      rerun_tma_highlight_v3_final.py - 用预存 vision plan 快速跑
+    兼容模式 (历史参考):
+      --mode legacy-v10 旧 v10.1 line 模式
+
+    用法:
+      python3 via54.py highlight --project TMA      # 默认 visual-v3, 跑所有 PDF
+      python3 via54.py highlight --project TMA --mode plan-v3 --limit 5  # 快速流程
+      python3 via54.py highlight --project TMA --mode legacy-v10  # 旧 v10.1
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", choices=["雷管方案", "TMA"], required=True)
-    parser.add_argument("--mode", default="line", choices=["line", "fill", "both"])
+    parser.add_argument("--mode", default="visual-v3",
+                        choices=["visual-v3", "plan-v3", "line", "fill", "both", "legacy-v10"],
+                        help="""默认 visual-v3 (PPT 视觉 API 实时识别 + 9 铁律)
+                        plan-v3 = 用预存 vision plan 快速跑
+                        legacy-v10 = 旧 v10.1 line 模式 (历史参考)""")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--no-vision", action="store_true",
+                        help="不用 vision API (用 python-pptx fallback)")
+    parser.add_argument("--no-rules", action="store_true",
+                        help="不应用 9 条铁律")
+    parser.add_argument("--slide", type=int, default=None,
+                        help="只处理指定 slide (默认所有)")
+    parser.add_argument("--pptx", default=None,
+                        help="PPT 文件路径 (默认自动查找)")
+    parser.add_argument("--pdf-dir", default=None,
+                        help="PDF 目录 (默认 _2_pdfs)")
+    parser.add_argument("--out-dir", default=None,
+                        help="输出目录 (默认 _3_highlight_v10)")
     ns = parser.parse_args(args)
+
+    # 选脚本
+    if ns.mode == "legacy-v10":
+        # 旧 v10.1 line 模式 (仅历史参考)
+        if ns.project == "雷管方案":
+            script = "rerun_leidafang_highlight_v10.py"
+        else:
+            script = "rerun_tma_highlight_v10.py"
+        argv = ["--mode", "line"]
+        if ns.limit: argv.extend(["--limit", str(ns.limit)])
+        if ns.skip_existing: argv.append("--skip-existing")
+        return _run_module(script, argv)
+
+    # visual-v3 / plan-v3 都基于项目目录跑所有 PDF
+    # 默认项目目录
     if ns.project == "雷管方案":
-        script = "rerun_leidafang_highlight_v10.py"
+        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR", "/Users/david/Desktop/雷管方案_文献整理")
     else:
-        script = "rerun_tma_highlight_v10.py"
-    argv = ["--mode", ns.mode]
-    if ns.limit: argv.extend(["--limit", str(ns.limit)])
-    if ns.skip_existing: argv.append("--skip-existing")
-    return _run_module(script, argv)
+        proj_dir = os.environ.get("VIA54_TMA_DIR", "/Users/david/Desktop/TMA_文献整理")
+
+    # 找 PPT 文件
+    pptx_path = ns.pptx or os.path.join(proj_dir, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
+    if not os.path.exists(pptx_path):
+        # TMA: 找顶层 .pptx
+        for f in os.listdir(proj_dir):
+            if f.endswith(".pptx"):
+                pptx_path = os.path.join(proj_dir, f)
+                break
+
+    pdf_dir = ns.pdf_dir or os.path.join(proj_dir, "_2_pdfs")
+    out_dir = ns.out_dir or os.path.join(proj_dir, "_3_highlight_v10")
+
+    if not os.path.isdir(pdf_dir):
+        print(f"错误: PDF 目录不存在 {pdf_dir}")
+        return 1
+
+    # 列出所有 PDF
+    pdfs = sorted([f for f in os.listdir(pdf_dir) if f.endswith(".pdf") and f.startswith("P")])
+    if ns.limit:
+        pdfs = pdfs[:ns.limit]
+    print(f"待处理 PDF: {len(pdfs)} (mode={ns.mode})")
+
+    # 选脚本
+    if ns.mode == "plan-v3":
+        # 快速流程: 一次跑所有 Pn-x
+        argv = []
+        if ns.limit: argv.extend(["--limit", str(ns.limit)])
+        return _run_module("rerun_tma_highlight_v3_final.py", argv)
+    else:
+        # 默认 visual-v3: 每 PDF 单独跑 (精确但慢)
+        # 输出按 8 列标准嵌套: {Pn-x}/{Pn-x}_main.pdf, _highlight.pdf, _pages/
+        script = "via54_ppt_visual_to_pdf.py"
+        n_ok = 0
+        for pdf_file in pdfs:
+            pdf_in = os.path.join(pdf_dir, pdf_file)
+
+            argv = [pdf_in]
+            if pptx_path and os.path.exists(pptx_path):
+                argv.extend(["--pptx", pptx_path])
+            if ns.no_vision: argv.append("--no-vision")
+            if ns.no_rules: argv.append("--no-rules")
+            if slide_num: argv.extend(["--slide", str(slide_num)])
+
+            print(f"\n=== {pdf_file} (slide {slide_num}) ===", flush=True)
+            rc = _run_module(script, argv)
+            if rc == 0:
+                n_ok += 1
+        print(f"\n=== 总结: {n_ok}/{len(pdfs)} 成功 ===")
+        return 0
 
 
 def cmd_paper_match(args):
