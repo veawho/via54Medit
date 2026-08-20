@@ -27,18 +27,18 @@ def main():
             for part in mid.split(','):
                 part = part.strip()
                 if part.isdigit():
-                    ctx_map['S%s_%s' % (sd['slide_num'], part)] = mark.get('context', '')
+                    ctx_map['P%s-%s' % (sd['slide_num'], part)] = mark.get('context', '')
 
     rows = []
-    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'S(\d+)', x).group(1)), int(x.split('_')[1]))):
-        m = re.match(r'S(\d+)_(\d+)', ref_id)
+    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'P(\d+)-', x).group(1)), int(x.split('-')[1]))):
+        m = re.match(r'P(\d+)-(\d+)', ref_id)
         slide, num = int(m.group(1)), int(m.group(2))
         d_field = refs[ref_id]
         info = doi_map.get(ref_id, {}) or {}
         doi = info.get('doi') or ''
         url = info.get('url') or ''
         ftype = info.get('type') or ('GUIDELINE' if ('共识' in d_field or '指南' in d_field or 'consensus' in d_field.lower()) else 'LITERATURE')
-        pdf_file = ('Pn-%s.pdf' % ref_id) if os.path.exists(os.path.join(PDF_DIR, 'Pn-%s.pdf' % ref_id)) else ''
+        pdf_file = ('%s.pdf' % ref_id) if os.path.exists(os.path.join(PDF_DIR, '%s.pdf' % ref_id)) else ''
         context = (ctx_map.get(ref_id) or '')[:100]
         h_parts = []
         if doi:
@@ -57,7 +57,7 @@ def main():
         w.writerows(rows)
 
     # 覆盖率报告
-    pdfs = set(f.replace('Pn-', '').replace('.pdf', '') for f in os.listdir(PDF_DIR) if f.endswith('.pdf'))
+    pdfs = set(f.replace('.pdf', '') for f in os.listdir(PDF_DIR) if f.endswith('.pdf'))
     hl_dirs = set()
     if os.path.isdir(HL_BASE):
         hl_dirs = set(d for d in os.listdir(HL_BASE) if os.path.isdir(os.path.join(HL_BASE, d)))
@@ -74,8 +74,8 @@ def main():
                 pass
     report = {
         'refs_total': len(refs),
-        'pdfs_present': len([r for r in refs if 'S' in r and ('Pn-%s.pdf' % r) in pdfs]),
-        'pdfs_missing': sorted([r for r in refs if ('Pn-%s.pdf' % r) not in pdfs]),
+        'pdfs_present': len([r for r in refs if ('%s.pdf' % r) in pdfs]),
+        'pdfs_missing': sorted([r for r in refs if ('%s.pdf' % r) not in pdfs]),
         'highlight_dirs': len(hl_dirs),
         'highlight_ok': len(hl_ok),
         'csv_rows': len(rows),

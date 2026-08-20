@@ -172,9 +172,9 @@ def cmd_highlight(args):
         for pdf_file in pdfs:
             pdf_in = os.path.join(pdf_dir, pdf_file)
 
-            # 从文件名提取 slide (Pn-x: Pn=slide 页码, x=该页第几条引用; Pn-S23_5 → 23; P23-5 → 23)
+            # 从文件名提取 slide (Pn-x: Pn=slide 页码, x=该页第几条引用; P3-1 → 3)
             slide_num = None
-            m = re.match(r"Pn-S(\d+)_(\d+)\.pdf", pdf_file) or re.match(r"P(\d+)-(\d+)\.pdf", pdf_file)
+            m = re.match(r"P(\d+)-(\d+)\.pdf", pdf_file)
             if m:
                 slide_num = int(m.group(1))
 

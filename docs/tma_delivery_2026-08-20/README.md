@@ -1,7 +1,8 @@
 ﻿# TMA 文献 Highlight 流水线 (2026-08-20 交付)
 
-> **Pn-x 命名规范**: Pn = PPT 的 slide 页码 (即 S{页码}), x = 该 slide 中第几条引用。
-> 例: Pn-S23_5 = PPT 第 23 页 (slide 23) 的第 5 条引用; 旧命名 P23-5 与之等价。
+> **Pn-x 命名规范**: Pn = PPT 的 slide 页码 (即 P{页码}), x = 该 slide 中第几条引用。
+> 正确格式: P3-1 = PPT 第 3 页 (slide 3) 的第 1 条引用; P23-5 = 第 23 页第 5 条引用。
+> ⚠️ 错误命名 Pn-S3_1 已废弃: 所有文件/目录/代码均归一为 P3-1 格式。
 > highlight 时每个 Pn-x 用其所在 slide 的视觉内容定位应证段。
 > 项目数据: `C:\Users\via54\Desktop\TMA_test\` (PPT: `TMA临床路径的诊断与鉴别.pptx`, 33 页, 89 个引用标号 S3_1..S31_6)
 

@@ -271,7 +271,7 @@ def main():
         for doi in dois[:4]:
             if done:
                 break
-            out_path = os.path.join(OUT, 'Pn-' + ref + '.pdf')
+            out_path = os.path.join(OUT, ref + '.pdf')
             attempts = []
             for src, urls in [
                 ('openalex', [openalex_oa(doi)]),

@@ -380,19 +380,20 @@ def highlight_from_visual(
         result["error"] = f"PDF not found: {pdf_in}"
         return result
 
-    # === 命名约定: 嵌套目录 ===
-    # 从 pdf_in 提取 Pn-x (如 Pn-S23_5.pdf → S23_5; P5-1.pdf → P5-1)
-    pdf_basename = os.path.basename(pdf_in).replace(".pdf", "")  # Pn-S23_5
-    pn_x = pdf_basename.replace("Pn-", "")  # S23_5
-    if not pn_x:
-        pn_x = pdf_basename
+    # === 命名约定: 嵌套目录 (Pn-x: Pn=slide 页码, x=页内第几条引用, 如 P3-1) ===
+    pdf_basename = os.path.basename(pdf_in).replace(".pdf", "")  # P3-1
+    pn_x = pdf_basename
+    # 兼容错误旧命名 Pn-S3_1 → 归一为 P3-1
+    m_old = re.match(r"Pn-S(\d+)_(\d+)$", pn_x)
+    if m_old:
+        pn_x = "P%s-%s" % (m_old.group(1), m_old.group(2))
 
     # 输出目录: 同级 _highlight/{Pn-x}/
     if pdf_out is None:
         pdf_in_dir = os.path.dirname(os.path.abspath(pdf_in))
         parent_dir = os.path.dirname(pdf_in_dir)  # 上一级 (如 _2_pdfs 的父 = 项目根)
         out_base = os.path.join(parent_dir, "_highlight_nested")
-        pdf_out_dir = os.path.join(out_base, f"Pn-{pn_x}")
+        pdf_out_dir = os.path.join(out_base, pn_x)
     else:
         # pdf_out 是用户指定路径
         pdf_out_dir = os.path.dirname(os.path.abspath(pdf_out)) or "."
@@ -406,7 +407,7 @@ def highlight_from_visual(
     result["output_dir"] = pdf_out_dir
 
     # 复制 main PDF 到嵌套目录 (或硬链接)
-    main_pdf_dest = os.path.join(pdf_out_dir, f"Pn-{pn_x}_main.pdf")
+    main_pdf_dest = os.path.join(pdf_out_dir, f"{pn_x}_main.pdf")
     if pdf_in != main_pdf_dest:
         try:
             import shutil
@@ -420,7 +421,7 @@ def highlight_from_visual(
 
     # 输出 highlight PDF
     if pdf_out is None or not pdf_out.endswith(".pdf"):
-        highlight_pdf = os.path.join(pdf_out_dir, f"Pn-{pn_x}_highlight.pdf")
+        highlight_pdf = os.path.join(pdf_out_dir, f"{pn_x}_highlight.pdf")
     else:
         highlight_pdf = pdf_out
     result["highlight_pdf"] = highlight_pdf
@@ -539,12 +540,12 @@ def highlight_from_visual(
             for pi in highlight_pages:
                 page = doc[pi]
                 pix = page.get_pixmap(dpi=150)
-                out_img = os.path.join(pdf_out_dir, f"Pn-{pn_x}_highlight_p{pi+1}.png")
+                out_img = os.path.join(pdf_out_dir, f"{pn_x}_highlight_p{pi+1}.png")
                 pix.save(out_img)
                 result["highlight_images"].append(out_img)
 
             # 6.2 导出所有页面 (Pn-x_highlight_pages 子目录)
-            all_pages_dir = os.path.join(pdf_out_dir, f"Pn-{pn_x}_highlight_pages")
+            all_pages_dir = os.path.join(pdf_out_dir, f"{pn_x}_highlight_pages")
             os.makedirs(all_pages_dir, exist_ok=True)
             result["all_pages_dir"] = all_pages_dir
             for pi in range(len(doc)):

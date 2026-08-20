@@ -155,7 +155,7 @@ def try_urls(urls, out_path, ref, src_label, attempts):
 
 
 def process_ref(ref_id, citation, doi_map_info, out_dir, sleep_s):
-    out_path = os.path.join(out_dir, 'Pn-' + ref_id + '.pdf')
+    out_path = os.path.join(out_dir, ref_id + '.pdf')
     if os.path.exists(out_path) and os.path.getsize(out_path) > 5000:
         v = verify_pdf(out_path)
         if v['ok']:
@@ -245,7 +245,7 @@ def main():
 
     todo = []
     for ref_id, citation in sorted(refs.items()):
-        p = os.path.join(OUT, 'Pn-' + ref_id + '.pdf')
+        p = os.path.join(OUT, ref_id + '.pdf')
         if os.path.exists(p) and os.path.getsize(p) > 5000:
             continue
         todo.append((ref_id, citation))

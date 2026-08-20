@@ -1,6 +1,6 @@
 """tma_batch_highlight.py — 全量嵌套 highlight (v3 FINAL rect 模式, 每 Pn-x 用其所在 slide 视觉定位)
 
-Pn-x 命名: Pn = PPT slide 页码 (即 S{页码}), x = 该 slide 中第几条引用. 例: Pn-S23_5 = 第 23 页第 5 条引用; 旧命名 P23-5 等价.
+Pn-x 命名: Pn = PPT slide 页码 (即 P{页码}), x = 该 slide 中第几条引用. 例: P3-1 = 第 3 页第 1 条引用 (禁止 Pn-S3_1 写法).
 
 修复 _batch_nested.py 的两个问题:
   1) 之前未传 --slide, 把全部 33 页 PPT 内容都拿去匹配每个 PDF (过宽)
@@ -24,11 +24,11 @@ if '--only' in sys.argv:
     only = sys.argv[sys.argv.index('--only') + 1].split(',')
 force = '--force' in sys.argv
 
-pdfs = sorted([f for f in os.listdir(PDF_DIR) if f.endswith('.pdf') and f.startswith('Pn-')])
+pdfs = sorted([f for f in os.listdir(PDF_DIR) if f.endswith('.pdf') and f.startswith('P')])
 print('待处理 PDF:', len(pdfs), flush=True)
 
 def slide_of(pdf_name):
-    m = re.match(r'Pn-S(\d+)_(\d+)\.pdf', pdf_name)
+    m = re.match(r'P(\d+)-(\d+)\.pdf', pdf_name)
     return int(m.group(1)) if m else None
 
 results = []

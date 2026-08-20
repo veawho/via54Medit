@@ -89,7 +89,7 @@ def main():
     for ref_id, citation in sorted(refs.items()):
         if only and ref_id not in only:
             continue
-        path = os.path.join(PDF_DIR, 'Pn-' + ref_id + '.pdf')
+        path = os.path.join(PDF_DIR, ref_id + '.pdf')
         if not os.path.exists(path) or os.path.getsize(path) < 5000:
             results.append({'ref': ref_id, 'verdict': 'no_pdf'})
             continue

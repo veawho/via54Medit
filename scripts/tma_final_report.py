@@ -14,7 +14,7 @@ CSV_OUT = os.path.join(T, '_citations_89_8col.csv')
 def main():
     refs = json.load(open(REF_JSON, encoding='utf-8'))
     doi_map = json.load(open(DOI_MAP, encoding='utf-8'))
-    pdfs = set(f.replace('Pn-', '').replace('.pdf', '') for f in os.listdir(PDF_DIR) if f.endswith('.pdf'))
+    pdfs = set(f.replace('.pdf', '') for f in os.listdir(PDF_DIR) if f.endswith('.pdf'))
     hl_dirs = set()
     if os.path.isdir(HL_BASE):
         hl_dirs = set(d for d in os.listdir(HL_BASE) if os.path.isdir(os.path.join(HL_BASE, d)))
@@ -32,15 +32,15 @@ def main():
 
     # 8 列 CSV
     rows = []
-    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'S(\d+)', x).group(1)), int(x.split('_')[1]))):
-        m = re.match(r'S(\d+)_(\d+)', ref_id)
+    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'P(\d+)-', x).group(1)), int(x.split('-')[1]))):
+        m = re.match(r'P(\d+)-(\d+)', ref_id)
         slide, num = int(m.group(1)), int(m.group(2))
         d_field = refs[ref_id]
         info = doi_map.get(ref_id, {}) or {}
         doi = info.get('doi') or ''
         url = info.get('url') or ''
         ftype = info.get('type') or ('GUIDELINE' if ('共识' in d_field or '指南' in d_field) else 'LITERATURE')
-        pdf_file = ('Pn-%s.pdf' % ref_id) if ref_id in pdfs else ''
+        pdf_file = ('%s.pdf' % ref_id) if ref_id in pdfs else ''
         h_parts = []
         if doi and doi.startswith('10.'):
             h_parts.append('DOI: %s' % doi)
@@ -68,10 +68,10 @@ def main():
     lines.append('')
     lines.append('| 引用 | 引文 (截断) | PDF | Highlight | annots |')
     lines.append('|---|---|---|---|---|')
-    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'S(\d+)', x).group(1)), int(x.split('_')[1]))):
+    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'P(\d+)-', x).group(1)), int(x.split('-')[1]))):
         cit = refs[ref_id][:55].replace('|', '/')
         has_pdf = ref_id in pdfs
-        hl = hl_info.get('Pn-' + ref_id)
+        hl = hl_info.get(ref_id)
         hl_txt = '✅' if hl else ('—' if not has_pdf else '❌')
         annot_txt = str(hl[1]) if hl else ''
         lines.append('| %s | %s | %s | %s | %s |' % (ref_id, cit, '✅' if has_pdf else '❌', hl_txt, annot_txt))
@@ -80,7 +80,7 @@ def main():
     lines.append('')
     lines.append('| 引用 | 引文 | 建议途径 |')
     lines.append('|---|---|---|')
-    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'S(\d+)', x).group(1)), int(x.split('_')[1]))):
+    for ref_id in sorted(refs.keys(), key=lambda x: (int(re.match(r'P(\d+)-', x).group(1)), int(x.split('-')[1]))):
         if ref_id in pdfs:
             continue
         cit = refs[ref_id][:80]

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 test_tma_pipeline.py — TMA 文献 highlight 流水线单测 (2026-08-20)
 
@@ -175,14 +175,16 @@ class TestScoreCrossref(unittest.TestCase):
 
 # ---------- T6: slide_of ----------
 class TestSlideOf(unittest.TestCase):
-    def test_new_naming(self):
-        self.assertEqual(bh.slide_of('Pn-S23_5.pdf'), 23)
+    def test_standard_naming(self):
+        # Pn-x: Pn=slide 页码, x=页内第几条引用
+        self.assertEqual(bh.slide_of('P23-5.pdf'), 23)
 
     def test_single_digit_slide(self):
-        self.assertEqual(bh.slide_of('Pn-S3_1.pdf'), 3)
+        self.assertEqual(bh.slide_of('P3-1.pdf'), 3)
 
-    def test_old_naming(self):
-        self.assertIsNone(bh.slide_of('P23-5.pdf'))
+    def test_wrong_old_format_rejected(self):
+        # Pn-S3_1 为错误命名, 应拒绝 (返回 None)
+        self.assertIsNone(bh.slide_of('Pn-S23_5.pdf'))
 
     def test_no_match(self):
         self.assertIsNone(bh.slide_of('random.pdf'))
