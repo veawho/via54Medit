@@ -13,6 +13,12 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   ppt             PPT 扩页 + 审计 + 渲染
   diff            双项目对比
   all             跑全部
+  download        TMA 文献级联下载 (round1 OA 级联 / round2 CrossRef+核验+SciHub)
+  pdf-verify      下载 PDF 内容核验 (期刊/年份/作者)
+  hl-batch        批量 highlight (嵌套目录, 每 Pn-x 按所在 slide)
+  hl-verify       highlight 质量验证 (annot/黄色像素/图片完整性)
+  report          生成 8 列 CSV + 交付报告
+  manual-list     生成人工下载清单 (付费墙/中文期刊 + 访问链接)
 
 用法:
   python3.11 via54.py rules <project_dir> [--verbose]
@@ -166,6 +172,12 @@ def cmd_highlight(args):
         for pdf_file in pdfs:
             pdf_in = os.path.join(pdf_dir, pdf_file)
 
+            # 从文件名提取 slide (Pn-S23_5 → 23; P23-5 → 23)
+            slide_num = None
+            m = re.match(r"Pn-S(\d+)_(\d+)\.pdf", pdf_file) or re.match(r"P(\d+)-(\d+)\.pdf", pdf_file)
+            if m:
+                slide_num = int(m.group(1))
+
             argv = [pdf_in]
             if pptx_path and os.path.exists(pptx_path):
                 argv.extend(["--pptx", pptx_path])
@@ -179,6 +191,90 @@ def cmd_highlight(args):
                 n_ok += 1
         print(f"\n=== 总结: {n_ok}/{len(pdfs)} 成功 ===")
         return 0
+
+
+
+
+def _tma_project_dir(ns):
+    """解析项目根: --project-dir > TMA_PROJECT env > VIA54_TMA_DIR env"""
+    if getattr(ns, "project_dir", None):
+        return ns.project_dir
+    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or "/Users/david/Desktop/TMA_文献整理"
+
+
+def _run_tma(script, argv, project_dir):
+    os.environ["TMA_PROJECT"] = project_dir
+    print(f"[tma] project={project_dir} script={script} args={argv}", flush=True)
+    return _run_module(script, argv)
+
+
+def cmd_download(args):
+    """TMA 文献级联下载: round1 = OA 级联 (OpenAlex/Unpaywall/EPMC/PMC/doi.org), round2 = CrossRef 重解析 + 内容核验 + Sci-Hub"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None, help="项目根 (默认 TMA_PROJECT env)")
+    parser.add_argument("--round2", action="store_true", help="用 round2 (CrossRef 重解析 DOI + 三维核验 + Sci-Hub 兜底)")
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--only", default=None, help="只处理指定引用, 逗号分隔")
+    parser.add_argument("--sleep", type=float, default=0.5)
+    ns = parser.parse_args(args)
+    proj = _tma_project_dir(ns)
+    script = "tma_download_round2.py" if ns.round2 else "tma_cascade_download.py"
+    argv = []
+    if ns.limit: argv.extend(["--limit", str(ns.limit)])
+    if ns.only: argv.extend(["--only", ns.only])
+    if ns.sleep != 0.5: argv.extend(["--sleep", str(ns.sleep)])
+    return _run_tma(script, argv, proj)
+
+
+def cmd_pdf_verify(args):
+    """下载后 PDF 内容核验 (期刊/年份/作者匹配)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--only", default=None)
+    ns = parser.parse_args(args)
+    argv = []
+    if ns.only: argv.extend(["--only", ns.only])
+    return _run_tma("tma_verify_pdfs.py", argv, _tma_project_dir(ns))
+
+
+def cmd_hl_batch(args):
+    """批量 highlight: 嵌套目录 + 每 Pn-x 用其所在 slide (v3 FINAL rect + 9 铁律)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--force", action="store_true", help="已存在输出也重跑")
+    parser.add_argument("--only", default=None)
+    ns = parser.parse_args(args)
+    argv = []
+    if ns.force: argv.append("--force")
+    if ns.only: argv.extend(["--only", ns.only])
+    return _run_tma("tma_batch_highlight.py", argv, _tma_project_dir(ns))
+
+
+def cmd_hl_verify(args):
+    """highlight 质量验证 (annot/黄色像素/图片完整性/pages 子目录)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--only", default=None)
+    ns = parser.parse_args(args)
+    argv = []
+    if ns.only: argv.extend(["--only", ns.only])
+    return _run_tma("tma_verify_highlights.py", argv, _tma_project_dir(ns))
+
+
+def cmd_report(args):
+    """生成 89 行 8 列 CSV + 交付报告 md"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    ns = parser.parse_args(args)
+    return _run_tma("tma_final_report.py", [], _tma_project_dir(ns))
+
+
+def cmd_manual_list(args):
+    """生成人工下载清单 (付费墙/中文期刊 + DOI/PubMed/万方/知网链接)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    ns = parser.parse_args(args)
+    return _run_tma("tma_manual_list.py", [], _tma_project_dir(ns))
 
 
 def cmd_paper_match(args):
@@ -256,6 +352,25 @@ def cmd_glm(args):
     return _run_module("glm_integration.py", args)
 
 
+HANDLERS = {
+    "rules": cmd_rules,
+    "step5": cmd_step5,
+    "highlight": cmd_highlight,
+    "paper-match": cmd_paper_match,
+    "keyword": cmd_keyword,
+    "ppt": cmd_ppt,
+    "download": cmd_download,
+    "pdf-verify": cmd_pdf_verify,
+    "hl-batch": cmd_hl_batch,
+    "hl-verify": cmd_hl_verify,
+    "report": cmd_report,
+    "manual-list": cmd_manual_list,
+    "diff": cmd_diff,
+    "glm": cmd_glm,
+    "all": cmd_all,
+}
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -263,18 +378,7 @@ def main():
 
     cmd = sys.argv[1]
     rest = sys.argv[2:]
-
-    handlers = {
-        "rules": cmd_rules,
-        "step5": cmd_step5,
-        "highlight": cmd_highlight,
-        "paper-match": cmd_paper_match,
-        "keyword": cmd_keyword,
-        "ppt": cmd_ppt,
-        "diff": cmd_diff,
-        "glm": cmd_glm,
-        "all": cmd_all,
-    }
+    handlers = HANDLERS
 
     if cmd not in handlers:
         print(f"未知命令: {cmd}")

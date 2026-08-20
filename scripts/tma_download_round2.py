@@ -95,7 +95,7 @@ J_ABBR = {
 }
 def journal_kw(citation):
     kw = set()
-    for m in re.finditer(r'([A-Z][A-Za-z&]+(?:\s[A-Z][A-Za-z&]+){0,4})', citation):
+    for m in re.finditer(r'([A-Z][A-Za-z&]*(?:\s[A-Z][A-Za-z&]*){0,4})', citation):
         tok = m.group(1)
         if 3 <= len(tok) <= 40 and not tok.startswith(('DOI', 'PMID', 'PMC')):
             t = tok.lower()
@@ -106,7 +106,7 @@ def journal_kw(citation):
 
 
 def year_kw(citation):
-    return set(re.findall(r'(19|20)\d{2}', citation))
+    return set(re.findall(r'(?:19|20)\d{2}', citation))
 
 
 def score_crossref(cr, citation):
@@ -208,7 +208,15 @@ def content_ok(txt, citation):
     """核验: 期刊整词 + 年份 + 作者姓氏 三维 (需期刊+年份 或 期刊+作者)"""
     jkw = journal_kw(citation)
     ykw = year_kw(citation)
-    asn = set(re.findall(r'\b([A-Z][a-z]{2,})\b', citation)) - _STOP
+    # 作者候选: 排除期刊缩写词 (J_ABBR 键) 与月份/通用词
+    jall = set()
+    for k in jkw:
+        jall.update(str(k).lower().split())
+    for k in J_ABBR:
+        jall.update(k.split())
+    asn = {a.lower() for a in re.findall(r'\b([A-Z][a-z]{2,})\b', citation)} - _STOP - jall
+    asn = {a for a in asn if a not in ('jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec',
+                                       'et','al','the','doi','vol','suppl','issue','pages','pp')}
     t = txt.lower()
     hit_j = False
     for k in jkw:
