@@ -13,7 +13,8 @@
 | Step 3 下载 | `scripts/tma_cascade_download.py` | 多级 OA 级联: OpenAlex → Unpaywall → EuropePMC → NCBI PMC → doi.org (已知 DOI) |
 | Step 3 恢复 | `scripts/tma_download_round2.py` | CrossRef 重解析 DOI + 首页内容三维核验 (期刊全词+年份+作者) + Sci-Hub 兜底 (`tma_scihub.py`) |
 | Step 3 核验 | `scripts/tma_verify_pdfs.py` | 逐 PDF 首页文本 vs 引文: 期刊/年份/作者匹配, 输出 ok/suspicious/mismatch |
-| Step 4 高亮 | `scripts/tma_batch_highlight.py` | 每 Pn-x 用其所在 slide 视觉定位 → `via54_ppt_visual_to_pdf.py` v3 FINAL rect 模式 (9 铁律), 嵌套目录 `_highlight_nested/` |
+| Step 4 高亮 | `scripts/tma_highlight_by_slide.py` | **按 slide 分组驱动 (推荐)**: ①导出全部 slide 图 `_ppt_renders/` ②逐页视觉提取 (文本/表格/图片形状) ③对照该页所有 PDF ④**文字段落 + 表格 (find_tables) + 图表/图片 (get_image_info) 四类应证 highlight** (v3 FINAL rect + 9 铁律, 嵌套目录) |
+| Step 4 高亮 (legacy) | `scripts/tma_batch_highlight.py` | 旧文字-only 模式 (历史参考; `via54.py hl-batch --legacy`) |
 | Step 5 验证 | `scripts/tma_verify_highlights.py` | annot 数 / 黄色像素 / 图片完整性 / pages 子目录 |
 | Step 6 打包 | `scripts/tma_package.py` + `tma_final_report.py` + `tma_manual_list.py` | 89 行 8 列 CSV + 交付报告 md + 人工下载清单 |
 
@@ -25,7 +26,8 @@ export TMA_PROJECT=/path/to/project        # Windows: set TMA_PROJECT=...
 python scripts/tma_cascade_download.py --limit 5      # 试跑 5 个
 python scripts/tma_download_round2.py                 # 缺失文献恢复下载
 python scripts/tma_verify_pdfs.py                     # 下载后内容核验
-python scripts/tma_batch_highlight.py                 # 全量 highlight (每 Pn-x 用其 slide)
+python scripts/tma_highlight_by_slide.py              # 全量 highlight (按 slide 分组, 文字+表格+图表/图片)
+python scripts/tma_batch_highlight.py --legacy           # 旧文字-only 模式 (历史)
 python scripts/tma_verify_highlights.py               # highlight 质量验证
 python scripts/tma_final_report.py                    # 交付报告 + 8 列 CSV
 python scripts/tma_manual_list.py                     # 人工下载清单

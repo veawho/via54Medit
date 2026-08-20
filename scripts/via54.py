@@ -15,7 +15,7 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   all             跑全部
   download        TMA 文献级联下载 (round1 OA 级联 / round2 CrossRef+核验+SciHub)
   pdf-verify      下载 PDF 内容核验 (期刊/年份/作者)
-  hl-batch        批量 highlight (嵌套目录, 每 Pn-x 按所在 slide)
+  hl-batch        批量 highlight (默认按 slide 分组: slide 图+视觉提取+文字/表格/图表/图片应证; --legacy 旧文字模式)
   hl-verify       highlight 质量验证 (annot/黄色像素/图片完整性)
   report          生成 8 列 CSV + 交付报告
   manual-list     生成人工下载清单 (付费墙/中文期刊 + 访问链接)
@@ -238,16 +238,27 @@ def cmd_pdf_verify(args):
 
 
 def cmd_hl_batch(args):
-    """批量 highlight: 嵌套目录 + 每 Pn-x 用其所在 slide (v3 FINAL rect + 9 铁律)"""
+    """批量 highlight (默认按 slide 分组驱动): 导出全部 slide 图 → 逐页视觉提取 →
+    对照该页所有 PDF → 文字段落 + 表格 + 图表/图片 应证 highlight (v3 FINAL rect + 9 铁律)"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-dir", default=None)
     parser.add_argument("--force", action="store_true", help="已存在输出也重跑")
-    parser.add_argument("--only", default=None)
+    parser.add_argument("--only", default=None, help="只处理指定 Pn-x, 逗号分隔")
+    parser.add_argument("--slide", type=int, default=None, help="只处理指定 slide")
+    parser.add_argument("--legacy", action="store_true",
+                        help="旧文字-only 模式 (tma_batch_highlight.py, 历史参考)")
     ns = parser.parse_args(args)
+    proj = _tma_project_dir(ns)
+    if ns.legacy:
+        argv = []
+        if ns.force: argv.append("--force")
+        if ns.only: argv.extend(["--only", ns.only])
+        return _run_tma("tma_batch_highlight.py", argv, proj)
     argv = []
     if ns.force: argv.append("--force")
     if ns.only: argv.extend(["--only", ns.only])
-    return _run_tma("tma_batch_highlight.py", argv, _tma_project_dir(ns))
+    if ns.slide: argv.extend(["--slide", str(ns.slide)])
+    return _run_tma("tma_highlight_by_slide.py", argv, proj)
 
 
 def cmd_hl_verify(args):

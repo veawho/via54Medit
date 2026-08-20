@@ -327,17 +327,127 @@ class TestVia54Commands(unittest.TestCase):
         finally:
             via54._run_module = old
 
-    def test_hl_batch_force_flag(self):
+    def test_hl_batch_default_by_slide(self):
         import via54
         captured = {}
         old = via54._run_module
         via54._run_module = lambda m, a: captured.update(module=m, args=a) or 0
         try:
             via54.cmd_hl_batch(['--force'])
-            self.assertEqual(captured['module'], 'tma_batch_highlight.py')
+            self.assertEqual(captured['module'], 'tma_highlight_by_slide.py')
             self.assertIn('--force', captured['args'])
         finally:
             via54._run_module = old
+
+    def test_hl_batch_legacy(self):
+        import via54
+        captured = {}
+        old = via54._run_module
+        via54._run_module = lambda m, a: captured.update(module=m, args=a) or 0
+        try:
+            via54.cmd_hl_batch(['--legacy'])
+            self.assertEqual(captured['module'], 'tma_batch_highlight.py')
+        finally:
+            via54._run_module = old
+
+
+# ---------- T11: by-slide 流程 (tma_highlight_by_slide) ----------
+import tma_highlight_by_slide as bs
+
+
+class TestBySlideTerms(unittest.TestCase):
+    def test_term_hits(self):
+        terms, data = bs.slide_terms({"data_points": [], "text_blocks": []})
+        self.assertIn("tma", terms)
+        self.assertIn("complement", terms)
+        self.assertIn("血栓", terms)
+
+    def test_data_points(self):
+        v = {"data_points": [{"text": "63%", "context": "占比63%"}]}
+        terms, data = bs.slide_terms(v)
+        self.assertIn("63%", data)
+
+    def test_cn_terms_present(self):
+        terms, _ = bs.slide_terms({"data_points": [], "text_blocks": []})
+        self.assertIn("补体", terms)
+        self.assertIn("微血管病", terms)
+
+
+class TestFindTableMatches(unittest.TestCase):
+    def setUp(self):
+        import fitz
+        self.tmp = tempfile.mkdtemp()
+        self.pdf = os.path.join(self.tmp, "t.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        # 画表格网格线, 让 find_tables 能检测到
+        for x in range(72, 420, 100):
+            page.draw_line((x, 100), (x, 220))
+        for y in range(100, 221, 60):
+            page.draw_line((72, y), (420, y))
+        page.insert_text((80, 130), "Transplant-associated thrombotic microangiopathy in HSCT")
+        page.insert_text((80, 190), "complement activation and endothelial injury")
+        doc.save(self.pdf)
+        doc.close()
+        import tma_highlight_by_slide as bs2
+        self.bs = bs2
+
+    def test_table_match_hits(self):
+        import fitz
+        doc = fitz.open(self.pdf)
+        page = doc[0]
+        matches = self.bs.find_table_matches(page, set(["tma", "transplant", "complement", "endothelial"]), [])
+        doc.close()
+        self.assertGreaterEqual(len(matches), 1)
+
+    def test_table_no_match(self):
+        import fitz
+        p2 = os.path.join(self.tmp, "n.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        for x in range(72, 420, 100):
+            page.draw_line((x, 100), (x, 220))
+        for y in range(100, 221, 60):
+            page.draw_line((72, y), (420, y))
+        page.insert_text((80, 130), "Abstract discussion methods")
+        doc.save(p2)
+        doc.close()
+        doc = fitz.open(p2)
+        matches = self.bs.find_table_matches(doc[0], set(["tma", "complement"]), [])
+        doc.close()
+        self.assertEqual(matches, [])
+
+
+class TestFindImageMatches(unittest.TestCase):
+    def setUp(self):
+        import fitz
+        from PIL import Image
+        import io as _io
+        self.tmp = tempfile.mkdtemp()
+        self.pdf = os.path.join(self.tmp, "img.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        buf = _io.BytesIO()
+        Image.new("RGB", (200, 150), (120, 120, 200)).save(buf, format="PNG")
+        page.insert_image(fitz.Rect(72, 200, 400, 400), stream=buf.getvalue())  # 大图 ~40% 页
+        doc.save(self.pdf)
+        doc.close()
+        import tma_highlight_by_slide as bs2
+        self.bs = bs2
+
+    def test_image_match_with_page_hit(self):
+        import fitz
+        doc = fitz.open(self.pdf)
+        matches = self.bs.find_image_matches(doc[0], set(["tma"]), [], page_has_hit=True)
+        doc.close()
+        self.assertGreaterEqual(len(matches), 1)
+
+    def test_image_no_hit_no_match(self):
+        import fitz
+        doc = fitz.open(self.pdf)
+        matches = self.bs.find_image_matches(doc[0], set(["tma"]), [], page_has_hit=False)
+        doc.close()
+        self.assertEqual(matches, [])
 
 
 if __name__ == '__main__':
