@@ -13,6 +13,7 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   ppt             PPT 扩页 + 审计 + 渲染
   diff            双项目对比
   all             跑全部
+  auto            自然语言一键全自动管线 (渲染PPT图→提取引用→限时下载→整理→highlight→报告)
   download        TMA 文献级联下载 (round1 OA 级联 / round2 CrossRef+核验+SciHub)
   pdf-verify      下载 PDF 内容核验 (期刊/年份/作者)
   hl-batch        批量 highlight (默认按 slide 分组: slide 图+视觉提取+文字/表格/图表/图片应证; --legacy 旧文字模式)
@@ -209,6 +210,36 @@ def _run_tma(script, argv, project_dir):
     return _run_module(script, argv)
 
 
+def cmd_auto(args):
+    """自然语言一键全自动管线:
+    via54.py auto "帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight" [--ppt X.pptx] [--budget 3600]"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("nl", nargs="?", default=None, help="自然语言指令")
+    parser.add_argument("--ppt", default=None, help="PPT 路径")
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--budget", type=int, default=3600, help="下载预算秒数 (默认 1 小时)")
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--skip-render", action="store_true")
+    parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--skip-highlight", action="store_true")
+    parser.add_argument("--skip-report", action="store_true")
+    ns = parser.parse_args(args)
+    if not ns.nl and not ns.ppt:
+        print('用法: via54.py auto "帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight" [--ppt X.pptx]')
+        return 1
+    argv = []
+    if ns.nl: argv.append(ns.nl)
+    if ns.ppt: argv.extend(["--ppt", ns.ppt])
+    if ns.project_dir: argv.extend(["--project-dir", ns.project_dir])
+    if ns.budget != 3600: argv.extend(["--budget", str(ns.budget)])
+    if ns.limit: argv.extend(["--limit", str(ns.limit)])
+    for flag, attr in [("--skip-render", "skip_render"), ("--skip-download", "skip_download"),
+                       ("--skip-highlight", "skip_highlight"), ("--skip-report", "skip_report")]:
+        if getattr(ns, attr):
+            argv.append(flag)
+    return _run_module("via54_auto.py", argv)
+
+
 def cmd_download(args):
     """TMA 文献级联下载: round1 = OA 级联 (OpenAlex/Unpaywall/EPMC/PMC/doi.org), round2 = CrossRef 重解析 + 内容核验 + Sci-Hub"""
     parser = argparse.ArgumentParser()
@@ -371,6 +402,7 @@ HANDLERS = {
     "paper-match": cmd_paper_match,
     "keyword": cmd_keyword,
     "ppt": cmd_ppt,
+    "auto": cmd_auto,
     "download": cmd_download,
     "pdf-verify": cmd_pdf_verify,
     "hl-batch": cmd_hl_batch,

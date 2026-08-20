@@ -501,5 +501,48 @@ class TestRenderEngine(unittest.TestCase):
         self.assertEqual(engine, "python-pptx")
 
 
+# ---------- T13: 自然语言一键全自动管线 (via54_auto) ----------
+import via54_auto as va
+
+
+class TestAutoPipeline(unittest.TestCase):
+    def test_parse_nl_extracts_pptx(self):
+        intent = va.parse_nl("帮我识别 D:/文献/某方案.pptx 中的文献引用，下载文献，并进行highlight")
+        self.assertTrue(intent["pptx"] and "某方案.pptx" in intent["pptx"])
+        self.assertTrue(intent["download"])
+        self.assertTrue(intent["highlight"])
+
+    def test_parse_nl_no_pptx(self):
+        intent = va.parse_nl("帮我识别PPT中的文献引用")
+        self.assertIsNone(intent["pptx"])
+
+    def test_parse_nl_download_only(self):
+        intent = va.parse_nl("只下载 D:/x/方案.pptx 的参考文献")
+        self.assertTrue(intent["download"])
+        self.assertFalse(intent["highlight"])
+
+    def test_resolve_project_default_pptx_dir(self):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        p = os.path.join(tmp, "a.pptx")
+        open(p, "w").write("x")
+        self.assertEqual(va.resolve_project(p, None), tmp)
+
+    def test_resolve_project_explicit(self):
+        self.assertEqual(va.resolve_project(None, "C:/proj"), os.path.abspath("C:/proj"))
+
+    def test_organize_pdfs(self):
+        import tempfile, shutil
+        root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(root, "_2_pdfs"))
+        for f in ["P3-1.pdf", "P23-5.pdf", "other.pdf"]:
+            open(os.path.join(root, "_2_pdfs", f), "w").write("pdf")
+        n = va.step_organize(root)
+        self.assertEqual(n, 2)
+        for pn in ["P3-1", "P23-5"]:
+            self.assertTrue(os.path.exists(os.path.join(root, "_literature_citation_index", pn, pn + "_main.pdf")))
+        shutil.rmtree(root)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -1,4 +1,62 @@
-﻿# TMA 文献 Highlight 流水线 (2026-08-20 交付)
+﻿# via54Medit 文献全自动管线 (任何设备部署即用)
+
+> 自然语言一句话: **"帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight"**
+> → 自动完成: 渲染PPT图 → 提取引用字段 → 限时下载PDF → 整理Pn-x目录 → 逐slide高亮分析+plan → 按序highlight → 交付报告
+
+## 一、部署 (新系统自动接入)
+
+```bash
+git clone <via54Medit> && cd via54Medit/scripts
+# 环境自检 + 自动安装依赖 (PyMuPDF/python-pptx/Pillow/pywin32[仅Win])
+python deps_auto.py
+```
+
+- **PPT → 图片**: 自动接入系统 PowerPoint COM (ProgID `PowerPoint.Application`) / WPS 演示 (`KWPP.Application`), 都没有则 python-pptx 兜底
+- **下载**: 自动接入 OpenAlex/Unpaywall/EuropePMC/NCBI PMC/CrossRef/Sci-Hub 多级级联
+- 任一依赖/引擎缺失自动尝试安装, 失败降级不中断
+
+## 二、自然语言一键全自动
+
+```bash
+python via54.py auto "帮我识别 D:/文献/某方案.pptx 中的文献引用，下载文献，并进行highlight"
+# 或指定参数
+python via54.py auto --ppt X.pptx --download --highlight --budget 3600
+python via54_auto.py "识别 X.pptx 引用并下载高亮" --project-dir D:/out
+```
+
+**流程**:
+| 步骤 | 内容 | 产物 |
+|---|---|---|
+| [0] | 环境自检+自动安装 | — |
+| [1] | 渲染全部 slide 图 (自动接 PowerPoint/WPS) | `_ppt_renders/slide_NNN.png` |
+| [2] | 提取文献引用 (上标/中文+数字标号 + 参考文献列表页) | `_refs.json` + `_references_full.json` (完整引文) |
+| [3] | 下载 PDF (**1 小时硬限**; 超时剩余保留访问链接到表格提示人工) | `_2_pdfs/P3-1.pdf` + `_download_auto_report.json` |
+| [4] | 整理下载目录 | `_literature_citation_index/P3-1/P3-1_main.pdf` |
+| [5] | 逐 slide 视觉分析 → highlight plan | `_highlight_plans/slide_003_plan.json` |
+| [6] | 按 slide 顺序完成 highlight (文字/表格/图表/图片四类应证) | `_highlight_nested/P3-1/` |
+| [7] | 交付报告 | 8列 CSV + 交付报告 + 人工下载清单 |
+
+**目录结构** (下载目录 / highlight 目录):
+```
+<project>/
+├── _ppt_renders/                          # slide 图片
+├── _literature_citation_index/            # 下载目录: Pn-x 子目录 + Pn-x 前缀 PDF
+│   └── P3-1/P3-1_main.pdf
+├── _highlight_plans/                      # highlight plan
+│   └── slide_003_plan.json
+├── _highlight_nested/                     # highlight 目录: Pn-x 子目录
+│   └── P3-1/
+│       ├── P3-1_main.pdf                  # 文献 PDF
+│       ├── P3-1_highlight.pdf             # 高亮 PDF
+│       ├── P3-1_highlight_pages/         # 导出图片目录 (全部页)
+│       └── P3-1_highlight_p1.png         # 有 highlight 的图片
+└── _citations_8col.csv                   # 8 列表 (H 列含访问链接)
+```
+
+**下载时间限制**: `--budget <秒>` (默认 3600 = 1 小时)。预算内逐条下载+内容核验 (期刊/年份/作者), 超时停止; 未下载成功的保留 DOI/PubMed/万方/知网链接在表格 H 列并写入 `_人工下载清单.md`, 提示用户手动下载后放入 `_2_pdfs/P3-1.pdf` 重跑即可。
+
+## 三、TMA 案例交付 (2026-08-20)
+
 
 > **Pn-x 命名规范**: Pn = PPT 的 slide 页码 (即 P{页码}), x = 该 slide 中第几条引用。
 > 正确格式: P3-1 = PPT 第 3 页 (slide 3) 的第 1 条引用; P23-5 = 第 23 页第 5 条引用。
