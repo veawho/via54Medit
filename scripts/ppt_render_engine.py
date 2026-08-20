@@ -14,7 +14,7 @@ macOS/Linux: 自动降级 python-pptx 近似渲染 (可自行扩展 soffice 分�
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
   n, engine = render_ppt_slides_auto("D:/x.pptx", "D:/out")
 """
-import os, io, sys, shutil, subprocess
+import os, io, sys, subprocess
 
 # 引擎探测优先级
 COM_ENGINES = [
@@ -49,8 +49,8 @@ def _ensure_pywin32(progid_hint=""):
     if progid_hint and not _progid_available(progid_hint):
         return False
     try:
-        r = subprocess.run([sys.executable, "-m", "pip", "install", "pywin32"],
-                           capture_output=True, timeout=300)
+        subprocess.run([sys.executable, "-m", "pip", "install", "pywin32"],
+                       capture_output=True, timeout=300)
         import win32com.client  # noqa: F401
         return True
     except Exception:

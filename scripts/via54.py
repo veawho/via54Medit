@@ -33,7 +33,7 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   python3.11 via54.py diff
   python3.11 via54.py all <project_dir>  # 跑全部
 """
-import os, sys, json, argparse, subprocess
+import os, re, sys, json, argparse, subprocess
 from pathlib import Path
 
 # 让子工具可以被 import
@@ -181,6 +181,7 @@ def cmd_highlight(args):
             argv = [pdf_in]
             if pptx_path and os.path.exists(pptx_path):
                 argv.extend(["--pptx", pptx_path])
+            if ns.out_dir: argv.extend(["--out-dir", ns.out_dir])
             if ns.no_vision: argv.append("--no-vision")
             if ns.no_rules: argv.append("--no-rules")
             if slide_num: argv.extend(["--slide", str(slide_num)])
@@ -350,7 +351,7 @@ def cmd_all(args):
                     _run_module("step5_alignment.py", ["--project", "雷管方案"])
                 elif "TMA" in proj:
                     _run_module("step5_alignment.py", ["--project", "TMA"])
-        print(f"\n=== Multi-project diff ===")
+        print("\n=== Multi-project diff ===")
         _run_module("multi_project_diff.py", [])
     else:
         for proj in args:

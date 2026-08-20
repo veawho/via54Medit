@@ -15,8 +15,7 @@ test_tma_pipeline.py — TMA 文献 highlight 流水线单测 (2026-08-20)
   T10: via54.py 子命令     (download/pdf-verify/hl-batch/...)   4 用例
 运行: python3 test_tma_pipeline.py
 """
-import os, sys, io, tempfile, unittest
-from pathlib import Path
+import os, sys, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -262,7 +261,6 @@ class TestVerifyPdf(unittest.TestCase):
 # ---------- T9: yellow_pct ----------
 class TestYellowPct(unittest.TestCase):
     def setUp(self):
-        from PIL import Image
         self.tmp = tempfile.mkdtemp()
         self.img = os.path.join(self.tmp, 'hl.png')
 

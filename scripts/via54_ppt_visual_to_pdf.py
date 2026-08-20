@@ -325,6 +325,7 @@ def highlight_from_visual(
     apply_9_rules: bool = True,
     use_vision_api: bool = True,
     export_images: bool = True,  # 导出 highlight 页面图片
+    out_base: str = None,  # 输出根目录 (默认 pdf_in 上级的 _highlight_nested)
 ) -> Dict:
     """
     完整流程: PPT视觉理解 → PDF应证 → v3 FINAL 高亮 + 9 铁律
@@ -392,7 +393,8 @@ def highlight_from_visual(
     if pdf_out is None:
         pdf_in_dir = os.path.dirname(os.path.abspath(pdf_in))
         parent_dir = os.path.dirname(pdf_in_dir)  # 上一级 (如 _2_pdfs 的父 = 项目根)
-        out_base = os.path.join(parent_dir, "_highlight_nested")
+        if out_base is None:
+            out_base = os.path.join(parent_dir, "_highlight_nested")
         pdf_out_dir = os.path.join(out_base, pn_x)
     else:
         # pdf_out 是用户指定路径
@@ -603,6 +605,7 @@ def main():
         apply_9_rules=not args.no_rules,
         use_vision_api=not args.no_vision,
         export_images=not args.no_images,
+        out_base=args.out_dir,
     )
 
     print(f"\n=== 结果 ===")

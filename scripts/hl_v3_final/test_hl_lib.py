@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """hl_lib 单元测试: canon / locate / rects / highlight 边界"""
-import sys, os
-sys.path.insert(0, '/tmp')
+import sys, os, tempfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hl_lib
 from hl_lib import (canon, canon_keys, locate_sentence, locate_sentence_all,
                     sentence_rects, highlight_sentences, norm)
@@ -64,16 +64,27 @@ check('微差同行合并', len(sentence_rects(chars3, 0, 2)) == 1)
 check('空区间', sentence_rects(chars, 5, 5) == [])
 
 print('== highlight_sentences 边界 ==')
-SRC = '/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-8_main.pdf'
+# 测试 PDF 参数化: TMA_HL_TEST_SRC > TMA_PROJECT/_2_pdfs/P23-8.pdf > Mac 默认
+SRC = os.environ.get("TMA_HL_TEST_SRC") or None
+if not SRC:
+    proj = os.environ.get("TMA_PROJECT") or ""
+    cand = os.path.join(proj, "_2_pdfs", "P23-8.pdf")
+    SRC = cand if os.path.isfile(cand) else "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-8_main.pdf"
+if not os.path.isfile(SRC):
+    print("  ⚠️ 无测试 PDF (设 TMA_PROJECT 或 TMA_HL_TEST_SRC), 跳过 highlight_sentences 边界组")
+    print(f"\n结果: {PASS} passed, {FAIL} failed (1 组跳过)")
+    sys.exit(0)
 doc = fitz.open(SRC)
 n = len(doc)
+# 动态取首页第一句作为 occurrence 测试句 (任何数据可用)
+first_sent = (doc[0].get_text().replace('\n', ' ').strip().split('.')[0] or 'TA-TMA')[:80]
 doc.close()
-out = '/tmp/test_hl_out.pdf'
+out = os.path.join(tempfile.mkdtemp(), 'hl_out.pdf')
 # 页越界保护
 r = highlight_sentences(SRC, out, {999: ['x']}, verbose=False)
 check('页越界保护', r[0][2] == 'BAD PAGE', repr(r))
 # occurrence 元组(句子出现多次时)
-r = highlight_sentences(SRC, out, {0: [('TA-TMA is a heterogenous disease', 0)]}, verbose=False)
+r = highlight_sentences(SRC, out, {0: [(first_sent, 0)]}, verbose=False)
 check('occurrence 元组可用', any('OK' in x[2] for x in r), repr(r))
 # 空句子
 r = highlight_sentences(SRC, out, {0: ['']}, verbose=False)

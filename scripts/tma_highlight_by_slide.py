@@ -17,7 +17,7 @@ tma_highlight_by_slide.py — 按 slide 顺序驱动的应证 highlight (v3 FINA
 用法:
   python tma_highlight_by_slide.py [--project-dir DIR] [--slide N] [--all] [--force] [--no-render] [--only P3-1]
 """
-import os, re, sys, io, json, argparse, shutil
+import os, re, sys, json, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hl_v3_final"))
 
@@ -254,7 +254,8 @@ def highlight_one_pdf(pdf_path, slide_visual, out_dir, apply_9_rules=True):
         pix = doc[pi].get_pixmap(dpi=100)
         pix.save(os.path.join(pages_dir, "page_%03d.jpg" % (pi + 1)))
     doc.close()
-    os.remove(hl_tmp)
+    if os.path.exists(hl_tmp):
+        os.remove(hl_tmp)
     return {
         "pn_x": pn_x,
         "text_ok": sum(1 for r in report if r[2].startswith("OK")),
@@ -326,10 +327,14 @@ def main():
                 print("    [skip] %s (已有输出)" % pdf_file, flush=True)
                 continue
             print("    [2] %s 应证 highlight..." % pdf_file, flush=True)
-            r = highlight_one_pdf(os.path.join(pdf_dir, pdf_file), visual, os.path.join(out_base, pn))
-            print("      文字 OK=%d / annot页=%s / 9铁律删除=%d" % (
-                r["text_ok"], list(r["annot_pages"].keys()), r["removed_9_rules"]), flush=True)
-            results.append(r)
+            try:
+                r = highlight_one_pdf(os.path.join(pdf_dir, pdf_file), visual, os.path.join(out_base, pn))
+                print("      文字 OK=%d / annot页=%s / 9铁律删除=%d" % (
+                    r["text_ok"], list(r["annot_pages"].keys()), r["removed_9_rules"]), flush=True)
+                results.append(r)
+            except Exception as e:
+                print("      ERROR %s: %s (继续下一 PDF)" % (pdf_file, str(e)[:120]), flush=True)
+                results.append({"pn_x": pn, "error": str(e)[:200]})
     print("\n=== 完成: %d 个 Pn-x ===" % len(results), flush=True)
     with open(os.path.join(out_base, "_by_slide_meta.json"), "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)

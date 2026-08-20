@@ -7,7 +7,7 @@ Pn-x 命名: Pn = PPT slide 页码 (即 P{页码}), x = 该 slide 中第几条�
   2) 之前中断, Pn-S27_1 无输出, Pn-S23_5 图片导出残缺
 本脚本: 每 Pn-x 提取 slide → --slide N --no-vision → 嵌套目录输出 → 记录汇总
 """
-import os, re, sys, io, json, subprocess, shutil, time
+import os, re, sys, io, json, subprocess, time
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')

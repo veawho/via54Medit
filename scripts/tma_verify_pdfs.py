@@ -1,4 +1,3 @@
-import os
 """tma_verify_pdfs.py — 下载后 PDF 内容与引用核对
 
 对 _2_pdfs 中每个 Pn-Sx_y.pdf, 提取首页文本, 与 _references_FINAL.json 的引用字段核对:

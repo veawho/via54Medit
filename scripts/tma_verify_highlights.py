@@ -1,4 +1,3 @@
-import os
 """tma_verify_highlights.py — highlight 质量验证
 
 对 _highlight_nested 每个 Pn-x:

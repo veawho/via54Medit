@@ -32,9 +32,8 @@ from pdf_understand import (
 )
 
 P41_MAIN = (
-    "/Users/david/Desktop/雷管方案_文献整理/"
-    "_literature_citation_index/P4-1/"
-    "P4-1_main_Lin_FrontOncol_2022.pdf"
+    os.environ.get("VIA54_LEIGUAN_DIR", "/Users/david/Desktop/雷管方案_文献整理")
+    + "/_literature_citation_index/P4-1/P4-1_main_Lin_FrontOncol_2022.pdf"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -134,6 +133,17 @@ def test_ppt_data_points_vs_pdf():
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    # 数据可用性守卫: 雷管方案 PPT / P4-1 PDF 缺失时跳过 (环境无关运行)
+    _miss = []
+    if not os.path.exists(PPT_PATH):
+        _miss.append("PPT_PATH=" + PPT_PATH)
+    if not os.path.exists(P41_MAIN):
+        _miss.append("P41_MAIN=" + P41_MAIN)
+    if _miss:
+        print("⚠️ 数据目录不可用 (设 VIA54_LEIGUAN_DIR 指向雷管方案项目根), 跳过全部测试:")
+        for m in _miss:
+            print("   -", m)
+        sys.exit(0)
     tests = [
         test_extract_p5_structure,
         test_find_citation_marks_v2,

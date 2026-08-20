@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scripts/ppt_render_engine.py (新)**: PPT → 图片多引擎自动渲染 — ①PowerPoint COM (ProgID PowerPoint.Application) ②WPS 演示 COM (KWPP.Application) ③python-pptx 近似兜底; 检测到 COM 引擎缺 pywin32 自动安装; DispatchEx 强制新实例 (修复 Dispatch 连接残留); 任一引擎失败自动降级
 - **tma_highlight_by_slide.py Step 0 接入 ppt_render_engine**: 全量 slide 图改用系统 PowerPoint 真实渲染 (本机实测: 非白像素 14-35% vs 近似渲染 1-11%)
 - **test_tma_pipeline.py 扩至 65 用例**: T12 渲染引擎 (ProgID 探测 / 兜底渲染 / COM 失败降级)
+- **深度调试修复 (2026-08-20 二轮)**:
+  - via54.py 缺 import re → cmd_highlight 运行时 NameError (致命) → 已修
+  - --out-dir 参数失效: cmd_highlight 未透传 + via54_ppt_visual_to_pdf.py out_base 未生效 → 双修
+  - tma_manual_list.py KNOWN_DOI 22 个 key 残留旧命名 S{slide}_{num} → 归一 P{slide}-{num} (人工清单 DOI 链接恢复)
+  - tma_highlight_by_slide.py: 单 PDF 异常隔离 (不中断全量 batch) + hl_tmp 异常清理
+  - 测试环境适配: test_hl_lib.py (TMA_HL_TEST_SRC/TMA_PROJECT 参数化, 无数据跳过) + test_ppt_understand.py (VIA54_LEIGUAN_DIR 参数化 + 数据守卫) → 跨系统可跑 (本机 25/25 真实数据通过)
+  - pyflakes 清理: 6 脚本头部孤立 import os / 未用 import (io/shutil/hashlib 等)
 
 ### Fixed
 - TMA 下载器 Windows stdout GBK UnicodeEncodeError 崩溃 (sys.stdout.reconfigure utf-8)
