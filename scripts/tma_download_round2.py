@@ -238,6 +238,85 @@ def content_ok(txt, citation):
     return score
 
 
+def process_ref(ref_id, citation, doi_map_info=None, out_dir=None, sleep_s=0.5):
+    """单条引用恢复下载 (供 via54_auto 编排器调用, 签名与 tma_cascade_download.process_ref 一致)
+
+    流程: CrossRef 重解析 DOI → OA 级联 (OpenAlex/Unpaywall/EPMC/NCBI/doi.org) → Sci-Hub 兜底
+    → content_ok 三维核验 (期刊/年份/作者) → 返回 {'ref','status':'ok|fail|exists',...}
+    """
+    out_dir = out_dir or OUT
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, ref_id + ".pdf")
+    if os.path.exists(out_path) and os.path.getsize(out_path) > 5000:
+        return {"ref": ref_id, "status": "exists"}
+    log = {"ref": ref_id}
+    cr = crossref_best(citation)
+    if not cr:
+        log["status"] = "crossref_fail"
+        return log
+    scored = score_crossref(cr, citation)
+    dois = []
+    known = (doi_map_info or {}).get("doi") if isinstance(doi_map_info, dict) else None
+    if known and str(known).startswith("10."):
+        dois.append(str(known))
+    for _s, it in scored:
+        if it.get("doi") and it["doi"] not in dois:
+            dois.append(it["doi"])
+    attempts = []
+    done = False
+    for doi in dois[:4]:
+        if done:
+            break
+        for src, urls in [
+            ("openalex", [openalex_oa(doi)]),
+            ("unpaywall", [unpaywall_oa(doi)]),
+            ("epmc", epmc_urls(doi)),
+            ("ncbi", ncbi_urls(doi)),
+            ("doi_org", ["https://doi.org/" + doi]),
+        ]:
+            if done:
+                break
+            for u in urls:
+                if not u:
+                    continue
+                try:
+                    download_pdf(u, out_path)
+                    txt = page1(out_path)
+                    score = content_ok(txt, citation)
+                    attempts.append((src, u[:70], "downloaded", score))
+                    if score >= 3:
+                        log.update({"status": "ok", "source": src, "doi": doi, "url": u, "score": score})
+                        done = True
+                        break
+                    os.remove(out_path)
+                    attempts[-1] = (src, u[:70], "content-mismatch", score)
+                except Exception as e:
+                    attempts.append((src, u[:70], str(e)[:40], 0))
+        if not done and doi.startswith("10."):
+            try:
+                if scihub_pdf(doi, out_path):
+                    txt = page1(out_path)
+                    score = content_ok(txt, citation)
+                    if score >= 3:
+                        log.update({"status": "ok", "source": "scihub", "doi": doi, "url": "sci-hub/" + doi, "score": score})
+                        done = True
+                        break
+                    os.remove(out_path)
+                elif os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+        if not done and os.path.exists(out_path):
+            os.remove(out_path)
+    if not done:
+        log["status"] = "fail"
+        log["doi_tried"] = dois[:3]
+        log["attempts"] = attempts[:6]
+    time.sleep(sleep_s)
+    return log
+
+
 def main():
     only = None
     if '--only' in sys.argv:

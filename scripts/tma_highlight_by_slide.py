@@ -286,6 +286,7 @@ def main():
         return 1
     pdf_dir = os.path.join(root, "_2_pdfs")
     out_base = os.path.join(root, "_highlight_nested")
+    os.makedirs(out_base, exist_ok=True)
     if not os.path.isdir(pdf_dir):
         print("错误: 无 _2_pdfs")
         return 1

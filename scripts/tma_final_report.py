@@ -12,7 +12,12 @@ CSV_OUT = os.path.join(T, '_citations_89_8col.csv')
 
 def main():
     refs = json.load(open(REF_JSON, encoding='utf-8'))
-    doi_map = json.load(open(DOI_MAP, encoding='utf-8'))
+    doi_map = {}
+    if os.path.exists(DOI_MAP):
+        try:
+            doi_map = json.load(open(DOI_MAP, encoding='utf-8'))
+        except Exception:
+            doi_map = {}
     pdfs = set(f.replace('.pdf', '') for f in os.listdir(PDF_DIR) if f.endswith('.pdf'))
     hl_dirs = set()
     if os.path.isdir(HL_BASE):

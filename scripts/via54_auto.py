@@ -242,9 +242,8 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
 
     refs_path = os.path.join(root, "_refs.json")
     refs = json.load(open(refs_path, encoding="utf-8"))
-    # 完整引文 (参考文献列表) 优先用于 CrossRef 匹配
-    full_path = os.path.join(root, "_references_full.json")
-    full_refs = json.load(open(full_path, encoding="utf-8")) if os.path.exists(full_path) else {}
+    # 注: 参考文献列表为全局编号, 而 P{slide}-{num} 的 num 是页内标号 (PPT 每页重新编号),
+    #     两者无结构映射, 不做自动替换, 避免下载错配; 完整引文保留于 _references_full.json 供报告/人工核对。
     doi_map_path = os.path.join(root, "_doi_map.json")
     doi_map = json.load(open(doi_map_path, encoding="utf-8")) if os.path.exists(doi_map_path) else {}
     pdf_dir = os.path.join(root, "_2_pdfs")
@@ -262,16 +261,49 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
     start = time.monotonic()
     results = []
     budget_hit = False
+
+    # --- 全文库优先: 参考文献列表完整引文 (准确字段, 高成功率), 用一半预算 ---
+    full_path = os.path.join(root, "_references_full.json")
+    full_ok = 0
+    if os.path.exists(full_path):
+        full_refs = json.load(open(full_path, encoding="utf-8"))
+        full_budget = budget_s // 2
+        print("  [全文库] 参考文献列表 %d 条完整引文直连下载 (预算 %d s)..." % (len(full_refs), full_budget), flush=True)
+        for num, cit in full_refs.items():
+            if time.monotonic() - start > full_budget:
+                budget_hit = True
+                print("    ⏰ 全文库预算耗尽, 剩余保留链接人工下载", flush=True)
+                break
+            refn = "ref%s" % num
+            out_path = os.path.join(pdf_dir, refn + ".pdf")
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 5000:
+                continue
+            print("    [%s] %s..." % (refn, str(cit)[:50]), flush=True)
+            try:
+                r1 = cd.process_ref(refn, str(cit), {}, pdf_dir, 0.3)
+                if r1.get("status") == "ok" or (os.path.exists(out_path) and os.path.getsize(out_path) > 5000):
+                    print("      -> OK %s" % r1.get("source", "exists"), flush=True)
+                    full_ok += 1
+                else:
+                    try:
+                        r2 = rd.process_ref(refn, str(cit), {}, pdf_dir, 0.3)
+                        if r2.get("status") == "ok" or (os.path.exists(out_path) and os.path.getsize(out_path) > 5000):
+                            print("      -> OK %s" % r2.get("source", "exists"), flush=True)
+                            full_ok += 1
+                        else:
+                            print("      -> FAILED (保留链接人工下载)", flush=True)
+                    except Exception as e:
+                        print("      -> round2 异常: %s" % str(e)[:60], flush=True)
+            except Exception as e:
+                print("      -> 异常: %s" % str(e)[:60], flush=True)
+
+    # --- 标号 refs 下载 (剩余预算) ---
     for i, ref in enumerate(missing):
         if time.monotonic() - start > budget_s:
             budget_hit = True
             print("    ⏰ 预算耗尽, 停止下载, 剩余 %d 条保留链接人工下载" % (len(missing) - i), flush=True)
             break
         citation = refs[ref]
-        # 若编号匹配完整引文表, 用完整引文 (CrossRef 匹配更准)
-        m_num = re.match(r"P\d+-(\d+)$", ref)
-        if m_num and int(m_num.group(1)) in full_refs:
-            citation = full_refs[int(m_num.group(1))]
         print("  [%d/%d] %s: %s..." % (i + 1, len(missing), ref, citation[:40]), flush=True)
         out_path = os.path.join(pdf_dir, ref + ".pdf")
         ok = False
@@ -305,8 +337,10 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
                 print("    -> round2 异常: %s" % str(e)[:80], flush=True)
                 results.append({"ref": ref, "status": "failed"})
     elapsed = int(time.monotonic() - start)
-    print("  下载阶段: %d s, ok=%d" % (elapsed, sum(1 for r in results if r.get("status") == "ok")), flush=True)
-    report = {"budget_s": budget_s, "elapsed_s": elapsed, "budget_hit": budget_hit, "results": results}
+    print("  下载阶段: %d s, 标号 ok=%d, 全文库 ok=%d" % (
+        elapsed, sum(1 for r in results if r.get("status") == "ok"), full_ok), flush=True)
+    report = {"budget_s": budget_s, "elapsed_s": elapsed, "budget_hit": budget_hit,
+              "results": results, "full_lib_ok": full_ok}
     json.dump(report, open(os.path.join(root, "_download_auto_report.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     return report
 
@@ -380,6 +414,21 @@ def step_highlight(root):
 
 # ============ Step 7: 报告 ============
 def step_report(root):
+    # 报告兼容: final_report 依赖 _references_FINAL.json; manual_list 依赖缺失清单 (缺则从 _refs.json 生成)
+    fin = os.path.join(root, "_references_FINAL.json")
+    if not os.path.exists(fin) and os.path.exists(os.path.join(root, "_refs.json")):
+        shutil.copy2(os.path.join(root, "_refs.json"), fin)
+    ml = os.path.join(root, "_manual_download_list.json")
+    if not os.path.exists(ml):
+        try:
+            refs = json.load(open(os.path.join(root, "_refs.json"), encoding="utf-8"))
+            pdf_dir = os.path.join(root, "_2_pdfs")
+            have = set(f[:-4] for f in os.listdir(pdf_dir)) if os.path.isdir(pdf_dir) else set()
+            miss = [{"ref": k, "citation": v} for k, v in sorted(refs.items())
+                    if k not in have]
+            json.dump(miss, open(ml, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        except Exception as e:
+            print("  [warn] 缺失清单生成失败: %s" % str(e)[:80], flush=True)
     for script in ["tma_final_report.py", "tma_manual_list.py"]:
         cmd = [sys.executable, os.path.join(HERE, script)]
         r = subprocess.run(cmd, env=dict(os.environ, TMA_PROJECT=root))
@@ -410,6 +459,13 @@ def run_pipeline(nl_text=None, ppt=None, project_dir=None, budget_s=DEFAULT_BUDG
     if not ok:
         print("⚠️ 环境自检有 %d 项问题, 继续尝试 (缺依赖的步骤会降级)" % len(problems), flush=True)
 
+    # PPT 复制进项目根 (by-slide highlight 需项目内 PPTX 自动发现)
+    proj_pptx = os.path.join(root, os.path.basename(pptx))
+    if os.path.abspath(pptx) != os.path.abspath(proj_pptx):
+        try:
+            shutil.copy2(pptx, proj_pptx)
+        except Exception as e:
+            print("  [warn] PPT 复制进项目失败: %s" % str(e)[:80], flush=True)
     if intent["render"] and not skip_render:
         step_render(pptx, root)
     step_extract_refs(pptx, root)

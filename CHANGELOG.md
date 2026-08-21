@@ -35,7 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **scripts/deps_auto.py (新)**: 环境自检 + 自动 pip 安装缺失依赖 (PyMuPDF/python-pptx/Pillow/pywin32[Win])
   - via54.py 新增 auto 子命令; 提取准确率: 55→109→59 条(去噪) + 16 条完整引文(参考文献列表), 无标号 slide 不再误建引用, 下载后内容核验(mismatch 即删)
   - 测试扩至 71 用例 (T13 自然语言解析/项目根/目录整理)
-- **深度调试修复 (2026-08-20 二轮)**:
+- **全新项目全自动测试修复 (2026-08-20 四轮)** (实测 TMA_auto_test):
+  - round2 补 process_ref 封装 (编排器调用缺函数崩溃)
+  - 下载顺序: 参考文献列表完整引文(准确字段)优先, 实测 16 条成功 10 条 (62%), 付费墙保留链接; 标号正文句匹配率低(中文)
+  - full_refs JSON int-key roundtrip 修复 (str key 导致替换失效)
+  - 移除按标号替换完整引文 (PPT 页内编号与全局编号无结构映射, 会错配)
+  - auto 管线: PPT 复制进项目根 (by-slide 需项目内 PPTX); 报告兼容 _references_FINAL/_manual_download_list 自动生成; 空项目 out_base/doi_map 容错
+  - 测试 71/71 通过, 全流程 exit 0
   - via54.py 缺 import re → cmd_highlight 运行时 NameError (致命) → 已修
   - --out-dir 参数失效: cmd_highlight 未透传 + via54_ppt_visual_to_pdf.py out_base 未生效 → 双修
   - tma_manual_list.py KNOWN_DOI 22 个 key 残留旧命名 S{slide}_{num} → 归一 P{slide}-{num} (人工清单 DOI 链接恢复)

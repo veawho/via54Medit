@@ -38,7 +38,15 @@ def pm_search(term):
     return 'https://pubmed.ncbi.nlm.nih.gov/?term=' + urllib.parse.quote(term)
 
 def main():
-    missing = json.load(open(MISSING, encoding='utf-8'))
+    # 缺失清单: 优先 _manual_download_list.json, 缺则从 _refs.json + PDF 目录自算 (全新项目兼容)
+    if os.path.exists(MISSING):
+        missing = json.load(open(MISSING, encoding='utf-8'))
+    else:
+        refs0 = json.load(open(REF_JSON, encoding='utf-8'))
+        pdf_dir = os.path.join(T, "_2_pdfs")
+        have = set(f[:-4] for f in os.listdir(pdf_dir)) if os.path.isdir(pdf_dir) else set()
+        missing = [{"ref": k, "citation": v} for k, v in sorted(refs0.items()) if k not in have]
+        json.dump(missing, open(MISSING, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     refs = json.load(open(REF_JSON, encoding='utf-8'))
     lines = []
     lines.append('# TMA 文献 — 人工下载清单 (自动下载截止后剩余 %d 篇)' % len(missing))
