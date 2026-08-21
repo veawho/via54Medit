@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to via54Medit will be documented in this file.
 
@@ -26,6 +26,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 验证
 - go test ./... -race 全绿 (medplan 26 用例 + GLM provider 4 用例新增)
 - CLI 冒烟: 真实调研回 116 条文献 (PubMed/OpenAlex/S2), 三档大纲+合规端到端; 否定语境豁免修复模板合规提示句误报 (patient FAIL→PASS)
+
+## [4.6.1] - 2026-08-20 (TMA highlight 全流水线集成: 89 引用级联下载 + 内容核验 + 批量 highlight)
+
+### Added
+- **scripts/tma_cascade_download.py**: 多级 OA 级联下载 (OpenAlex/Unpaywall/EuropePMC/NCBI PMC/doi.org), 项目根经 `TMA_PROJECT` 环境变量覆盖
+- **scripts/tma_download_round2.py + tma_scihub.py**: CrossRef 重解析 DOI + 首页内容三维核验 (期刊整词/年份/作者) + Sci-Hub 兜底; 修复 DOI 表 3 处错配 (S9_1/S11_6/S31_1)
+- **scripts/tma_verify_pdfs.py**: 下载后逐 PDF 内容核验 (期刊缩写展开表 40+ 条)
+- **scripts/tma_batch_highlight.py**: 每 Pn-x 按所在 slide 视觉定位批量 v3 FINAL highlight (嵌套目录, 修复旧 batch 无 --slide 过宽匹配)
+- **scripts/tma_verify_highlights.py**: annot/黄色像素/图片完整性/pages 子目录四维验证
+- **scripts/tma_package.py / tma_final_report.py / tma_manual_list.py**: 89 行 8 列 CSV + 交付报告 + 人工下载清单
+- **docs/tma_delivery_2026-08-20/**: TMA 交付物 (对照表/CSV/人工清单/核验报告) + 流水线 README
+- **scripts/test_tma_pipeline.py**: 53 用例黄金测试 (DOI 提取/期刊缩写展开/三维内容核验/黄色像素/子命令注册)
+- **via54.py 新增 6 子命令**: download (round1/round2) / pdf-verify / hl-batch / hl-verify / report / manual-list; 修复 cmd_highlight slide_num 未定义 bug; handlers 提为模块级 HANDLERS
+- **scripts/tma_highlight_by_slide.py (新)**: 按 slide 分组驱动 highlight — ①导出全部 slide 图 _ppt_renders/ (python-pptx 近似渲染) ②逐页视觉提取 (文本/表格/图片形状, 融合 vision report) ③对照该页所有 PDF ④**文字段落 + 表格 (find_tables) + 图表/图片 (get_image_info) 四类应证 highlight** (v3 FINAL rect + 9 铁律, xref 层规避 PyMuPDF 1.28.2 annot.rect 原生崩溃 bug + clean-resave 兼容)
+- **via54.py hl-batch 默认按 slide 分组** (tma_highlight_by_slide.py), --legacy 走旧文字-only 模式
+- **test_tma_pipeline.py 扩至 61 用例**: T11 by-slide (slide_terms / find_table_matches / find_image_matches) + T10 更新 (hl-batch 默认/legacy)
+- **scripts/ppt_render_engine.py (新)**: PPT → 图片多引擎自动渲染 — ①PowerPoint COM (ProgID PowerPoint.Application) ②WPS 演示 COM (KWPP.Application) ③python-pptx 近似兜底; 检测到 COM 引擎缺 pywin32 自动安装; DispatchEx 强制新实例 (修复 Dispatch 连接残留); 任一引擎失败自动降级
+- **tma_highlight_by_slide.py Step 0 接入 ppt_render_engine**: 全量 slide 图改用系统 PowerPoint 真实渲染 (本机实测: 非白像素 14-35% vs 近似渲染 1-11%)
+- **test_tma_pipeline.py 扩至 65 用例**: T12 渲染引擎 (ProgID 探测 / 兜底渲染 / COM 失败降级)
+- **自然语言一键全自动管线 (2026-08-20 三轮)**:
+  - **scripts/via54_auto.py (新)**: 自然语言入口编排器 — via54.py auto "帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight" 全自动: 环境自检(依赖自动安装)→渲染PPT图(PowerPoint/WPS COM)→深度提取引用(上标/中文+数字标号 + 参考文献列表完整引文)→1小时限时下载(级联+CrossRef+SciHub, 超时保留链接)→整理Pn-x目录(_literature_citation_index/)→逐slide视觉分析+highlight plan(_highlight_plans/)→按序highlight→交付报告
+  - **scripts/deps_auto.py (新)**: 环境自检 + 自动 pip 安装缺失依赖 (PyMuPDF/python-pptx/Pillow/pywin32[Win])
+  - via54.py 新增 auto 子命令; 提取准确率: 55→109→59 条(去噪) + 16 条完整引文(参考文献列表), 无标号 slide 不再误建引用, 下载后内容核验(mismatch 即删)
+  - 测试扩至 71 用例 (T13 自然语言解析/项目根/目录整理)
+- **第八轮 (2026-08-20)**: 修复非正文错标 — 9 铁律扩展 4 规则
+  - 规则10 投稿元数据 (Received/Accepted/Published); 规则11 页眉页脚 (卷期/页码/版权/许可); 规则12 声明标题 (FUNDING/ACKNOWLEDGMENTS/CONTRIBUTIONS/COPYRIGHT); 规则13 参考文献条目 (doi/et al./作者列表/续行)
+  - 修复 get_textbox 跨行文本导致规则正则失效 (is_metadata_rect 空白归一化)
+  - 实测: P3-1/P16-1/P23-5 错标清零; 全量 58 个重跑, 删除量 +10~30% (P4-6 38, P23-5 46)
+  - 测试扩至 79 用例 (T14 规则扩展)
+- **第七轮迭代 (2026-08-20)**: 关联固化与复用
+  - `_ref_assoc_map.json`: 每 Pn-x → 完整引文编号 + 关联状态 (ok/rejected/dl_failed)
+  - 人工清单增强: 双核验通过的 ref 显示「复用全文库 ref{N}.pdf」; 被拒的显示「需人工核对」; 未关联的显示建议引文
+  - 实测: P3-1→full#1, P3-3→full#3, P4-3→full#3 关联固化; 人工清单可复用 ref1-3.pdf
+- **第六轮迭代 (2026-08-20)**: 标号↔完整引文自动关联
+  - 复合标号解析: 上标 run 支持 "4,6"/"1-3" 拆分, 提取 28→34 条
+  - 完整引文关联下载: 标号数字命中参考文献列表编号时, 用完整引文下载 + **双核验** (引文自洽 + context 英文术语出现在 PDF)
+  - 双核验拦截错配: 页内编号≠全局编号时自动拒绝并回退 (实测 P5-1 正确拦截)
+  - 实测 (TMA_auto_test 全新项目): 标号关联下载 6 篇 + 全文库 8 篇, 6 个 Pn-x 完成 highlight, 全流程 exit 0
+- **第五轮迭代 (2026-08-20)**:
+  - PubMed 术语检索兜底下载: 正文句含英文医学术语时 ESearch→EuropePMC OA 下载
+  - 全文库对照表 `_全文库对照表.md`: 参考文献列表完整引文 ↔ 下载状态 (供人工对照 PPT 标号)
+  - 实测 highlight 链路: 全文库 PDF 映射 Pn-x 后 by-slide 高亮正常 (P3-1 59 高亮/9铁律删 41)
+  - 修复: 下载 failed 重复记录; full_lib_table f.write 字符串损坏; full_refs JSON int-key roundtrip
+- **全新项目全自动测试修复 (2026-08-20 四轮)** (实测 TMA_auto_test):
+  - round2 补 process_ref 封装 (编排器调用缺函数崩溃)
+  - 下载顺序: 参考文献列表完整引文(准确字段)优先, 实测 16 条成功 10 条 (62%), 付费墙保留链接; 标号正文句匹配率低(中文)
+  - full_refs JSON int-key roundtrip 修复 (str key 导致替换失效)
+  - 移除按标号替换完整引文 (PPT 页内编号与全局编号无结构映射, 会错配)
+  - auto 管线: PPT 复制进项目根 (by-slide 需项目内 PPTX); 报告兼容 _references_FINAL/_manual_download_list 自动生成; 空项目 out_base/doi_map 容错
+  - 测试 71/71 通过, 全流程 exit 0
+  - via54.py 缺 import re → cmd_highlight 运行时 NameError (致命) → 已修
+  - --out-dir 参数失效: cmd_highlight 未透传 + via54_ppt_visual_to_pdf.py out_base 未生效 → 双修
+  - tma_manual_list.py KNOWN_DOI 22 个 key 残留旧命名 S{slide}_{num} → 归一 P{slide}-{num} (人工清单 DOI 链接恢复)
+  - tma_highlight_by_slide.py: 单 PDF 异常隔离 (不中断全量 batch) + hl_tmp 异常清理
+  - 测试环境适配: test_hl_lib.py (TMA_HL_TEST_SRC/TMA_PROJECT 参数化, 无数据跳过) + test_ppt_understand.py (VIA54_LEIGUAN_DIR 参数化 + 数据守卫) → 跨系统可跑 (本机 25/25 真实数据通过)
+  - pyflakes 清理: 6 脚本头部孤立 import os / 未用 import (io/shutil/hashlib 等)
+
+### Fixed
+- TMA 下载器 Windows stdout GBK UnicodeEncodeError 崩溃 (sys.stdout.reconfigure utf-8)
+- Pn-S27_1 嵌套输出缺失 + Pn-S23_5 0 字节 p5.png (全量重跑 batch 解决)
+- 错配下载 24 篇隔离至项目 `_2_pdfs_wrong/` (含 ojs.omniscient.sg/hanspub 等低质 OA 源)
+- S20_2 (MDPI) / S31_2 (Frontiers) 手动直链修复
+
+### Stats
+- TMA_test: 89 引用, 52 篇有 PDF+highlight (58%), 37 篇付费墙/中文期刊 → `_人工下载清单.md` (含访问链接, 下载按用户要求 1 小时截止)
 
 ## [4.6.0] - 2026-08-18 (v3 FINAL 全量经验注入: highlight rect 模式 + 8列表 + 合并规则)
 
@@ -309,3 +374,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Remaining (网络阻塞)
 - 61 commits 待 push 到 github.com/veawho/via54Medit
 - 跑 `cd via54Medit && git push origin main` 在网络恢复后
+

@@ -607,7 +607,10 @@ via54Medit 的 highlight 工具配套 skill 在 `~/.hermes/skills/devops/via54-h
 python3 scripts/via54.py all                                       # 默认跑雷管方案 + TMA
 python3 scripts/via54.py rules <project_dir> [--verbose]            # 6 步校验
 python3 scripts/via54.py step5 --project 雷管方案 [--use-glm]      # 三方对齐
-python3 scripts/via54.py highlight --project TMA --mode line       # 重跑 highlight
+python3 scripts/via54.py highlight --project TMA                    # 默认 visual-v3 (PPT 视觉 API + v3 FINAL + 9 铁律)
+python3 scripts/via54.py highlight --project TMA --mode plan-v3    # 快速模式 (用预存 vision plan)
+python3 scripts/via54.py highlight --project TMA --mode legacy-v10 # 旧 v10.1 line 模式 (历史)
+python3 scripts/via54.py highlight --project TMA --no-vision        # 不用 vision API
 python3 scripts/via54.py paper-match verify <pdf> <citation>        # L0 单条
 python3 scripts/via54.py keyword "<citation>" "[context]"            # L4 抽词
 python3 scripts/via54.py ppt audit|expand|render <input.pptx>      # PPT 扩页
@@ -689,3 +692,160 @@ python3 scripts/hl_v3_final/copy_hl_images.py     # 根目录只留高亮页
 
 - 合并判定 = 引用文本指向同一文献(不能只看 MD5: 同一文献不同下载版本 MD5 不同仍要合并)
 - 新目录名 = 成员按数字顺序下划线连接: `P3-1_P4-1`; TMA 106→90 目录(12 组合并, 28 个 Pn-x)
+
+
+## 🔥 73. v3 FINAL + 9 条铁律 集成 (2026-08-20 用户硬规则)
+
+完整集成 via54Medit ARCHITECTURE.md §23.2 的 9 条视觉铁律到 v3 FINAL rect 模式:
+
+### 9 条铁律 (via54_highlight_v3_final.py 自动应用)
+
+| # | 规则 | 检测方法 | 违规处理 |
+|---|------|----------|----------|
+| 1 | 视觉与 PPT 正文匹配 | 整句匹配 (不用关键词) | hl_lib locate_sentence |
+| 2 | ❌ 禁止 highlight 作者 | AUTHOR_PATTERNS + [A-Z][a-z]+ | page.delete_annot |
+| 3 | ❌ 禁止 highlight 文献标题 | 字号 >= 14pt + 上部 40% | page.delete_annot |
+| 4 | ❌ 禁止 highlight 期刊名 | PUBLISHER_PATTERNS | page.delete_annot |
+| 5 | ❌ 禁止 highlight Abstract 标题 | ABSTRACT_HEADERS | page.delete_annot |
+| 6 | ❌ 禁止关键词匹配 | 用整句/短语 (50-200 字符) | hl_lib 强制 |
+| 7 | ❌ 不能串行 | v3 FINAL rect 每行 1 rect | hl_lib sentence_rects |
+| 8 | ❌ 不能遮盖文字 | rect 收窄 -0.6pt | hl_lib line 215-216 |
+| 9 | ❌ 不能偏移 | 严格按 rawdict bbox | hl_lib 强制 |
+
+### 新增脚本
+
+| 脚本 | 路径 | 作用 |
+|------|------|------|
+| `via54_highlight_v3_final.py` | `scripts/` | v3 FINAL + 9 条铁律的通用 API |
+| `rerun_tma_highlight_v3_final.py` | `scripts/` | TMA 专属 v3 FINAL 高亮 (替代 v10.4) |
+
+### 用法
+
+```python
+from via54_highlight_v3_final import highlight_with_v3_final
+
+# sentences = {page_idx_0based: [sentence, ...]}
+result = highlight_with_v3_final(
+    pdf_in="path/to/input.pdf",
+    pdf_out="path/to/output.pdf",
+    sentences=sentences_map,
+    apply_9_rules=True,  # 自动删除违规 highlight
+)
+# result = {
+#   "ok": True,
+#   "total_sentences": 15,
+#   "highlights_ok": 12,
+#   "highlights_removed": 3,  # 9 条铁律删除的
+#   "violations": [(page, rule, text), ...]
+# }
+```
+
+### vs v10.4 改进
+
+| 项 | v10.4 (line 模式) | v3 FINAL (rect 模式) + 9 铁律 |
+|---|-------------------|-------------------------------|
+| 样式 | 文字下方细黄线 | 整段半透明黄色 rect (opacity 0.45) |
+| 匹配 | 关键词 (search_for) | 整句 (locate_sentence) |
+| 行级覆盖 | 跨行延伸 | 每行 1 rect, 严格按行距 |
+| 作者/标题 | 部分跳过 (前 2 行 + 上下 10%/8%) | 完全跳过 (字号 + 模式) |
+| 9 条铁律 | 未集成 | 自动应用 + 删除违规 |
+| 验证 | 25 passed | 25 passed + 9 铁律验证 |
+
+### 验证 (TMA 案例)
+
+- 6/6 PDF 全部高亮 ✅
+- 11 个违规 highlight 被删除 (3 个标题, 8 个元数据区)
+- 93 个合法 highlight 保留 (全部在 body content)
+
+
+## 🔥 74. PPT视觉识别 → PDF应证 → v3 FINAL 高亮 完整流程 (2026-08-20 用户硬规则)
+
+完全替代关键词匹配, 实现真正的**视觉驱动** highlight 流程:
+
+### 之前的错误 (硬规则)
+
+之前 `via54_highlight_fix_v10.py` 用关键词 `search_for()` 在 PDF 中匹配 (如 `'elevated lactate dehydrogenase'`)。
+问题: 关键词匹配 = 简单 grep, 不对应 PPT 视觉内容, 导致:
+  - 误命中 (单关键词多处出现)
+  - 漏匹配 (关键词变了找不到)
+  - 不应证 (没体现 PPT 视觉)
+
+### 正确流程 (via54_ppt_visual_to_pdf.py)
+
+```
+Step 1: PPT 视觉理解 (sensenova vision API)
+   - 用 vision API 渲染 PPT slide 为 png
+   - 调用 sensenova-6.7-flash-lite 提取:
+     * text_blocks (位置+类型)
+     * citation_marks (标号+上下文+视觉位置)
+     * data_points (数字/百分比/月份)
+
+Step 2: PDF 语义级搜索 (不用关键词)
+   - 整段匹配 (50-200 字符)
+   - 提取医学术语 + 数据点 (避通用词)
+   - 多 token 命中策略 (>=2 token 或 含数据点)
+
+Step 3: v3 FINAL rect 高亮
+   - 用 hl_lib.highlight_sentences (整句)
+   - opacity 0.45 半透明黄色
+
+Step 4: 9 条铁律自动应用
+   - 删除标题/作者/期刊/Abstract 高亮
+   - 只保留 body content 高亮
+```
+
+### 新增脚本
+
+| 脚本 | 路径 | 作用 |
+|------|------|------|
+| `via54_ppt_visual_to_pdf.py` | `scripts/` | PPT视觉→PDF应证→高亮 完整流程 |
+
+### vs 旧流程对比
+
+| 项 | 旧 (`via54_highlight_fix_v10.py`) | 新 (`via54_ppt_visual_to_pdf.py`) |
+|---|--------|---------|
+| PPT 内容识别 | 关键词 (如 "T+A", "STRIDE") | vision API 视觉识别 |
+| PDF 匹配 | search_for() 单词 | 整段 + 多 token 语义 |
+| 标号定位 | 正则 (找 "中文词+数字") | vision 给出视觉位置 |
+| 数据点 | 关键词 (如 "23.7") | vision 提取 (数字+类型) |
+| 应证 | 字符串匹配 | 视觉+语义双层 |
+| 9 铁律 | STRICT_SKIP_HEADER (部分) | 9 条完整 + 字号检测 |
+
+### 用法
+
+```bash
+# 完整流程 (使用 vision API)
+python3 via54_ppt_visual_to_pdf.py input.pptx input.pdf output.pdf
+
+# 指定 slide
+python3 via54_ppt_visual_to_pdf.py input.pptx input.pdf output.pdf --slide 5
+
+# 不使用 vision API (fallback python-pptx)
+python3 via54_ppt_visual_to_pdf.py input.pptx input.pdf output.pdf --no-vision
+```
+
+### Python API
+
+```python
+from via54_ppt_visual_to_pdf import highlight_from_visual
+
+result = highlight_from_visual(
+    pptx_path="presentation.pptx",
+    pdf_in="input.pdf",
+    pdf_out="output.pdf",
+    slide_num=5,  # 或 None 处理所有 slide
+    use_vision_api=True,
+    apply_9_rules=True,
+)
+# result["highlights_ok"] = 实际高亮数
+# result["highlights_removed"] = 9 铁律删除数
+# result["violations"] = [(page, rule, text)]
+```
+
+### 验证 (TMA 案例)
+
+- 6/6 PDF 全部用 PPT 视觉驱动高亮 ✅
+- 104 个合法 highlight (整段匹配, 不是关键词)
+- 69 个违规被 9 铁律删除 (DOI 链接 + 元数据区)
+- 视觉位置正确 (top/center/bottom)
+- 整段匹配, 不用 search_for()

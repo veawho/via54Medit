@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 """
-via54.py — via54Medit 统一入口 (2026-08-10)
+via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
 
 整合所有 v10 工具, 一个 CLI 全跑.
 
 子命令:
   rules           6 步规则校验
   step5           Step 5 三方对齐
-  highlight       Highlight 重新生成 (v10.1)
+  highlight       Highlight 重新生成 (默认 visual-v3: PPT 视觉 API + v3 FINAL + 9 铁律)
   paper-match     L0 错论文校验
   keyword         L4 关键词抽取
   ppt             PPT 扩页 + 审计 + 渲染
   diff            双项目对比
   all             跑全部
+  auto            自然语言一键全自动管线 (渲染PPT图→提取引用→限时下载→整理→highlight→报告)
+  download        TMA 文献级联下载 (round1 OA 级联 / round2 CrossRef+核验+SciHub)
+  pdf-verify      下载 PDF 内容核验 (期刊/年份/作者)
+  hl-batch        批量 highlight (默认按 slide 分组: slide 图+视觉提取+文字/表格/图表/图片应证; --legacy 旧文字模式)
+  hl-verify       highlight 质量验证 (annot/黄色像素/图片完整性)
+  report          生成 8 列 CSV + 交付报告
+  manual-list     生成人工下载清单 (付费墙/中文期刊 + 访问链接)
 
 用法:
   python3.11 via54.py rules <project_dir> [--verbose]
   python3.11 via54.py step5 --project 雷管方案
-  python3.11 via54.py highlight --project TMA --mode line
+  python3.11 via54.py highlight --project TMA                    # 默认 visual-v3 (推荐)
+  python3.11 via54.py highlight --project TMA --mode plan-v3      # 用预存 vision plan 快速跑
+  python3.11 via54.py highlight --project TMA --mode legacy-v10  # 旧 v10.1 line 模式 (历史)
+  python3.11 via54.py highlight --project TMA --no-vision        # 不用 vision API
   python3.11 via54.py paper-match <pdf> <citation>
   python3.11 via54.py keyword "<citation>" "[context]"
   python3.11 via54.py ppt audit <input.pptx>
   python3.11 via54.py diff
   python3.11 via54.py all <project_dir>  # 跑全部
 """
-import os, sys, json, argparse, subprocess
+import os, re, sys, json, argparse, subprocess
 from pathlib import Path
 
 # 让子工具可以被 import
@@ -70,20 +80,244 @@ def cmd_step5(args):
 
 
 def cmd_highlight(args):
+    """
+    Highlight 重新生成 (v3 FINAL + 9 铁律 + 视觉驱动)
+
+    默认流程 (新):
+      via54_ppt_visual_to_pdf.py - PPT 视觉 API 实时识别 + PDF 应证 + v3 FINAL 高亮
+    快速流程 (有预存 vision plan 时):
+      rerun_tma_highlight_v3_final.py - 用预存 vision plan 快速跑
+    兼容模式 (历史参考):
+      --mode legacy-v10 旧 v10.1 line 模式
+
+    用法:
+      python3 via54.py highlight --project TMA      # 默认 visual-v3, 跑所有 PDF
+      python3 via54.py highlight --project TMA --mode plan-v3 --limit 5  # 快速流程
+      python3 via54.py highlight --project TMA --mode legacy-v10  # 旧 v10.1
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", choices=["雷管方案", "TMA"], required=True)
-    parser.add_argument("--mode", default="line", choices=["line", "fill", "both"])
+    parser.add_argument("--mode", default="visual-v3",
+                        choices=["visual-v3", "plan-v3", "line", "fill", "both", "legacy-v10"],
+                        help="""默认 visual-v3 (PPT 视觉 API 实时识别 + 9 铁律)
+                        plan-v3 = 用预存 vision plan 快速跑
+                        legacy-v10 = 旧 v10.1 line 模式 (历史参考)""")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--no-vision", action="store_true",
+                        help="不用 vision API (用 python-pptx fallback)")
+    parser.add_argument("--no-rules", action="store_true",
+                        help="不应用 9 条铁律")
+    parser.add_argument("--slide", type=int, default=None,
+                        help="只处理指定 slide (默认所有)")
+    parser.add_argument("--pptx", default=None,
+                        help="PPT 文件路径 (默认自动查找)")
+    parser.add_argument("--pdf-dir", default=None,
+                        help="PDF 目录 (默认 _2_pdfs)")
+    parser.add_argument("--out-dir", default=None,
+                        help="输出目录 (默认 _3_highlight_v10)")
     ns = parser.parse_args(args)
+
+    # 选脚本
+    if ns.mode == "legacy-v10":
+        # 旧 v10.1 line 模式 (仅历史参考)
+        if ns.project == "雷管方案":
+            script = "rerun_leidafang_highlight_v10.py"
+        else:
+            script = "rerun_tma_highlight_v10.py"
+        argv = ["--mode", "line"]
+        if ns.limit: argv.extend(["--limit", str(ns.limit)])
+        if ns.skip_existing: argv.append("--skip-existing")
+        return _run_module(script, argv)
+
+    # visual-v3 / plan-v3 都基于项目目录跑所有 PDF
+    # 默认项目目录
     if ns.project == "雷管方案":
-        script = "rerun_leidafang_highlight_v10.py"
+        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR", "/Users/david/Desktop/雷管方案_文献整理")
     else:
-        script = "rerun_tma_highlight_v10.py"
-    argv = ["--mode", ns.mode]
-    if ns.limit: argv.extend(["--limit", str(ns.limit)])
-    if ns.skip_existing: argv.append("--skip-existing")
+        proj_dir = os.environ.get("VIA54_TMA_DIR", "/Users/david/Desktop/TMA_文献整理")
+
+    # 找 PPT 文件
+    pptx_path = ns.pptx or os.path.join(proj_dir, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
+    if not os.path.exists(pptx_path):
+        # TMA: 找顶层 .pptx
+        for f in os.listdir(proj_dir):
+            if f.endswith(".pptx"):
+                pptx_path = os.path.join(proj_dir, f)
+                break
+
+    pdf_dir = ns.pdf_dir or os.path.join(proj_dir, "_2_pdfs")
+    out_dir = ns.out_dir or os.path.join(proj_dir, "_3_highlight_v10")
+
+    if not os.path.isdir(pdf_dir):
+        print(f"错误: PDF 目录不存在 {pdf_dir}")
+        return 1
+
+    # 列出所有 PDF
+    pdfs = sorted([f for f in os.listdir(pdf_dir) if f.endswith(".pdf") and f.startswith("P")])
+    if ns.limit:
+        pdfs = pdfs[:ns.limit]
+    print(f"待处理 PDF: {len(pdfs)} (mode={ns.mode})")
+
+    # 选脚本
+    if ns.mode == "plan-v3":
+        # 快速流程: 一次跑所有 Pn-x
+        argv = []
+        if ns.limit: argv.extend(["--limit", str(ns.limit)])
+        return _run_module("rerun_tma_highlight_v3_final.py", argv)
+    else:
+        # 默认 visual-v3: 每 PDF 单独跑 (精确但慢)
+        # 输出按 8 列标准嵌套: {Pn-x}/{Pn-x}_main.pdf, _highlight.pdf, _pages/
+        script = "via54_ppt_visual_to_pdf.py"
+        n_ok = 0
+        for pdf_file in pdfs:
+            pdf_in = os.path.join(pdf_dir, pdf_file)
+
+            # 从文件名提取 slide (Pn-x: Pn=slide 页码, x=该页第几条引用; P3-1 → 3)
+            slide_num = None
+            m = re.match(r"P(\d+)-(\d+)\.pdf", pdf_file)
+            if m:
+                slide_num = int(m.group(1))
+
+            argv = [pdf_in]
+            if pptx_path and os.path.exists(pptx_path):
+                argv.extend(["--pptx", pptx_path])
+            if ns.out_dir: argv.extend(["--out-dir", ns.out_dir])
+            if ns.no_vision: argv.append("--no-vision")
+            if ns.no_rules: argv.append("--no-rules")
+            if slide_num: argv.extend(["--slide", str(slide_num)])
+
+            print(f"\n=== {pdf_file} (slide {slide_num}) ===", flush=True)
+            rc = _run_module(script, argv)
+            if rc == 0:
+                n_ok += 1
+        print(f"\n=== 总结: {n_ok}/{len(pdfs)} 成功 ===")
+        return 0
+
+
+
+
+def _tma_project_dir(ns):
+    """解析项目根: --project-dir > TMA_PROJECT env > VIA54_TMA_DIR env"""
+    if getattr(ns, "project_dir", None):
+        return ns.project_dir
+    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or "/Users/david/Desktop/TMA_文献整理"
+
+
+def _run_tma(script, argv, project_dir):
+    os.environ["TMA_PROJECT"] = project_dir
+    print(f"[tma] project={project_dir} script={script} args={argv}", flush=True)
     return _run_module(script, argv)
+
+
+def cmd_auto(args):
+    """自然语言一键全自动管线:
+    via54.py auto "帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight" [--ppt X.pptx] [--budget 3600]"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("nl", nargs="?", default=None, help="自然语言指令")
+    parser.add_argument("--ppt", default=None, help="PPT 路径")
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--budget", type=int, default=3600, help="下载预算秒数 (默认 1 小时)")
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--skip-render", action="store_true")
+    parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--skip-highlight", action="store_true")
+    parser.add_argument("--skip-report", action="store_true")
+    ns = parser.parse_args(args)
+    if not ns.nl and not ns.ppt:
+        print('用法: via54.py auto "帮我识别 X.pptx 中的文献引用，下载文献，并进行highlight" [--ppt X.pptx]')
+        return 1
+    argv = []
+    if ns.nl: argv.append(ns.nl)
+    if ns.ppt: argv.extend(["--ppt", ns.ppt])
+    if ns.project_dir: argv.extend(["--project-dir", ns.project_dir])
+    if ns.budget != 3600: argv.extend(["--budget", str(ns.budget)])
+    if ns.limit: argv.extend(["--limit", str(ns.limit)])
+    for flag, attr in [("--skip-render", "skip_render"), ("--skip-download", "skip_download"),
+                       ("--skip-highlight", "skip_highlight"), ("--skip-report", "skip_report")]:
+        if getattr(ns, attr):
+            argv.append(flag)
+    return _run_module("via54_auto.py", argv)
+
+
+def cmd_download(args):
+    """TMA 文献级联下载: round1 = OA 级联 (OpenAlex/Unpaywall/EPMC/PMC/doi.org), round2 = CrossRef 重解析 + 内容核验 + Sci-Hub"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None, help="项目根 (默认 TMA_PROJECT env)")
+    parser.add_argument("--round2", action="store_true", help="用 round2 (CrossRef 重解析 DOI + 三维核验 + Sci-Hub 兜底)")
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--only", default=None, help="只处理指定引用, 逗号分隔")
+    parser.add_argument("--sleep", type=float, default=0.5)
+    ns = parser.parse_args(args)
+    proj = _tma_project_dir(ns)
+    script = "tma_download_round2.py" if ns.round2 else "tma_cascade_download.py"
+    argv = []
+    if ns.limit: argv.extend(["--limit", str(ns.limit)])
+    if ns.only: argv.extend(["--only", ns.only])
+    if ns.sleep != 0.5: argv.extend(["--sleep", str(ns.sleep)])
+    return _run_tma(script, argv, proj)
+
+
+def cmd_pdf_verify(args):
+    """下载后 PDF 内容核验 (期刊/年份/作者匹配)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--only", default=None)
+    ns = parser.parse_args(args)
+    argv = []
+    if ns.only: argv.extend(["--only", ns.only])
+    return _run_tma("tma_verify_pdfs.py", argv, _tma_project_dir(ns))
+
+
+def cmd_hl_batch(args):
+    """批量 highlight (默认按 slide 分组驱动): 导出全部 slide 图 → 逐页视觉提取 →
+    对照该页所有 PDF → 文字段落 + 表格 + 图表/图片 应证 highlight (v3 FINAL rect + 9 铁律)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--force", action="store_true", help="已存在输出也重跑")
+    parser.add_argument("--only", default=None, help="只处理指定 Pn-x, 逗号分隔")
+    parser.add_argument("--slide", type=int, default=None, help="只处理指定 slide")
+    parser.add_argument("--legacy", action="store_true",
+                        help="旧文字-only 模式 (tma_batch_highlight.py, 历史参考)")
+    ns = parser.parse_args(args)
+    proj = _tma_project_dir(ns)
+    if ns.legacy:
+        argv = []
+        if ns.force: argv.append("--force")
+        if ns.only: argv.extend(["--only", ns.only])
+        return _run_tma("tma_batch_highlight.py", argv, proj)
+    argv = []
+    if ns.force: argv.append("--force")
+    if ns.only: argv.extend(["--only", ns.only])
+    if ns.slide: argv.extend(["--slide", str(ns.slide)])
+    return _run_tma("tma_highlight_by_slide.py", argv, proj)
+
+
+def cmd_hl_verify(args):
+    """highlight 质量验证 (annot/黄色像素/图片完整性/pages 子目录)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    parser.add_argument("--only", default=None)
+    ns = parser.parse_args(args)
+    argv = []
+    if ns.only: argv.extend(["--only", ns.only])
+    return _run_tma("tma_verify_highlights.py", argv, _tma_project_dir(ns))
+
+
+def cmd_report(args):
+    """生成 89 行 8 列 CSV + 交付报告 md"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    ns = parser.parse_args(args)
+    return _run_tma("tma_final_report.py", [], _tma_project_dir(ns))
+
+
+def cmd_manual_list(args):
+    """生成人工下载清单 (付费墙/中文期刊 + DOI/PubMed/万方/知网链接)"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-dir", default=None)
+    ns = parser.parse_args(args)
+    return _run_tma("tma_manual_list.py", [], _tma_project_dir(ns))
 
 
 def cmd_paper_match(args):
@@ -148,7 +382,7 @@ def cmd_all(args):
                     _run_module("step5_alignment.py", ["--project", "雷管方案"])
                 elif "TMA" in proj:
                     _run_module("step5_alignment.py", ["--project", "TMA"])
-        print(f"\n=== Multi-project diff ===")
+        print("\n=== Multi-project diff ===")
         _run_module("multi_project_diff.py", [])
     else:
         for proj in args:
@@ -161,6 +395,26 @@ def cmd_glm(args):
     return _run_module("glm_integration.py", args)
 
 
+HANDLERS = {
+    "rules": cmd_rules,
+    "step5": cmd_step5,
+    "highlight": cmd_highlight,
+    "paper-match": cmd_paper_match,
+    "keyword": cmd_keyword,
+    "ppt": cmd_ppt,
+    "auto": cmd_auto,
+    "download": cmd_download,
+    "pdf-verify": cmd_pdf_verify,
+    "hl-batch": cmd_hl_batch,
+    "hl-verify": cmd_hl_verify,
+    "report": cmd_report,
+    "manual-list": cmd_manual_list,
+    "diff": cmd_diff,
+    "glm": cmd_glm,
+    "all": cmd_all,
+}
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -168,18 +422,7 @@ def main():
 
     cmd = sys.argv[1]
     rest = sys.argv[2:]
-
-    handlers = {
-        "rules": cmd_rules,
-        "step5": cmd_step5,
-        "highlight": cmd_highlight,
-        "paper-match": cmd_paper_match,
-        "keyword": cmd_keyword,
-        "ppt": cmd_ppt,
-        "diff": cmd_diff,
-        "glm": cmd_glm,
-        "all": cmd_all,
-    }
+    handlers = HANDLERS
 
     if cmd not in handlers:
         print(f"未知命令: {cmd}")
