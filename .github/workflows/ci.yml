@@ -49,6 +49,10 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      - name: Python encoding guard (Windows GBK console)
+        run: |
+          echo "PYTHONIOENCODING=utf-8" >> $GITHUB_ENV
+
       - name: TMA pipeline tests
         working-directory: scripts
         run: python -m unittest test_tma_pipeline

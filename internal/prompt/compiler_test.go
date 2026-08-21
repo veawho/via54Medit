@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+// dspyScript is the DSPy compile script used by these tests. On CI it does
+// not exist (it lives in the author's ~/.medit), so tests that actually
+// exec it skip there but keep full value on the dev machine.
+const dspyScript = "/Users/david/.medit/scripts/dspy_compile.py"
+
+func requireDSPY(t *testing.T) string {
+	t.Helper()
+	if _, err := os.Stat(dspyScript); err != nil {
+		t.Skipf("skip: %s not present on this machine (CI/dev layout)", dspyScript)
+	}
+	return dspyScript
+}
+
 // TestCompiler_NewCompiler 算法测试: 创建 + 错误处理
 func TestCompiler_NewCompiler(t *testing.T) {
 	_, err := NewCompiler("", "")
@@ -14,7 +27,7 @@ func TestCompiler_NewCompiler(t *testing.T) {
 	}
 
 	// 用真 script
-	c, err := NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", "")
+	c, err := NewCompiler(dspyScript, "")
 	if err != nil {
 		t.Errorf("NewCompiler 应该成功, got %v", err)
 	}
@@ -25,19 +38,20 @@ func TestCompiler_NewCompiler(t *testing.T) {
 
 // TestCompiler_Compile 算法测试: 编译 + cache
 func TestCompiler_Compile(t *testing.T) {
+	requireDSPY(t)
 	tmpDir, _ := os.MkdirTemp("", "compiler_test")
 	defer os.RemoveAll(tmpDir)
 
-	c, err := NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", tmpDir)
+	c, err := NewCompiler(dspyScript, tmpDir)
 	if err != nil {
 		t.Fatalf("NewCompiler: %v", err)
 	}
 
 	req := CompileRequest{
-		Signature:    "test_sig -> intent",
-		TrainSet:     []map[string]string{{"nl_input": "test", "intent": "test"}},
-		MetricFunc:   "exact_match",
-		Optimizer:    "BootstrapFewShot",
+		Signature:     "test_sig -> intent",
+		TrainSet:      []map[string]string{{"nl_input": "test", "intent": "test"}},
+		MetricFunc:    "exact_match",
+		Optimizer:     "BootstrapFewShot",
 		MaxIterations: 1,
 	}
 
@@ -56,20 +70,21 @@ func TestCompiler_Compile(t *testing.T) {
 
 // TestCompiler_CacheHit 算法测试: 同一 signature 第二次走 cache
 func TestCompiler_CacheHit(t *testing.T) {
+	requireDSPY(t)
 	tmpDir, _ := os.MkdirTemp("", "compiler_cache_test")
 	defer os.RemoveAll(tmpDir)
 
-	c, err := NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", tmpDir)
+	c, err := NewCompiler(dspyScript, tmpDir)
 	if err != nil {
 		t.Fatalf("NewCompiler: %v", err)
 	}
 
 	sig := "cache_test_sig -> intent"
 	req := CompileRequest{
-		Signature:    sig,
-		TrainSet:     []map[string]string{{"nl_input": "x", "intent": "y"}},
-		MetricFunc:   "exact_match",
-		Optimizer:    "BootstrapFewShot",
+		Signature:     sig,
+		TrainSet:      []map[string]string{{"nl_input": "x", "intent": "y"}},
+		MetricFunc:    "exact_match",
+		Optimizer:     "BootstrapFewShot",
 		MaxIterations: 1,
 	}
 
@@ -92,10 +107,11 @@ func TestCompiler_CacheHit(t *testing.T) {
 
 // TestCompiler_Load 算法测试: 从 cache 加载
 func TestCompiler_Load(t *testing.T) {
+	requireDSPY(t)
 	tmpDir, _ := os.MkdirTemp("", "compiler_load_test")
 	defer os.RemoveAll(tmpDir)
 
-	c, err := NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", tmpDir)
+	c, err := NewCompiler(dspyScript, tmpDir)
 	if err != nil {
 		t.Fatalf("NewCompiler: %v", err)
 	}
@@ -109,10 +125,10 @@ func TestCompiler_Load(t *testing.T) {
 	// 先 Compile 再 Load
 	sig := "load_test_sig"
 	req := CompileRequest{
-		Signature:    sig,
-		TrainSet:     []map[string]string{{"a": "b"}},
-		MetricFunc:   "exact_match",
-		Optimizer:    "BootstrapFewShot",
+		Signature:     sig,
+		TrainSet:      []map[string]string{{"a": "b"}},
+		MetricFunc:    "exact_match",
+		Optimizer:     "BootstrapFewShot",
 		MaxIterations: 1,
 	}
 	_, _ = c.Compile(context.Background(), req)
@@ -188,7 +204,7 @@ func TestCompiler_FilePath(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "compiler_path_test")
 	defer os.RemoveAll(tmpDir)
 
-	c, _ := NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", tmpDir)
+	c, _ := NewCompiler(dspyScript, tmpDir)
 	// 算法: CachePath 是 Compile 结果, 不是 Compiler 字段
 	// 这里只验证 cacheDir 创建成功
 	if c.cacheDir != tmpDir {

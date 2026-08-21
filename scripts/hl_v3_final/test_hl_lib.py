@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """hl_lib 单元测试: canon / locate / rects / highlight 边界"""
 import sys, os, tempfile
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hl_lib
 from hl_lib import (canon, canon_keys, locate_sentence, locate_sentence_all,
