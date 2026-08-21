@@ -27,6 +27,7 @@ force = '--force' in sys.argv
 pdfs = []
 if os.path.isdir(PDF_DIR):
     pdfs = sorted([f for f in os.listdir(PDF_DIR) if f.endswith('.pdf') and f.startswith('P')])
+    os.makedirs(OUT_BASE, exist_ok=True)
 print('待处理 PDF:', len(pdfs), flush=True)
 
 def slide_of(pdf_name):
