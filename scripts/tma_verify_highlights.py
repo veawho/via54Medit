@@ -13,13 +13,23 @@ HL_BASE = os.path.join(T, '_highlight_nested')
 OUT = os.path.join(T, '_highlight_verify_report.json')
 
 def yellow_pct(path):
+    """返回黄色像素占比 (%) 或 None (文件不可读)。纯 PIL, 不依赖 numpy。"""
     try:
         from PIL import Image
-        import numpy as np
-        arr = np.array(Image.open(path).convert('RGB'))
-        r, g, b = arr[:, :, 0].astype(int), arr[:, :, 1].astype(int), arr[:, :, 2].astype(int)
-        yellow = (r > 200) & (g > 200) & (b < 150)
-        return float(yellow.sum()) / yellow.size * 100.0
+        img = Image.open(path).convert('RGB')
+        w, h = img.size
+        if w == 0 or h == 0:
+            return 0.0
+        total = w * h
+        yellow = 0
+        px = img.load()
+        for y in range(0, h, 100):
+            for yy in range(y, min(y + 100, h)):
+                for xx in range(w):
+                    r, g, b = px[xx, yy]
+                    if r > 200 and g > 200 and b < 150:
+                        yellow += 1
+        return float(yellow) / total * 100.0
     except Exception:
         return None
 

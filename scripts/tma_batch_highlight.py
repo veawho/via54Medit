@@ -24,7 +24,9 @@ if '--only' in sys.argv:
     only = sys.argv[sys.argv.index('--only') + 1].split(',')
 force = '--force' in sys.argv
 
-pdfs = sorted([f for f in os.listdir(PDF_DIR) if f.endswith('.pdf') and f.startswith('P')])
+pdfs = []
+if os.path.isdir(PDF_DIR):
+    pdfs = sorted([f for f in os.listdir(PDF_DIR) if f.endswith('.pdf') and f.startswith('P')])
 print('待处理 PDF:', len(pdfs), flush=True)
 
 def slide_of(pdf_name):
@@ -73,6 +75,7 @@ for pdf_file in pdfs:
     time.sleep(0.5)
 
 print(f'\n=== 总结: {sum(1 for r in results if r.get("ok"))}/{len(results)} 成功 ===', flush=True)
+os.makedirs(OUT_BASE, exist_ok=True)
 with open(os.path.join(OUT_BASE, '_batch_summary.json'), 'w', encoding='utf-8') as f:
     json.dump(results, f, ensure_ascii=False, indent=2)
 print('\n=== 输出结构 ===', flush=True)
