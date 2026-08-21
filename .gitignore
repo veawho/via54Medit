@@ -75,6 +75,7 @@ tests/stress/logs/
 references/test-data/pdfs/
 references/test-data/embedded/
 /medit
+/medit-mcp
 cmd/medit/medit
 *.exe
 list_citations_v2

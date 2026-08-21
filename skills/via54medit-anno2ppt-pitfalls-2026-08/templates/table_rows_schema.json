@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "anno2ppt TableRows — 应证推理机标准输入",
+  "description": "medit anno2ppt confirm 命令接受的表格行 JSON. 由 L2 PaddleOCR 或 PyMuPDF 文字层抽出. 字段对齐全 P3-3 Fig.2 实测要求.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["Disease", "Value", "Unit", "Geography"],
+    "properties": {
+      "Disease": {
+        "type": "string",
+        "description": "病种中文名 (e.g. 肝癌 / 胰腺癌 / 乳腺癌)",
+        "examples": ["肝癌", "胰腺癌", "甲状腺癌"]
+      },
+      "Value": {
+        "type": "number",
+        "description": "数值 (肝癌 14.4, 胰腺癌 8.5, 甲状腺癌 92.9)",
+        "examples": [14.4, 8.5, 92.9]
+      },
+      "Unit": {
+        "type": "string",
+        "enum": ["%", "万", "months", "per 100000"],
+        "description": "单位",
+        "examples": ["%"]
+      },
+      "Geography": {
+        "type": "string",
+        "description": "地理范围 (中国 / 全球 / 亚太)",
+        "examples": ["中国"]
+      },
+      "BBox": {
+        "type": "object",
+        "description": "PDF 坐标系 bbox (PyMuPDF: pt 单位, 原点在左上). 真实跑通时必填.",
+        "properties": {
+          "X0": {"type": "number"},
+          "Y0": {"type": "number"},
+          "X1": {"type": "number"},
+          "Y1": {"type": "number"}
+        }
+      },
+      "Page": {
+        "type": "integer",
+        "description": "PDF 页码 (1-indexed)"
+      },
+      "RawText": {
+        "type": "string",
+        "description": "原始 OCR/文字层文本 (用于调试)"
+      }
+    }
+  },
+  "examples": [
+    [
+      {
+        "Disease": "肝癌",
+        "Value": 14.4,
+        "Unit": "%",
+        "Geography": "中国",
+        "BBox": {"X0": 153.4, "Y0": 182.7, "X1": 498.7, "Y1": 631.2},
+        "Page": 4
+      },
+      {
+        "Disease": "胰腺癌",
+        "Value": 8.5,
+        "Unit": "%",
+        "Geography": "中国",
+        "BBox": {"X0": 148.9, "Y0": 99.1, "X1": 498.7, "Y1": 653.0},
+        "Page": 4
+      },
+      {
+        "Disease": "甲状腺癌",
+        "Value": 92.9,
+        "Unit": "%",
+        "Geography": "中国",
+        "BBox": {"X0": 157.0, "Y0": 99.0, "X1": 499.0, "Y1": 108.0},
+        "Page": 4
+      }
+    ]
+  ]
+}

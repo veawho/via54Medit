@@ -8,7 +8,8 @@ ppt_render_engine.py — PPT → 图片 多引擎自动渲染 (部署新系统�
   3. python-pptx + Pillow 近似渲染 (兜底, 任何平台可用)
 
 Windows: COM 真实渲染 (保真度最高); 若系统有 PowerPoint/WPS 但缺 pywin32, 自动尝试 pip 安装。
-macOS/Linux: 自动降级 python-pptx 近似渲染 (可自行扩展 soffice 分支)。
+macOS/Linux: 优先 soffice/libreoffice 真实渲染 (检测到即用, 全平台), 否则 python-pptx 近似渲染。
+CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Noto CJK), 保证中文近似渲染可读。
 
 用法:
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
@@ -71,14 +72,27 @@ def _com_probe(progid):
         return False
 
 
+def _find_soffice():
+    """探测 LibreOffice 可执行文件 (soffice/libreoffice), 全平台"""
+    import shutil
+    for name in ("soffice", "libreoffice"):
+        p = shutil.which(name)
+        if p:
+            return p
+    return None
+
+
 def detect_engines():
-    """返回可用引擎列表 [(name, kind), ...], kind: com | python_pptx"""
+    """返回可用引擎列表 [(name, kind), ...], kind: com | soffice | python_pptx"""
     out = []
     if os.name == "nt":
         for name, progid in COM_ENGINES:
             if _progid_available(progid):
                 if _ensure_pywin32(progid) and _com_probe(progid):
                     out.append((name, "com", progid))
+    soffice = _find_soffice()
+    if soffice:
+        out.append(("LibreOffice (soffice)", "soffice", soffice))
     out.append(("python-pptx 近似渲染", "python_pptx", ""))
     return out
 
@@ -126,7 +140,70 @@ def render_via_com(progid, pptx_path, out_dir, width_px=1600):
     return n
 
 
+# ============ LibreOffice 真实渲染 (全平台, 检测到即优先于近似) ============
+def render_via_soffice(soffice, pptx_path, out_dir, dpi=120):
+    """soffice --headless 转 PDF → PyMuPDF 渲染 PNG (真实排版, 含矢量/图表)"""
+    os.makedirs(out_dir, exist_ok=True)
+    import tempfile
+    import fitz
+    tmp = tempfile.mkdtemp(prefix="ppt_soffice_")
+    pdf_path = os.path.join(tmp, "slides.pdf")
+    try:
+        r = subprocess.run([soffice, "--headless", "--convert-to", "pdf",
+                            "--outdir", tmp, pptx_path],
+                           capture_output=True, text=True, timeout=300)
+        if r.returncode != 0 or not os.path.exists(pdf_path):
+            raise RuntimeError("soffice convert failed: %s" % (r.stderr or r.stdout)[-200:])
+        doc = fitz.open(pdf_path)
+        n = 0
+        for i, page in enumerate(doc, start=1):
+            pix = page.get_pixmap(dpi=dpi)
+            pix.save(os.path.join(out_dir, "slide_%03d.png" % i))
+            n += 1
+        doc.close()
+        return n
+    finally:
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ============ python-pptx 近似渲染 (兜底) ============
+
+# CJK 字体候选 (按平台): Windows 微软雅黑 / macOS 苹方·黑体 / Linux Noto·文泉驿
+_FONT_CANDIDATES = [
+    # Windows
+    r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc", r"C:\Windows\Fonts\simhei.ttf",
+    # macOS
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    # Linux (Noto CJK / 文泉驿)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+]
+
+
+def _find_cjk_font():
+    """按平台探测可用的 CJK 字体文件, 找不到返回 None (退化为内置位图字体)"""
+    for cand in _FONT_CANDIDATES:
+        if os.path.exists(cand):
+            return cand
+    # Linux 兜底: fc-match 查询
+    if os.name != "nt":
+        try:
+            out = subprocess.run(["fc-match", "-f", "%{file}", "sans-serif:lang=zh"],
+                                 capture_output=True, text=True, timeout=10)
+            p = (out.stdout or "").strip()
+            if p and os.path.exists(p):
+                return p
+        except Exception:
+            pass
+    return None
+
+
 def render_via_python_pptx(pptx_path, out_dir, dpi=120):
     os.makedirs(out_dir, exist_ok=True)
     try:
@@ -136,11 +213,7 @@ def render_via_python_pptx(pptx_path, out_dir, dpi=120):
     except ImportError as e:
         print("  [warn] render 依赖缺失: %s (跳过 slide 图导出)" % e)
         return 0
-    font_path = None
-    for cand in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc", r"C:\Windows\Fonts\simhei.ttf"]:
-        if os.path.exists(cand):
-            font_path = cand
-            break
+    font_path = _find_cjk_font()
     prs = Presentation(pptx_path)
     EMU_IN = 914400.0
     n = 0
@@ -200,6 +273,11 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
             if kind == "com":
                 print("  [render] 引擎=%s (COM %s)" % (name, progid), flush=True)
                 n = render_via_com(progid, pptx_path, out_dir, width_px)
+                if n > 0:
+                    return n, name
+            elif kind == "soffice":
+                print("  [render] 引擎=%s (%s)" % (name, progid), flush=True)
+                n = render_via_soffice(progid, pptx_path, out_dir)
                 if n > 0:
                     return n, name
             else:

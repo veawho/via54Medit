@@ -148,6 +148,12 @@ func registerAll() {
 	// --- 医学策划方案 (medplan, 2026-08-21) ---
 	rootCmd.AddCommand(medplanCmd) // medplan <new|run|research|outline|optimize|compliance|show|list>
 
+	// --- 跨平台浏览器接入 (2026-08-21) ---
+	rootCmd.AddCommand(browserCmd) // browser <start|health|stop>
+
+	// --- 部署自检 (2026-08-21) ---
+	rootCmd.AddCommand(doctorCmd) // doctor [--fix]
+
 	// --- Meta (1, --version is via root.Version; "version" subcommand for multi-line Full()) ---
 	rootCmd.AddCommand(versionCmd)
 }

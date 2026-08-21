@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [4.8.0] - 2026-08-21 (跨平台部署: 任意设备自动接入软件/工具/包 + skills 仓库化)
+
+### Added (跨平台自动接入)
+- **medit doctor**: 部署自检 (Python 解释器/包/浏览器/CDP/soffice/pdftotext/lark-cli/env 覆盖点), --fix 自动 pip 安装
+- **medit browser start/health/stop**: Chrome/Edge/Chromium 跨平台自动探测 + 独立 profile 调试实例启动 (port 9223), antfu health 已接入自动启动
+- **internal/foundation/python.go**: Python 解释器探测链 (config > $PYTHON > python3.11 > python3 > python) + HermesHome/UserMeditDir 可移植辅助
+- **skills/ (新)**: 9 个核心 skills vendored 入库 (anno2ppt phase7+pitfalls/highlight-strict/literature-pipeline 等, 1.5MB) + **scripts/skills_bootstrap.py** 一键同步 (幂等/--dry-run/--force/--list)
+- **requirements.txt** (pywin32 平台标记) + **deps_auto.py** 增强 (requirements 优先安装 + soffice/pdftotext/lark-cli 系统工具探测提示)
+- **ppt_render_engine.py**: LibreOffice soffice 引擎 (全平台, COM 之后近似之前) + 跨平台 CJK 字体探测 (Windows 雅黑/macOS 苹方/Linux Noto+fc-match)
+- **.github/workflows/ci.yml**: 三平台 (ubuntu/macos/windows) Go build+vet+race + Python 工具链测试 (79+25 用例)
+- **docs/DEPLOY.md**: 三平台安装/软件接入矩阵/env 覆盖点/FAQ
+
+### Changed (可移植性修复)
+- 硬编码个人路径 env 化: HLO_DIR/HLO_PYTHON/HLO_SQLITE/HERMES_HOME/LIT_ROOT/LARK_CLI/HERMES_ENV 覆盖 anno2ppt/hlo_orchestrator/prompt/medit-mcp/self_check/audit_v13/citation_sync
+- hlo_orchestrator osHomeDir(sh echo $HOME) → os.UserHomeDir; lit_truth.json → $HERMES_HOME/cache
+- .goreleaser.yaml + release.sh: 启用 windows/arm64 (6 平台矩阵)
+
+### 验证
+- go test ./... -race 全绿 (新增 chrome_launcher/python 探测单测 8 用例)
+- test_tma_pipeline 79/79 + test_hl_lib 25/25 (改动后回归)
+- 本机实测: medit browser start 自动启动 Chromium → CDP 就绪 → stop 关闭 9 进程; doctor 全项输出; ppt_render_engine 检测到 soffice+STHeiti
+
 ## [4.7.0] - 2026-08-21 (medplan: 医学策划方案生成 + 中国大陆合规验证)
 
 ### Added

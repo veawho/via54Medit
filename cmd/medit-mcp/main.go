@@ -25,6 +25,7 @@
 //	🔜 medit_pico / medit_grade / medit_anno2ppt (Phase 3.0 next)
 //
 // Phase 5.0 (HLO 集成):
+//
 //	✅ HLO Source adapter (hlo_orchestrator.go)
 //	✅ 4 HLO MCP tools (medit_hlo_ask / medit_hlo_truth / medit_hlo_audit / medit_hlo_corr)
 //	✅ 0 浏览器注册, 0 密钥, 0 成本 (复用 HLO 现有 SQLite + 4 源 API)
@@ -323,8 +324,26 @@ func anno2pptTool(_ context.Context, _ *mcp.CallToolRequest, input Anno2PPTInput
 // =============================================================================
 
 // hloRunPython 执行 hlo_nlu_v2.py 并返回 stdout
+// 路径解析: $HLO_DIR > $HOME/HLO_design > ./; 解释器: 探测链 ($HLO_PYTHON > python3.11 > python3 > python)
 func hloRunPython(args ...string) (string, error) {
-	cmd := exec.Command("python3.11", append([]string{"/Users/david/Desktop/HLO_design/hlo_nlu_v2.py"}, args...)...)
+	script := os.Getenv("HLO_DIR") + "/hlo_nlu_v2.py"
+	home, _ := os.UserHomeDir()
+	if script == "/hlo_nlu_v2.py" || !fileExists(script) {
+		if p := home + "/HLO_design/hlo_nlu_v2.py"; fileExists(p) {
+			script = p
+		} else {
+			script = "./hlo_nlu_v2.py"
+		}
+	}
+	py := os.Getenv("HLO_PYTHON")
+	if py == "" {
+		if r, err := foundation.ResolvePython(nil); err == nil {
+			py = r
+		} else {
+			py = "python3.11"
+		}
+	}
+	cmd := exec.Command(py, append([]string{script}, args...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -332,6 +351,11 @@ func hloRunPython(args ...string) (string, error) {
 		return "", fmt.Errorf("hlo exec: %w (stderr: %s)", err, stderr.String())
 	}
 	return stdout.String(), nil
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // --- HLO Tool 1: medit_hlo_ask (NLU 入口) ---
@@ -387,11 +411,11 @@ type HloTruthInput struct {
 }
 
 type HloTruthOutput struct {
-	Count     int            `json:"count"`
-	RowPref   string         `json:"row_pref,omitempty"`
-	Truth     map[string]any `json:"truth,omitempty"`
-	AllKeys   []string       `json:"all_keys,omitempty"`
-	Source    string         `json:"source"`
+	Count   int            `json:"count"`
+	RowPref string         `json:"row_pref,omitempty"`
+	Truth   map[string]any `json:"truth,omitempty"`
+	AllKeys []string       `json:"all_keys,omitempty"`
+	Source  string         `json:"source"`
 }
 
 func hloTruthTool(_ context.Context, _ *mcp.CallToolRequest, input HloTruthInput) (*mcp.CallToolResult, HloTruthOutput, error) {
@@ -443,12 +467,12 @@ type HloAuditInput struct {
 }
 
 type HloAuditOutput struct {
-	Real   int      `json:"real"`
-	Fake   int      `json:"fake"`
-	Unknown int     `json:"unknown"`
+	Real     int      `json:"real"`
+	Fake     int      `json:"fake"`
+	Unknown  int      `json:"unknown"`
 	FakeList []string `json:"fake_list,omitempty"`
-	Output  string  `json:"output"`
-	Source  string  `json:"source"`
+	Output   string   `json:"output"`
+	Source   string   `json:"source"`
 }
 
 func hloAuditTool(_ context.Context, _ *mcp.CallToolRequest, input HloAuditInput) (*mcp.CallToolResult, HloAuditOutput, error) {

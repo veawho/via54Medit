@@ -17,9 +17,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-LIT_ROOT = Path('/Users/david/Desktop/雷管方案_文献整理')
+LIT_ROOT = Path(os.environ.get('LIT_ROOT', '/Users/david/Desktop/雷管方案_文献整理'))
 ARCHIVE_ROOT = LIT_ROOT / '_literature_citation_index'
-PYTHON = '/Users/david/.hermes/hermes-agent/venv/bin/python3.11'
+PYTHON = (os.environ.get('HERMES_PYTHON')
+          or os.environ.get('PYTHON')
+          or '/Users/david/.hermes/hermes-agent/venv/bin/python3.11')
 
 
 def main():

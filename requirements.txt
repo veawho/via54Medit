@@ -1,0 +1,20 @@
+# via54Medit Python 工具链依赖 (跨平台部署, 2026-08-21)
+# 安装: pip install -r requirements.txt
+# 或自动: python scripts/deps_auto.py (导入探测 + 按需安装)
+#
+# 平台说明:
+#   pywin32 仅 Windows 需要 (PowerPoint/WPS COM 渲染), 其他平台自动跳过。
+#   pytest 用于运行 scripts/ 下测试 (test_tma_pipeline.py, hl_v3_final/test_hl_lib.py)。
+#
+# 系统二进制 (非 pip, 可选):
+#   - LibreOffice (soffice)   : PPT 真实渲染 (macOS: brew install --cask libreoffice; Linux: apt install libreoffice)
+#   - poppler-utils (pdftotext): PDF 文本提取 (macOS: brew install poppler; Linux: apt install poppler-utils)
+#   - Chrome / Edge / Chromium : CDP 调试实例 (`medit browser start` 自动探测启动)
+
+pymupdf>=1.24
+python-pptx>=0.6.23
+Pillow>=10.0
+pywin32>=306; sys_platform == "win32"
+
+# 测试
+pytest>=8.0

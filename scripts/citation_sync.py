@@ -22,6 +22,7 @@ citation_sync.py — 飞书表 ↔ 本地 CSV 单一真理源 + 原子化双向�
 import json
 import subprocess
 import csv
+import os
 import io
 import sys
 from pathlib import Path
@@ -30,7 +31,7 @@ from typing import List, Dict, Tuple, Optional
 # 飞书配置 (硬编码, 不允许运行期改)
 FEISHU_TOKEN = "FEISHU_SHEET_TOKEN(已轮换,勿复用)"
 FEISHU_SHEET = "b03e59"
-LARK_CLI = "/Users/david/.hermes/node/bin/lark-cli"
+LARK_CLI = os.environ.get("LARK_CLI", "/Users/david/.hermes/node/bin/lark-cli")
 
 # 本地 CSV 路径
 CSV_PATH = "/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv"

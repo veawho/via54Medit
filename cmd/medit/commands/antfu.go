@@ -168,12 +168,14 @@ func runAntfuExtract(cmd *cobra.Command, args []string) error {
 }
 
 func runAntfuHealth(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
-	if err := source.ChromeHealth(ctx, antfuCDP); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "antfu: Chrome NOT reachable at %s: %v\n", antfuCDP, err)
-		fmt.Fprintln(cmd.ErrOrStderr(), "Hint: start Chrome with --remote-debugging-port=9223")
-		os.Exit(1)
+	chrome, err := source.EnsureChromeCDP(ctx, antfuCDP, DefaultCDPPort)
+	if err != nil {
+		return fmt.Errorf("antfu: Chrome NOT reachable: %w", err)
+	}
+	if chrome != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "antfu: 已自动启动调试实例 %s\n", chrome)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "antfu: Chrome reachable at %s\n", antfuCDP)
 	return nil

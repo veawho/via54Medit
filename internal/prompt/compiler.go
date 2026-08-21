@@ -1,7 +1,8 @@
 // Package prompt — 算法驱动 prompt 编译器 (Phase 4, 2026-07-29)
 //
 // 设计哲学 (用户原话): "算法比规则靠谱, 算法配合 LLM, 去理解概念、理解规则的相对性,
-//                       不写死绝对值, 强行塞记忆"
+//
+//	不写死绝对值, 强行塞记忆"
 //
 // 实现: Go 调用 Python DSPy (Stanford, ★36K) 通过 GEPA 算法编译 prompt
 //   - DSPy Signature: 声明式 (不用手写 prompt 字符串)
@@ -10,10 +11,10 @@
 //   - Compiled program 序列化到 .json → 跨设备 deterministic
 //
 // 关键算法:
-//   1. Bayesian optimization 找最优 prompt
-//   2. EWMA 跟踪每条 prompt 的成功率
-//   3. Pareto-front 维护 (不只 score 最高, 还考虑 robustness)
-//   4. Reflective prompt evolution (LLM 反思失败 case → 改 prompt)
+//  1. Bayesian optimization 找最优 prompt
+//  2. EWMA 跟踪每条 prompt 的成功率
+//  3. Pareto-front 维护 (不只 score 最高, 还考虑 robustness)
+//  4. Reflective prompt evolution (LLM 反思失败 case → 改 prompt)
 package prompt
 
 import (
@@ -26,12 +27,14 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/veawho/via54Medit/internal/foundation"
 )
 
 // Compiler 是 prompt 编译器 (DSPy wrapper)
 type Compiler struct {
-	scriptPath string  // DSPy Python script
-	cacheDir   string  // 编译结果缓存目录 (.json)
+	scriptPath string // DSPy Python script
+	cacheDir   string // 编译结果缓存目录 (.json)
 	mu         sync.Mutex
 }
 
@@ -98,11 +101,11 @@ type CompileStats struct {
 // Compile 算法: 调 DSPy 编译 prompt, 返回可序列化的 JSON
 //
 // 流程:
-//   1. 检查 cache (命中 → 直接返回)
-//   2. 调 Python DSPy script (BootstrapFewShot / GEPA)
-//   3. 拿到 compiled program
-//   4. 序列化到 cacheDir/{signature_hash}.json
-//   5. 返回 CompileResult
+//  1. 检查 cache (命中 → 直接返回)
+//  2. 调 Python DSPy script (BootstrapFewShot / GEPA)
+//  3. 拿到 compiled program
+//  4. 序列化到 cacheDir/{signature_hash}.json
+//  5. 返回 CompileResult
 func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*CompileResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -118,9 +121,13 @@ func (c *Compiler) Compile(ctx context.Context, req CompileRequest) (*CompileRes
 		}
 	}
 
-	// 算法: 调 Python DSPy
+	// 算法: 调 Python DSPy (解释器经探测链, 兼容任意 Python 3.10+)
 	t0 := time.Now()
-	cmd := exec.CommandContext(ctx, "python3.11", c.scriptPath,
+	py, pyErr := foundation.ResolvePython(nil)
+	if pyErr != nil {
+		return nil, fmt.Errorf("prompt: %w", pyErr)
+	}
+	cmd := exec.CommandContext(ctx, py, c.scriptPath,
 		"--signature", req.Signature,
 		"--metric", req.MetricFunc,
 		"--optimizer", req.Optimizer,
@@ -201,9 +208,9 @@ func (r *CompileResult) SanityCheck() error {
 //
 // 任务: HLO NLU 输入 → intent + confidence
 // 算法: 用 DSPy GEPA 编译一个 classifier
-//       - Trainset: 历史 corrections (用户反馈)
-//       - Metric: exact_match (intent 名字精确匹配)
-//       - Optimizer: GEPA (LLM 反思 + 算法搜索, 2025 SOTA)
+//   - Trainset: 历史 corrections (用户反馈)
+//   - Metric: exact_match (intent 名字精确匹配)
+//   - Optimizer: GEPA (LLM 反思 + 算法搜索, 2025 SOTA)
 //
 // 跨设备 deterministic: 同 trainset 编译同 compiled program
 func CompileForHLO(ctx context.Context, c *Compiler) (*CompileResult, error) {
@@ -213,10 +220,10 @@ func CompileForHLO(ctx context.Context, c *Compiler) (*CompileResult, error) {
 	}
 
 	req := CompileRequest{
-		Signature:    "nl_input -> intent: str = Field(desc='HLO intent name'), confidence: float = Field(desc='0-1 confidence')",
-		TrainSet:     trainset,
-		MetricFunc:   "exact_match",
-		Optimizer:    "GEPA",
+		Signature:     "nl_input -> intent: str = Field(desc='HLO intent name'), confidence: float = Field(desc='0-1 confidence')",
+		TrainSet:      trainset,
+		MetricFunc:    "exact_match",
+		Optimizer:     "GEPA",
 		MaxIterations: 50,
 	}
 	return c.Compile(ctx, req)
@@ -225,16 +232,33 @@ func CompileForHLO(ctx context.Context, c *Compiler) (*CompileResult, error) {
 // loadCorrectionsAsTrainset 从 HLO SQLite 读 corrections 当 trainset
 // 用 Python helper script (跨平台, 不引 SQLite driver)
 func loadCorrectionsAsTrainset() []map[string]string {
-	cmd := exec.Command("python3.11", "-c", `
-import sqlite3, json
-conn = sqlite3.connect("/Users/david/Desktop/hlo_nlu.sqlite")
+	db := os.Getenv("HLO_SQLITE")
+	if db == "" {
+		home, _ := os.UserHomeDir()
+		for _, c := range []string{home + "/Desktop/hlo_nlu.sqlite", home + "/HLO_design/hlo_nlu.sqlite", filepath.Join(home, ".medit", "hlo_nlu.sqlite")} {
+			if _, err := os.Stat(c); err == nil {
+				db = c
+				break
+			}
+		}
+	}
+	if db == "" {
+		return []map[string]string{} // no corrections db on this machine
+	}
+	py, _ := foundation.ResolvePython(nil)
+	if py == "" {
+		py = "python3.11"
+	}
+	script := fmt.Sprintf(`import sqlite3, json
+conn = sqlite3.connect("%s")
 rows = conn.execute("""
     SELECT row_pref, field, predicted, corrected
     FROM corrections WHERE applied = 1
     ORDER BY id DESC LIMIT 50
 """).fetchall()
 print(json.dumps([{"row_pref": r[0], "field": r[1], "predicted": r[2], "corrected": r[3]} for r in rows]))
-`)
+`, db)
+	cmd := exec.Command(py, "-c", script)
 	out, err := cmd.Output()
 	trainset := []map[string]string{}
 	if err != nil {

@@ -26,7 +26,7 @@ CSV_PATH = f"{TMA_ROOT}/_citation_table/tma_citation_table.csv"
 PPT_SLIDES_JSON = f"{TMA_ROOT}/_citation_table/ppt_slides_analysis.json"
 
 # === GLM config ===
-with open('/Users/david/.hermes/.env') as f:
+with open(os.environ.get('HERMES_ENV', '/Users/david/.hermes/.env')) as f:
     for line in f:
         if 'GLM_API_KEY=' in line:
             GLM_API_KEY = line.split('=', 1)[1].strip()

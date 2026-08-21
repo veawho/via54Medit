@@ -8,14 +8,14 @@
 //   - antfu.go            : 蚂蚁阿福 RAG (Chrome CDP)
 //
 // HLO 提供:
-//   1. NLU 自然语言入口 (1 句 NL = 1 次执行, 14 意图路由)
-//   2. 32 Producer 白名单 PDF 真伪鉴定
-//   3. 5 模式 BibTeX Author 简写
-//   4. 17 DOI 前缀期刊映射
-//   5. 飞书 H 字段 v2.0 8 section (anno2ppt 完美对应)
-//   6. _downloads/ 命名规范化
-//   7. 160 Row 字段真值表
-//   8. 自升级: NL 修正 → MEMORY → skill patch
+//  1. NLU 自然语言入口 (1 句 NL = 1 次执行, 14 意图路由)
+//  2. 32 Producer 白名单 PDF 真伪鉴定
+//  3. 5 模式 BibTeX Author 简写
+//  4. 17 DOI 前缀期刊映射
+//  5. 飞书 H 字段 v2.0 8 section (anno2ppt 完美对应)
+//  6. _downloads/ 命名规范化
+//  7. 160 Row 字段真值表
+//  8. 自升级: NL 修正 → MEMORY → skill patch
 package source
 
 import (
@@ -172,15 +172,16 @@ func (h *HLOSource) Search(ctx context.Context, q types.EBMQuestion, limit int) 
 // parseSearchOutput 解析 hlo_nlu_v2.py 输出为 Citation 列表.
 //
 // HLO search_papers 格式:
-//   🎯 意图: search_papers
-//   ⏱️  耗时: 1380ms
 //
-//   🔍 关键词: Qin S 2025 HCC (最近 7 天)
-//   📚 找到 5 篇
+//	🎯 意图: search_papers
+//	⏱️  耗时: 1380ms
 //
-//   1. 🔓 Title here
-//      Author A, Author B | Journal (Year)
-//      DOI: 10.xxxx | PMID: xxxxx
+//	🔍 关键词: Qin S 2025 HCC (最近 7 天)
+//	📚 找到 5 篇
+//
+//	1. 🔓 Title here
+//	   Author A, Author B | Journal (Year)
+//	   DOI: 10.xxxx | PMID: xxxxx
 func (h *HLOSource) parseSearchOutput(output string, limit int) []types.Citation {
 	cites := make([]types.Citation, 0, limit)
 	lines := strings.Split(output, "\n")

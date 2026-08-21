@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo "dev")}
-PLATFORMS=("windows-amd64" "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64")
+PLATFORMS=("windows-amd64" "windows-arm64" "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64")
 
 DIST_DIR="$ROOT/dist/${VERSION}"
 mkdir -p "$DIST_DIR"
