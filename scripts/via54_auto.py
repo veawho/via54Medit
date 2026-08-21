@@ -80,31 +80,46 @@ def _iter_shapes(shapes):
 
 
 def _sup_marks(para):
+    """上标 run → 引用标号 (支持复合 "4,6"/"1-3"; 排除 C3/C5 前导字母)"""
     out = []
-    full = para.text or ''
+    full = para.text or ""
     for run in para.runs:
-        txt = (run.text or '').strip()
-        if not txt.isdigit() or not (1 <= int(txt) <= 200):
-            continue
+        txt = (run.text or "").strip()
         try:
             rPr = run.font._rPr
         except Exception:
             rPr = None
-        if rPr is None or rPr.get('baseline') != '30000':
+        if rPr is None or rPr.get("baseline") != "30000":
             continue
-        num = int(txt)
-        pos = 0
-        while True:
-            idx = full.find(txt, pos)
-            if idx < 0:
-                break
-            prev = full[idx - 1] if idx > 0 else ''
-            if prev and (prev.isalpha() or prev.isdigit()):
-                pos = idx + len(txt)
+        nums = []
+        for part in re.split(r"[,，;；]", txt):
+            part = part.strip()
+            if not part:
                 continue
-            out.append((num, full[:120]))
-            break
+            if part.isdigit() and 1 <= int(part) <= 200:
+                nums.append(int(part))
+            elif "-" in part:
+                try:
+                    a, b = part.split("-")[:2]
+                    if a.isdigit() and b.isdigit():
+                        lo, hi = int(a), min(int(b), 200)
+                        nums.extend(range(lo, hi + 1))
+                except Exception:
+                    pass
+        for num in nums:
+            pos = 0
+            while True:
+                idx = full.find(txt, pos)
+                if idx < 0:
+                    break
+                prev = full[idx - 1] if idx > 0 else ""
+                if prev and (prev.isalpha() or prev.isdigit()):
+                    pos = idx + len(txt)
+                    continue
+                out.append((num, full[:120]))
+                break
     return out
+
 
 
 def _marks_in_para(para):
@@ -272,6 +287,29 @@ def _pubmed_term_download(citation, out_path):
     return False
 
 
+def _assoc_full(full_cit, context, pdf_path):
+    """双核验关联: ①完整引文自洽 (期刊/年份/作者) ②context 英文术语出现在 PDF 前 3 页"""
+    try:
+        import tma_verify_pdfs as vp
+        r = vp.check("ref", full_cit, pdf_path)
+        if r.get("verdict") == "mismatch":
+            return False
+    except Exception:
+        pass
+    terms = re.findall(r"\b[A-Z]{2,12}\b", context or "")
+    terms = [t for t in terms if len(t) >= 3 and t not in ("TMA", "PPT", "HSCT", "HCT", "CI", "OR", "HR")][:5]
+    if not terms:
+        return True
+    try:
+        import fitz
+        doc = fitz.open(pdf_path)
+        txt = " ".join(doc[i].get_text() for i in range(min(3, len(doc)))).lower()
+        doc.close()
+        return sum(1 for t in terms if t.lower() in txt) >= 1
+    except Exception:
+        return True
+
+
 # ============ Step 3: 下载 (1 小时硬限) ============
 def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
     """级联 + 重解析下载, 超预算即停, 剩余保留链接"""
@@ -346,18 +384,40 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
         print("  [%d/%d] %s: %s..." % (i + 1, len(missing), ref, citation[:40]), flush=True)
         out_path = os.path.join(pdf_dir, ref + ".pdf")
         ok = False
+        # 编号命中完整引文时, 优先关联下载 (双核验防错配)
         try:
-            r1 = cd.process_ref(ref, citation, doi_map.get(ref, {}), pdf_dir, 0.3)
-            if r1.get("status") == "ok" or (os.path.exists(out_path) and os.path.getsize(out_path) > 5000):
-                if _verify_download(ref, citation, out_path):
-                    print("    -> OK %s" % r1.get("source", "exists"), flush=True)
-                    results.append({"ref": ref, "status": "ok", "source": r1.get("source")})
-                    ok = True
+            _num = int(ref.split("-")[1])
+        except Exception:
+            _num = None
+        if _num and str(_num) in full_refs:
+            _full_cit = str(full_refs[str(_num)])
+            try:
+                r0 = cd.process_ref(ref, _full_cit, {}, pdf_dir, 0.3)
+                if r0.get("status") == "ok" or (os.path.exists(out_path) and os.path.getsize(out_path) > 5000):
+                    if _assoc_full(_full_cit, citation, out_path):
+                        print("    -> OK 完整引文关联 %s" % r0.get("source", "exists"), flush=True)
+                        results.append({"ref": ref, "status": "ok", "source": "full_assoc:%s" % r0.get("source")})
+                        ok = True
+                    else:
+                        _safe_remove(out_path)
+                        print("    -> 双核验失败, 回退 context 下载", flush=True)
                 else:
-                    _safe_remove(out_path)
-                    print("    -> 内容核验失败 (mismatch), 删除重试", flush=True)
-        except Exception as e:
-            print("    -> cascade 异常: %s" % str(e)[:80], flush=True)
+                    print("    -> 完整引文下载失败, 回退 context", flush=True)
+            except Exception as e:
+                print("    -> 完整引文关联异常: %s" % str(e)[:60], flush=True)
+        if not ok:
+            try:
+                r1 = cd.process_ref(ref, citation, doi_map.get(ref, {}), pdf_dir, 0.3)
+                if r1.get("status") == "ok" or (os.path.exists(out_path) and os.path.getsize(out_path) > 5000):
+                    if _verify_download(ref, citation, out_path):
+                        print("    -> OK %s" % r1.get("source", "exists"), flush=True)
+                        results.append({"ref": ref, "status": "ok", "source": r1.get("source")})
+                        ok = True
+                    else:
+                        _safe_remove(out_path)
+                        print("    -> 内容核验失败 (mismatch), 删除重试", flush=True)
+            except Exception as e:
+                print("    -> cascade 异常: %s" % str(e)[:80], flush=True)
         if not ok:
             try:
                 r2 = rd.process_ref(ref, citation, doi_map.get(ref, {}), pdf_dir, 0.3)
