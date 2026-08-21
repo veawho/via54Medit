@@ -43,7 +43,7 @@ import (
 // There are NO defaults that assume any specific project — callers MUST
 // provide Token and SheetID.
 type Config struct {
-	// Token is the Feishu spreadsheet token (e.g. "FEISHU_SHEET_TOKEN(已轮换,勿复用)").
+	// Token is the Feishu spreadsheet token (set via FEISHU_TOKEN env; never hardcode).
 	// Required.
 	Token string
 

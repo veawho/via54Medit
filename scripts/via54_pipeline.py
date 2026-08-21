@@ -260,7 +260,7 @@ def main():
     parser.add_argument('--ppt', default='/Users/david/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx')
     parser.add_argument('--csv', default='/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
     parser.add_argument('--lit-base', default='/Users/david/Desktop/雷管方案_文献整理/_literature_citation_index')
-    parser.add_argument('--feishu-token', default='FEISHU_SHEET_TOKEN(已轮换,勿复用)')
+    parser.add_argument('--feishu-token', default=os.environ.get('FEISHU_TOKEN', ''))
     parser.add_argument('--sheet-id', default='b03e59')
     args = parser.parse_args()
     

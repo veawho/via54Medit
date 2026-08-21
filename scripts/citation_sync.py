@@ -23,13 +23,14 @@ import json
 import subprocess
 import csv
 import os
+import os
 import io
 import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
 # 飞书配置 (硬编码, 不允许运行期改)
-FEISHU_TOKEN = "FEISHU_SHEET_TOKEN(已轮换,勿复用)"
+FEISHU_TOKEN = os.environ.get("FEISHU_TOKEN") or os.environ.get("FEISHU_SHEET_TOKEN", "")
 FEISHU_SHEET = "b03e59"
 LARK_CLI = os.environ.get("LARK_CLI", "/Users/david/.hermes/node/bin/lark-cli")
 

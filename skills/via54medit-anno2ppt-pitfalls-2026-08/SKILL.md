@@ -285,13 +285,13 @@ lark-cli 文档说用 `model: sense` 是错的 (API 报 "unknown model"). 实测
 **雷管方案正确**:
 ```bash
 lark-cli sheets +cells-get \
-  --spreadsheet-token FEISHU_SHEET_TOKEN(已轮换,勿复用) \
+  --spreadsheet-token <FEISHU_SHEET_TOKEN> \
   --sheet-id b03e59 \
   --range A{N}:F{N}
 ```
 
 **区分**:
-- `spreadsheet_token` (整表 ID) 在 URL 路径 `/sheets/{TOKEN}` — 雷管方案 = `FEISHU_SHEET_TOKEN(已轮换,勿复用)`
+- `spreadsheet_token` (整表 ID) 在 URL 路径 `/sheets/{TOKEN}` — 雷管方案 = `<FEISHU_SHEET_TOKEN>`
 - `sheet_id` (子表 ID) 在 URL 末尾或 `?sheet=...` — 雷管方案 = `b03e59`
 - 飞书 URL `https://xxx.feishu.cn/sheets/b03e59` 里的 `b03e59` 是**子表 ID**, 不是 spreadsheet_token
 

@@ -37,7 +37,7 @@ C列 = 标记（PPT内引用编号，是另一个独立编号系统）
 | 项目 | 飞书URL | 内容 |
 |------|---------|------|
 | **TMA（血栓性微血管病）** | `https://hackhealth.feishu.cn/sheets/Nf84sqBbqh0zcjtUCAZcGRkknMe` | 当前项目，106行，8列与雷管方案完全一致 |
-| HCC（肝癌项目） | `https://hackhealth.feishu.cn/sheets/FEISHU_SHEET_TOKEN(已轮换,勿复用)` | 雷管方案模板来源，不要混淆 |
+| HCC（肝癌项目） | `https://hackhealth.feishu.cn/sheets/<FEISHU_SHEET_TOKEN>` | 雷管方案模板来源，不要混淆 |
 
 **TMA飞书在线表（2026-08-14 定稿）**：
 - **URL**: https://hackhealth.feishu.cn/sheets/Nf84sqBbqh0zcjtUCAZcGRkknMe
@@ -47,7 +47,7 @@ C列 = 标记（PPT内引用编号，是另一个独立编号系统）
 - 生成/写入: `via54medit-literature-pipeline/scripts/align_tables.py` + `leiguan_table.py --write`
 - 旧表 P41bsK7t8hMJHntV936cggbxnve / AuPvsIPE1hLMQ2tAP5acl9Ydnof 已被取代, 勿再引用
 
-**HCC表（另一项目，勿混淆）**：`https://hackhealth.feishu.cn/sheets/FEISHU_SHEET_TOKEN(已轮换,勿复用)`
+**HCC表（另一项目，勿混淆）**：`https://hackhealth.feishu.cn/sheets/<FEISHU_SHEET_TOKEN>`
 
 **lark-cli写操作必须用user身份**：不加 `--as bot`，否则报 `91403 Forbidden`（bot身份对cells-set无效，但drive+delete可以）。读操作bot/user均可。
 

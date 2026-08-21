@@ -25,7 +25,7 @@ Usage:
 Env:
   SENSENOVA_API_KEY    (for visual cascade, not used here)
   LARK_CLI             default: /Users/david/.hermes/node/bin/lark-cli
-  FEISHU_SHEET_TOKEN   default: FEISHU_SHEET_TOKEN(已轮换,勿复用)
+  FEISHU_SHEET_TOKEN   必填 (飞书表格 token, 勿硬编码提交)
   FEISHU_SHEET_ID      default: b03e59
 """
 import argparse
@@ -49,7 +49,7 @@ CANONICAL_HEADER = [
 ]
 
 LARK_CLI = os.environ.get("LARK_CLI", "/Users/david/.hermes/node/bin/lark-cli")
-FEISHU_SHEET_TOKEN = os.environ.get("FEISHU_SHEET_TOKEN", "FEISHU_SHEET_TOKEN(已轮换,勿复用)")
+FEISHU_SHEET_TOKEN = os.environ.get("FEISHU_SHEET_TOKEN", "")
 FEISHU_SHEET_ID = os.environ.get("FEISHU_SHEET_ID", "b03e59")
 
 

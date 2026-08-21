@@ -33,7 +33,7 @@ import subprocess, json
 def feishu_get_page_rows(page):
     r = subprocess.run([
         '/Users/david/.hermes/node/bin/lark-cli', 'sheets', '+cells-get',
-        '--spreadsheet-token', 'FEISHU_SHEET_TOKEN(已轮换,勿复用)',
+        '--spreadsheet-token', '<FEISHU_SHEET_TOKEN>',
         '--sheet-id', 'b03e59',
         '--range', f'A{page}:H161',
         '--include', 'value',
@@ -295,7 +295,7 @@ PPT页,第几条,引用语义（上下文）,PPT中的文献引用 完整字段,
 ```bash
 # ✅ 正确
 lark-cli sheets +cells-get \
-  --spreadsheet-token FEISHU_SHEET_TOKEN(已轮换,勿复用) \
+  --spreadsheet-token <FEISHU_SHEET_TOKEN> \
   --sheet-id b03e59 \
   --range A2:F2
 
@@ -307,7 +307,7 @@ lark-cli sheets +cells-get \
 
 | 参数 | 含义 | 雷管方案 |
 |------|------|----------|
-| `--spreadsheet-token` | 整表 ID | `FEISHU_SHEET_TOKEN(已轮换,勿复用)` |
+| `--spreadsheet-token` | 整表 ID | `<FEISHU_SHEET_TOKEN>` |
 | `--sheet-id` | 子表 ID | `b03e59` |
 
 ## 7 步逐标号校准 SOP (v4.1)

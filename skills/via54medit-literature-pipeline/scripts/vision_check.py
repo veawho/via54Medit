@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """视觉检查统一入口: SenseNova(商汤, 用户指定) -> M3 -> GLM 依次降级.
 用于检查 PPT slide 渲染图、PDF 页面渲染图、highlight 导出图. 支持单图或多图."""
-import sys, json, base64, time, urllib.request
+import os, sys, json, base64, time, urllib.request
 from pathlib import Path
 
-SENSENOVA_KEY = "SENSENOVA_API_KEY(已轮换,勿复用)"
+SENSENOVA_KEY = os.environ.get("SENSENOVA_API_KEY", "")
 SENSENOVA_URL = "https://token.sensenova.cn/v1/chat/completions"
 SENSENOVA_MODEL = "sensenova-6.8-flash-lite"
 
-M3_KEY = "M3_API_KEY(已轮换,勿复用)"
+M3_KEY = os.environ.get("M3_API_KEY", "")
 M3_URL = "https://api.minimaxi.com/anthropic/v1/messages"
 
-GLM_KEY = "GLM_API_KEY(已轮换,勿复用)"
+GLM_KEY = os.environ.get("GLM_API_KEY", "")
 GLM_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
 
