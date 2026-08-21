@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ---- Go: build + vet + race tests on 3 OSes ----
+  go:
+    name: go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build all packages
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Race tests
+        run: go test -race -timeout 300s ./...
+
+  # ---- Python toolchain: deps + unit tests (no data needed) ----
+  python:
+    name: python (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: TMA pipeline tests
+        working-directory: scripts
+        run: python -m unittest test_tma_pipeline
+
+      - name: hl_lib (v3 FINAL) tests
+        working-directory: scripts/hl_v3_final
+        run: python test_hl_lib.py
+
+      - name: Toolchain imports (cross-platform surface)
+        working-directory: scripts
+        run: |
+          python -c "import sys; sys.path.insert(0, '.'); import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final; print('imports OK')"
