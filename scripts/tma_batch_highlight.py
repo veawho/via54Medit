@@ -75,15 +75,16 @@ for pdf_file in pdfs:
         results.append({'pdf': pdf_file, 'slide': slide, 'ok': False, 'err': str(e)})
     time.sleep(0.5)
 
-print(f'\n=== 总结: {sum(1 for r in results if r.get("ok"))}/{len(results)} 成功 ===', flush=True)
-os.makedirs(OUT_BASE, exist_ok=True)
-with open(os.path.join(OUT_BASE, '_batch_summary.json'), 'w', encoding='utf-8') as f:
-    json.dump(results, f, ensure_ascii=False, indent=2)
-print('\n=== 输出结构 ===', flush=True)
-for pn_dir in sorted(os.listdir(OUT_BASE)):
-    full = os.path.join(OUT_BASE, pn_dir)
-    if os.path.isdir(full):
-        n_files = sum(1 for _ in os.scandir(full))
-        pages_dir = os.path.join(full, pn_dir + '_highlight_pages')
-        n_pages = len([f for f in os.listdir(pages_dir) if f.endswith('.jpg')]) if os.path.isdir(pages_dir) else 0
-        print(f'  {pn_dir}/: {n_files} files, {n_pages} page images', flush=True)
+if pdfs:
+    print(f'\n=== 总结: {sum(1 for r in results if r.get("ok"))}/{len(results)} 成功 ===', flush=True)
+    os.makedirs(OUT_BASE, exist_ok=True)
+    with open(os.path.join(OUT_BASE, '_batch_summary.json'), 'w', encoding='utf-8') as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    print('\n=== 输出结构 ===', flush=True)
+    for pn_dir in sorted(os.listdir(OUT_BASE)):
+        full = os.path.join(OUT_BASE, pn_dir)
+        if os.path.isdir(full):
+            n_files = sum(1 for _ in os.scandir(full))
+            pages_dir = os.path.join(full, pn_dir + '_highlight_pages')
+            n_pages = len([f for f in os.listdir(pages_dir) if f.endswith('.jpg')]) if os.path.isdir(pages_dir) else 0
+            print(f'  {pn_dir}/: {n_files} files, {n_pages} page images', flush=True)
