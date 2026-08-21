@@ -233,6 +233,45 @@ def _verify_download(ref, citation, pdf_path):
         return True  # 核验异常时保守保留
 
 
+def _pubmed_term_download(citation, out_path):
+    """正文句含英文医学术语时, 用 PubMed ESearch 定位候选 PMID → EuropePMC 下载
+
+    返回 True 若下载成功且为有效 PDF (内容核验由调用方执行)"""
+    import urllib.parse as _up
+    terms = re.findall(r"\b[A-Z]{2,12}\b", citation or "")
+    terms = [t for t in terms if t not in ("TMA", "PPT") and len(t) >= 3][:4]
+    if len(terms) < 2:
+        return False
+    q = " AND ".join(terms)
+    try:
+        d = json.loads(__import__("urllib.request").urlopen(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=3&term="
+            + _up.quote(q), timeout=25).read().decode("utf-8", "replace"))
+        ids = d.get("esearchresult", {}).get("idlist", [])
+        if not ids:
+            return False
+        for pmid in ids[:2]:
+            ep = json.loads(__import__("urllib.request").urlopen(
+                "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:%s&resultType=core&format=json" % pmid,
+                timeout=25).read().decode("utf-8", "replace"))
+            res = (ep.get("resultList") or {}).get("result") or []
+            for r in res:
+                if r.get("isOpenAccess") == "Y" and r.get("pmcid"):
+                    url = "https://europepmc.org/articles/%s/pdf/main.pdf" % r["pmcid"]
+                    try:
+                        req = __import__("urllib.request").Request(url, headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                        data = __import__("urllib.request").urlopen(req, timeout=90).read()
+                        if data[:4] == b"%PDF" and len(data) > 5000:
+                            open(out_path, "wb").write(data)
+                            return True
+                    except Exception:
+                        continue
+    except Exception:
+        return False
+    return False
+
+
 # ============ Step 3: 下载 (1 小时硬限) ============
 def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
     """级联 + 重解析下载, 超预算即停, 剩余保留链接"""
@@ -332,10 +371,22 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
                         results.append({"ref": ref, "status": "failed"})
                 else:
                     print("    -> FAILED (链接保留在表格 H 列)", flush=True)
-                    results.append({"ref": ref, "status": "failed"})
             except Exception as e:
                 print("    -> round2 异常: %s" % str(e)[:80], flush=True)
-                results.append({"ref": ref, "status": "failed"})
+        if not ok:
+            # PubMed 术语检索兜底 (正文句含英文医学术语时)
+            try:
+                if _pubmed_term_download(citation, out_path):
+                    if _verify_download(ref, citation, out_path):
+                        print("    -> OK pubmed-term", flush=True)
+                        results.append({"ref": ref, "status": "ok", "source": "pubmed_term"})
+                        ok = True
+                    else:
+                        _safe_remove(out_path)
+            except Exception:
+                pass
+        if not ok:
+            results.append({"ref": ref, "status": "failed"})
     elapsed = int(time.monotonic() - start)
     print("  下载阶段: %d s, 标号 ok=%d, 全文库 ok=%d" % (
         elapsed, sum(1 for r in results if r.get("status") == "ok"), full_ok), flush=True)
@@ -433,7 +484,34 @@ def step_report(root):
         cmd = [sys.executable, os.path.join(HERE, script)]
         r = subprocess.run(cmd, env=dict(os.environ, TMA_PROJECT=root))
         print("  %s 退出码: %d" % (script, r.returncode), flush=True)
-    print("[7] 交付报告已生成 (CSV + 交付报告 + 人工下载清单)", flush=True)
+    # 全文库对照表: 参考文献列表 16 条完整引文 ↔ 下载状态 (供人工对照 PPT 标号)
+    _write_full_lib_table(root)
+    print("[7] 交付报告已生成 (CSV + 交付报告 + 人工下载清单 + 全文库对照表)", flush=True)
+
+
+def _write_full_lib_table(root):
+    try:
+        full_path = os.path.join(root, "_references_full.json")
+        if not os.path.exists(full_path):
+            return
+        full_refs = json.load(open(full_path, encoding="utf-8"))
+        pdf_dir = os.path.join(root, "_2_pdfs")
+        lines = ["# 全文库对照表 (参考文献列表 → 下载状态)", ""]
+        lines.append("> PPT 正文上标标号为参考文献列表全局编号; 人工下载后放入 `_2_pdfs/ref{N}.pdf` 即可。")
+        lines.append("")
+        lines.append("| 编号 | 完整引文 | PDF |")
+        lines.append("|---|---|---|")
+        for num in sorted(full_refs, key=lambda x: int(x)):
+            cit = str(full_refs[num])[:90]
+            ref_pdf = os.path.join(pdf_dir, "ref%s.pdf" % num)
+            ok = os.path.exists(ref_pdf) and os.path.getsize(ref_pdf) > 5000
+            lines.append("| %s | %s | %s |" % (num, cit, "✅ ref%s.pdf" % num if ok else "❌ 待人工下载"))
+        out = os.path.join(root, "_全文库对照表.md")
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(chr(10).join(lines) + chr(10))
+        print("  全文库对照表 → %s" % out, flush=True)
+    except Exception as e:
+        print("  [warn] 全文库对照表失败: %s" % str(e)[:80], flush=True)
 
 
 # ============ 主流程 ============
