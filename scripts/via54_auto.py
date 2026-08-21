@@ -338,6 +338,7 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
     start = time.monotonic()
     results = []
     budget_hit = False
+    assoc_map = {}  # P{slide}-{num} -> {full_num, assoc, full_cit}
 
     # --- 全文库优先: 参考文献列表完整引文 (准确字段, 高成功率), 用一半预算 ---
     full_path = os.path.join(root, "_references_full.json")
@@ -397,13 +398,17 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
                     if _assoc_full(_full_cit, citation, out_path):
                         print("    -> OK 完整引文关联 %s" % r0.get("source", "exists"), flush=True)
                         results.append({"ref": ref, "status": "ok", "source": "full_assoc:%s" % r0.get("source")})
+                        assoc_map[ref] = {"full_num": _num, "assoc": "ok", "full_cit": _full_cit[:120]}
                         ok = True
                     else:
                         _safe_remove(out_path)
+                        assoc_map[ref] = {"full_num": _num, "assoc": "rejected", "full_cit": _full_cit[:120]}
                         print("    -> 双核验失败, 回退 context 下载", flush=True)
                 else:
+                    assoc_map[ref] = {"full_num": _num, "assoc": "dl_failed", "full_cit": _full_cit[:120]}
                     print("    -> 完整引文下载失败, 回退 context", flush=True)
             except Exception as e:
+                assoc_map[ref] = {"full_num": _num, "assoc": "error", "full_cit": _full_cit[:120]}
                 print("    -> 完整引文关联异常: %s" % str(e)[:60], flush=True)
         if not ok:
             try:
@@ -453,6 +458,8 @@ def step_download(root, budget_s=DEFAULT_BUDGET_S, limit=0):
     report = {"budget_s": budget_s, "elapsed_s": elapsed, "budget_hit": budget_hit,
               "results": results, "full_lib_ok": full_ok}
     json.dump(report, open(os.path.join(root, "_download_auto_report.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    assoc_path = os.path.join(root, "_ref_assoc_map.json")
+    json.dump(assoc_map, open(assoc_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     return report
 
 

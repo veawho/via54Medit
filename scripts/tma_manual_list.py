@@ -54,12 +54,45 @@ def main():
     lines.append('> 说明: 自动级联下载 (OpenAlex/Unpaywall/EuropePMC/PMC/Sci-Hub) 已于 1 小时内截止,')
     lines.append('> 以下文献为付费墙或中文期刊 (无开放 PDF), 请通过链接手动获取后放入 `_2_pdfs/Pn-Sx_y.pdf`。')
     lines.append('')
+    # 引用关联映射 (完整引文编号 ↔ 下载状态), 用于人工清单展示建议引文
+    assoc_path = os.path.join(T, "_ref_assoc_map.json")
+    assoc_map = {}
+    if os.path.exists(assoc_path):
+        try:
+            assoc_map = json.load(open(assoc_path, encoding="utf-8"))
+        except Exception:
+            assoc_map = {}
+    full_path2 = os.path.join(T, "_references_full.json")
+    full_refs = {}
+    if os.path.exists(full_path2):
+        try:
+            full_refs = json.load(open(full_path2, encoding="utf-8"))
+        except Exception:
+            full_refs = {}
+    pdf_dir2 = os.path.join(T, "_2_pdfs")
     rows = []
     for m in missing:
         ref = m['ref']
         cit = refs[ref]
         doi = KNOWN_DOI.get(ref) or m.get('doi') or ''
         links = []
+        # 建议完整引文 (编号命中全文库时)
+        try:
+            _num = int(ref.split("-")[1])
+        except Exception:
+            _num = None
+        if _num and str(_num) in full_refs:
+            full_cit = str(full_refs[str(_num)])
+            ref_pdf = os.path.join(pdf_dir2, "ref%s.pdf" % _num)
+            ref_ok = os.path.exists(ref_pdf) and os.path.getsize(ref_pdf) > 5000
+            ainfo = assoc_map.get(ref) or {}
+            if ainfo.get("assoc") == "ok" and ref_ok:
+                # 双核验通过: 确认该 ref = 全文库 ref{N}.pdf, 直接复用
+                links.append("[复用全文库 ref%s.pdf (双核验通过)](local: _2_pdfs/ref%s.pdf)" % (_num, _num))
+            elif ainfo.get("assoc") == "rejected":
+                links.append("⚠️ 编号=全文库%s 但双核验未过, 需人工核对: %s" % (_num, full_cit[:70]))
+            else:
+                links.append("建议引文(编号=全文库%s): %s" % (_num, full_cit[:70]))
         if doi.startswith('10.'):
             links.append('[DOI: %s](https://doi.org/%s)' % (doi, doi))
             links.append('[PubMed](%s)' % pm_search(doi))
