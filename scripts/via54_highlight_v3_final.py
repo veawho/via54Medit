@@ -126,10 +126,83 @@ def is_title_text(page, rect, rect_text):
     return True
 
 
+def is_submission_meta(text):
+    """规则 10: 投稿元数据行 (Received/Accepted/Published/Revised/Editor)"""
+    t = text.strip()
+    if len(t) > 120:
+        return False
+    return bool(re.match(r"^(Received|Accepted|Published|Revised|Editor|Reviewer|Handling Editor|Publisher.?s Note)\b", t, re.I))
+
+
+def is_header_footer(page, rect, text):
+    """规则 11: 页眉页脚 (顶部/底部 8% 的卷期/期刊/页码/版权)"""
+    t = text.strip()
+    if len(t) > 120:
+        return False
+    if "©" in t or "Copyright" in t:
+        return True  # 版权行 (任意位置)
+    if re.search(r"reproduction in any medium|distribution or reproduction|distributed under", t, re.I):
+        return True  # 开放许可声明文本
+    h = page.rect.height
+    in_zone = rect.y0 < h * 0.13 or rect.y1 > h * 0.90
+    if not in_zone:
+        return False
+    if re.match(r"^\d{1,3}\s*$", t):
+        return True  # 页码
+    if re.search(r"Vol\.?\s*\d+|www\.|doi|ISSN|Chin J|J \w+\b", t, re.I):
+        return True
+    return False
+
+
+def is_statement_header(text):
+    """规则 12: 声明区标题 (FUNDING/ACKNOWLEDGMENTS/CONTRIBUTIONS/CONFLICT...)"""
+    t = text.strip()
+    if len(t) > 60:
+        return False
+    return bool(re.match(
+        r"^(FUNDING|FUNDING STATEMENT|ACKNOWLEDGEMENTS?|ACKNOWLEDGMENTS?|AUTHOR CONTRIBUTIONS?|CONFLICT OF INTEREST|"
+        r"DATA AVAILABILITY|CORRESPONDENCE|ETHICS STATEMENT|DECLARATION|DISCLOSURE|COMPETING INTERESTS?|COPYRIGHT|"
+        r"SUPPLEMENTARY MATERIALS?|ACKNOWLEDGMENT)\b", t, re.I))
+
+
+def is_reference_entry(text):
+    """规则 13: 参考文献条目 (et al.+年份 / 年份+卷期页 / doi)"""
+    t = text.strip()
+    if len(t) < 15 or len(t) > 200:
+        return False
+    # 正文括号引用 "(Smith et al., 2020)" 排除
+    if re.search(r"\(\s*[A-Z][a-z]+ et al\.?\s*,?\s*(?:19|20)\d{2}\s*\)", t):
+        return False
+    if re.search(r"\bdoi\b", t, re.I):
+        return True
+    if re.search(r"\bet al\.?\b", t, re.I):
+        return True
+    if re.search(r"\s+et al\.?\b", t, re.I):
+        return True
+    # 参考文献条目续行: 行首 et al. 或 作者, et al. (跨行条目)
+    if re.match(r"^(?:[A-Z][\w\s,\.\-]{0,40}?,\s*)?et al\.?\b", t, re.I):
+        return True
+    if re.search(r"\(\s*(19|20)\d{2}\s*\)", t) and re.search(r"\d+\s*[:\u2013-]\s*\d+", t):
+        return True
+    if re.search(r"[（(]\s*(19|20)\d{2}\s*[)）][;：:]?\s*\d+\s*\(\d+\)", t):
+        return True
+    return False
+
+
 def is_metadata_rect(page, rect, rect_text):
     """综合检测: rect 是否在元数据区 (违规)"""
+    # 归一化空白: get_textbox 常返回跨行文本 (et\nal.\n...), 正则需单行
+    rect_text = re.sub(r"\s+", " ", rect_text or "").strip()
     if is_author_text(rect_text):
         return "RULE_2_AUTHOR"
+    if is_reference_entry(rect_text):
+        return "RULE_13_REFERENCE"
+    if is_statement_header(rect_text):
+        return "RULE_12_STATEMENT"
+    if is_submission_meta(rect_text):
+        return "RULE_10_SUBMISSION"
+    if is_header_footer(page, rect, rect_text):
+        return "RULE_11_HEADER_FOOTER"
     if is_title_text(page, rect, rect_text):
         return "RULE_3_TITLE"
     if is_publisher_text(rect_text):

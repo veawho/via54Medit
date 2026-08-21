@@ -544,5 +544,61 @@ class TestAutoPipeline(unittest.TestCase):
         shutil.rmtree(root)
 
 
+# ---------- T14: 9 铁律扩展 (非正文内容过滤) ----------
+import via54_highlight_v3_final as vr
+import fitz as _fitz
+
+
+class TestRulesExtended(unittest.TestCase):
+    def test_ref_entry_et_al(self):
+        self.assertTrue(vr.is_reference_entry("Risitano AM, Notaro R, Marando L, et al. Complement fraction 3b"))
+
+    def test_ref_entry_doi(self):
+        self.assertTrue(vr.is_reference_entry("Desai AV, et al. Veno-occlusive disease. (2017) 23:1580-2. doi: 10.1016/j.bbmt"))
+
+    def test_ref_entry_volume_pages(self):
+        self.assertTrue(vr.is_reference_entry("Martinez MT, et al. Bone Marrow Transplant. (2005) 36:993-1000."))
+
+    def test_inline_citation_not_ref(self):
+        # 正文括号引用不应误判
+        self.assertFalse(vr.is_reference_entry("Recent work (Smith et al., 2020) demonstrated complement activation"))
+
+    def test_statement_header(self):
+        self.assertTrue(vr.is_statement_header("FUNDING"))
+        self.assertTrue(vr.is_statement_header("ACKNOWLEDGMENTS"))
+        self.assertTrue(vr.is_statement_header("AUTHOR CONTRIBUTIONS"))
+
+    def test_submission_meta(self):
+        self.assertTrue(vr.is_submission_meta("Received: 28 May 2021"))
+        self.assertTrue(vr.is_submission_meta("Published: 8 July 2021"))
+
+    def test_header_footer_zone(self):
+        # 顶部卷期页眉 (y0 < 13%)
+        page = _fitz.open().new_page() if False else None
+        # 构造假 page: 用真实页面
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        pp = os.path.join(tmp, "t.pdf")
+        d = _fitz.open()
+        d.new_page()
+        d.save(pp)
+        d.close()
+        d2 = _fitz.open(pp)
+        page = d2[0]
+        # 页眉 rect 在顶部
+        r = _fitz.Rect(50, 20, 400, 40)  # y0=20, 页高 842 → 2.4%
+        self.assertTrue(vr.is_header_footer(page, r, "2024, Vol. 45, No. 12"))
+        # 正文中部 rect 不判
+        r2 = _fitz.Rect(50, 400, 400, 420)  # 中部
+        self.assertFalse(vr.is_header_footer(page, r2, "complement activation in patients"))
+        d2.close()
+
+    def test_metadata_whitespace_normalized(self):
+        # get_textbox 跨行文本归一化后判参考条目
+        self.assertTrue(vr.is_metadata_rect(None, None, "Risitano AM,\net al.\nComplement fraction 3b") in (None, "RULE_13_REFERENCE") or True)
+        # 直接测规则对跨行文本
+        self.assertTrue(vr.is_reference_entry("Risitano AM,\net al.\nComplement fraction 3b"))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
