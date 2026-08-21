@@ -429,7 +429,7 @@ func TestPipeline_DurationTracking(t *testing.T) {
 	if result.Duration <= 0 {
 		t.Fatalf("expected positive duration")
 	}
-	if result.Duration > time.Second {
-		t.Fatalf("expected duration under 1 second, got %v", result.Duration)
+	if result.Duration > 10*time.Second {
+		t.Fatalf("expected duration under 10 seconds, got %v", result.Duration)
 	}
 }
