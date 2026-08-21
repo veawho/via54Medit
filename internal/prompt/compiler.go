@@ -236,10 +236,10 @@ rows = conn.execute("""
 print(json.dumps([{"row_pref": r[0], "field": r[1], "predicted": r[2], "corrected": r[3]} for r in rows]))
 `)
 	out, err := cmd.Output()
+	trainset := []map[string]string{}
 	if err != nil {
-		return nil
+		return trainset
 	}
-	var trainset []map[string]string
 	_ = json.Unmarshal(out, &trainset)
 	return trainset
 }

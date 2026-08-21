@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [4.7.0] - 2026-08-21 (medplan: 医学策划方案生成 + 中国大陆合规验证)
+
+### Added
+- **internal/medplan/** (10 文件): 医学策划六阶段管线 — Brief(指令+产品) → 五维调研(文献=router 真实检索, 新闻/研报/政策/竞品=LLM 综合待核验) → 观点提炼(insights+SWOT, item_id 白名单校验) → 分受众大纲(HCP/患者/行业, 五核心模块稳定骨架) → 语义优化(版本化 changelog+结构 diff) → 合规验证(规则引擎常开+LLM 语义层+否定语境豁免)
+- **compliance_rules.go**: 12 条数据驱动规则 — 广告法§9 绝对化用语/§16 疗效断言·安全性保证·比较·代言, 药品管理法§89 处方药大众媒介禁令(RxOnly), 医疗广告管理办法§7, 患者材料 DTC 禁令+disclaimer presence 检查(PatientOnly), RDPAC HCP 边界; verdict pass/warn/fail + section 级标注回写
+- **internal/foundation/llm_glm.go**: GLM provider (RegisterLLM("glm"), BigModel OpenAI 兼容端点, GLM_API_KEY/ZHIPU_API_KEY)
+- **cmd/medit/commands/medplan.go**: `medit medplan new|run|research|outline|optimize|compliance|show|list` 8 子命令; 存储 ~/.medit/medplan/<项目>/ (JSON+MD 原子写)
+- **docs/MEDPLAN.md**: 完整文档 + GitHub 高星项目调研(STORM 31.1k★ outline-first 借鉴, gpt-researcher 29.1k★ 引用溯源, ToolGood.Words 5.2k★ 词库升级路径; 结论: 该定位无直接开源竞品)
+
+### Fixed
+- **internal/prompt/compiler.go**: loadCorrectionsAsTrainset 失败路径返回 nil → 空 slice (预存在测试失败修复)
+
+### 验证
+- go test ./... -race 全绿 (medplan 26 用例 + GLM provider 4 用例新增)
+- CLI 冒烟: 真实调研回 116 条文献 (PubMed/OpenAlex/S2), 三档大纲+合规端到端; 否定语境豁免修复模板合规提示句误报 (patient FAIL→PASS)
+
 ## [4.6.0] - 2026-08-18 (v3 FINAL 全量经验注入: highlight rect 模式 + 8列表 + 合并规则)
 
 ### Added

@@ -145,6 +145,9 @@ func registerAll() {
 	// --- Citation 算法核心 (Phase 6, 2026-07-31) ---
 	rootCmd.AddCommand(citationCmd) // citation <match|test-extract|replayer> [args...]
 
+	// --- 医学策划方案 (medplan, 2026-08-21) ---
+	rootCmd.AddCommand(medplanCmd) // medplan <new|run|research|outline|optimize|compliance|show|list>
+
 	// --- Meta (1, --version is via root.Version; "version" subcommand for multi-line Full()) ---
 	rootCmd.AddCommand(versionCmd)
 }

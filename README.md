@@ -41,6 +41,12 @@ medit feishu verify
 medit feishu push --dry-run
 medit citation match <ref> <pdf>
 medit citation replayer
+
+# medplan 医学策划 (2026-08-21)
+medit medplan run --instruction "为 DrugX 上市撰写三档医学传播策略" \
+  --name DrugX --indication "2型糖尿病" --rx-status rx     # 调研→提炼→三档大纲→合规
+medit medplan optimize <项目> --audience hcp --instruction "扩充县域市场"
+medit medplan compliance <项目> --audience all             # 中国大陆医学合规验证
 ```
 
 ## 完整流程 (Python 入口)

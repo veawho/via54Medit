@@ -1318,3 +1318,28 @@ func ValidateVisualRules(pdfPath string, pageIdx int, segments []Segment) ([]Vio
 **【正确路径】**: `tools/ppt_render_slides.py` (python-pptx + Pillow)
 **【永久屏蔽】**: LibreOffice soffice / Keynote / PowerPoint AppleScript
 **【本机物理事实】**: LibreOffice.app 是空壳 (Caskroom 占位, 无真实可执行二进制)
+
+## §26. medplan 医学策划模块 (2026-08-21)
+
+**定位**: 把证据链 (ask/router) 向策划端延伸 — 指令+产品信息 → 五维调研
+(文献/新闻/研报/政策/竞品) → 观点提炼 (insights+SWOT) → 分受众策略大纲
+(HCP/患者/行业, 五核心模块稳定骨架) → 语义优化 (版本化 changelog) →
+中国大陆医学合规验证 (广告法§9/§16 + 药品管理法§89 + 医疗广告管理办法§7
++ RDPAC, 规则常开 + LLM 语义层收尾 + 否定语境豁免)。
+
+```
+internal/medplan/          # 10 文件: models/audiences/research/analyze/
+                           #   outline/optimize/compliance(+rules)/
+                           #   project/render/pipeline
+internal/foundation/llm_glm.go   # GLM provider (RegisterLLM("glm"))
+cmd/medit/commands/medplan.go    # medit medplan <new|run|research|outline|
+                                 #   optimize|compliance|show|list>
+```
+
+- 存储: `~/.medit/medplan/<项目>/` (brief/research/insights/outline_x/
+  compliance_x JSON + outline_x.md, 原子写入)
+- 降级链: LLM 缺失→模板大纲+启发式观点; 单源检索失败→记录于 dossier.queries
+- 证据溯源: ResearchItem ID (L/N/R/P/C) 贯穿 insights 与 outline
+  section.evidence, LLM 输出的 item_id 经白名单校验
+- 完整文档: **docs/MEDPLAN.md** (含 GitHub 高星项目调研: STORM/gpt-researcher
+  模式借鉴, ToolGood.Words 词库升级路径, 无直接开源竞品结论)

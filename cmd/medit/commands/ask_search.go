@@ -199,6 +199,17 @@ func buildLLM() (foundation.LLMProvider, error) {
 			cfg["model"] = askLLMModel
 		}
 		return foundation.NewLLM("openai", cfg)
+	case "glm":
+		cfg := map[string]any{
+			"api_key": askLLMKey, // falls back to $GLM_API_KEY when empty
+		}
+		if askLLMEndp != "" {
+			cfg["endpoint"] = askLLMEndp
+		}
+		if askLLMModel != "" {
+			cfg["model"] = askLLMModel
+		}
+		return foundation.NewLLM("glm", cfg)
 	default:
 		return nil, fmt.Errorf("unknown LLM provider: %s", askLLMProv)
 	}
