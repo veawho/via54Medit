@@ -91,6 +91,10 @@ func TestIsRCT(t *testing.T) {
 		{"A systematic review", false},
 		{"Random sample survey", false},
 		{"随机双盲试验", true},
+		{"A non-randomized controlled trial of aspirin", false},
+		{"A non-randomised trial", false},
+		{"Not randomized clinical trial", false},
+		{"非随机对照临床试验", false},
 		{"", false},
 	}
 	for _, c := range cases {

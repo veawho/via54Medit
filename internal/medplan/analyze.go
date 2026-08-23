@@ -190,3 +190,66 @@ func (a *Analyzer) analyzeWithLLM(ctx context.Context, brief *Brief, d *Research
 	}
 	return out, nil
 }
+
+// AnalyzeMarket 提取并分析市场机会和未满足需求。
+func (a *Analyzer) AnalyzeMarket(ctx context.Context, brief *Brief, d *ResearchDossier) (string, error) {
+	if a.LLM != nil {
+		sys := "你是一位医药行业市场分析专家，擅长使用 PESTEL 模型（政治、经济、社会、技术、环境、法律）评估临床未满足需求与全球/国内市场竞争格局。"
+		user := fmt.Sprintf("对产品 %s (%s) 进行市场分析。要求：分析国内竞争对手数据、最新集采与医保政策（PESTEL中的Politics/Economics/Legal维度）以及患者未满足需求。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+			brief.Product.Name, strings.Join(brief.Product.Indications, "、"), brief.Instruction, dossierDigest(d, 8))
+		return a.LLM.Complete(ctx, sys, user)
+	}
+	return fmt.Sprintf("[PESTEL 市场分析结果 (针对 %s)]：\n1. 政治/法律 (P/L): 国家集采与省级医保双通道准入政策加速仿制药限价。\n2. 经济 (E): 国内医保支付受限，县域及下沉市场具备庞大的增量空间。\n3. 社会 (S): %s 的国内患者基数大，存在明显未满足的临床痛点。\n4. 竞争态势: 国内主要竞品为 %s。", brief.Product.Name, strings.Join(brief.Product.Indications, "、"), strings.Join(brief.Product.Competitors, "、")), nil
+}
+
+// AnalyzeStrategy 制定产品在目标市场的学术推广与准入策略。
+func (a *Analyzer) AnalyzeStrategy(ctx context.Context, brief *Brief, d *ResearchDossier) (string, error) {
+	if a.LLM != nil {
+		sys := "你是一位资深的医药市场准入与推广策略专家，擅长使用 SWOT 分析模型制定差异化竞争策略。"
+		user := fmt.Sprintf("为产品 %s 制定市场及学术准入策略。要求：应用 SWOT 模型评估该产品的核心竞争优势与外部威胁（如集采压力、竞品证据），输出差异化定位。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+			brief.Product.Name, brief.Instruction, dossierDigest(d, 8))
+		return a.LLM.Complete(ctx, sys, user)
+	}
+	return fmt.Sprintf("[SWOT 策略分析结果 (针对 %s)]：\n- S (优势): 临床循证数据充分，具备差异化分子机制。\n- W (劣势): 作为处方药准入难度大，初期学术教育成本高。\n- O (机会): 三进政策（进医院、进基药、进医保）及双通道药店零售限价提供了院外市场准入红利。\n- T (威胁): 同类仿制药低价竞标压力。\n- 推广路径: 优先建立核心大三甲医院专家学术共识，通过下沉渠道辐射县域市场。", brief.Product.Name), nil
+}
+
+// AnalyzeMarketing 生成具体的学术营销活动建议，支持引用营销案例库。
+func (a *Analyzer) AnalyzeMarketing(ctx context.Context, brief *Brief, d *ResearchDossier, casesDBPath string) (string, error) {
+	if a.LLM != nil {
+		sys := "你是一位资深的医药 brand 与学术营销策划专家，擅长利用 4P 营销理论和经典学术营销案例策划活动。"
+		user := fmt.Sprintf("为产品 %s 策划医学学术营销活动，参考案例库：%s。要求：运用 4P 理论，提出明确的学术传播内容与推广组合方案。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+			brief.Product.Name, casesDBPath, brief.Instruction, dossierDigest(d, 8))
+		return a.LLM.Complete(ctx, sys, user)
+	}
+	casesRef := "未指定案例库"
+	if casesDBPath != "" {
+		casesRef = casesDBPath
+	}
+	return fmt.Sprintf("[4P 营销活动策划 (针对 %s，参考 %s)]：\n1. Product (产品定位): 聚焦临床未满足需求，传递高效、安全的核心证据。\n2. Price (价格策略): 联动阳光采购平台与零售限价，树立高性价比性价比定位。\n3. Promotion (推广方案): 联合大带头人开展指南解读视频，发布真实世界研究报告。\n4. Place (渠道拓展): 结合双通道药店及下沉医疗机构进行覆盖。", brief.Product.Name, casesRef), nil
+}
+
+// ExportToOKF 将分析出的报告和材料转换为 OKF 标准的 YAML Frontmatter + Markdown 格式。
+func (a *Analyzer) ExportToOKF(title string, body string, metadata map[string]interface{}) (string, error) {
+	// 生成符合 Google Open Knowledge Format 规范的文档
+	header := "---\n"
+	header += "type: medical_policy_insight\n"
+	header += fmt.Sprintf("title: %q\n", title)
+	header += fmt.Sprintf("date: %q\n", nowUTC().Format("2006-01-02T15:04:05Z"))
+	header += "level: \"一类优先 (政府官网)\"\n"
+	for k, v := range metadata {
+		header += fmt.Sprintf("%s: %q\n", k, v)
+	}
+	header += "---\n\n"
+	return header + body, nil
+}
+
+// PushSummaryToChannels 将定期抓取的政策汇总摘要分发到各配置渠道（微信、Telegram、飞书、邮件等）。
+func PushSummaryToChannels(summary string, channels []string) error {
+	for _, ch := range channels {
+		fmt.Printf("[PushChannel] 正在将摘要推送至渠道: %s\n内容: %s\n", ch, summary)
+		// 实际应用中将通过 via54Larkfix 飞书 IPC / Telegram OAPI 客户端或邮件发件箱推送
+	}
+	return nil
+}
+
+

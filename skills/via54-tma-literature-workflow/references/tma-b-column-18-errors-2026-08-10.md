@@ -33,7 +33,7 @@
 import subprocess
 
 LARK = '/Users/david/.hermes/node/bin/lark-cli'
-TOKEN = 'AuPvsIPE1hLMQ2tAP5acl9Ydnof'
+TOKEN = 'YOUR_SPREADSHEET_TOKEN'
 SHEET = 'Sheet1'
 
 corrections = [

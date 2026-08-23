@@ -40,7 +40,7 @@
 import subprocess, json
 
 lark_cli = '/Users/david/.hermes/node/bin/lark-cli'
-TOKEN = 'AuPvsIPE1hLMQ2tAP5acl9Ydnof'
+TOKEN = 'YOUR_SPREADSHEET_TOKEN'
 
 result = subprocess.run([lark_cli, 'sheets', '+cells-get',
     '--spreadsheet-token', TOKEN, '--sheet-name', 'Sheet1',

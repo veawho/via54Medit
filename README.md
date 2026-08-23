@@ -1,3 +1,15 @@
+<div align="center">
+
+# via54Medit
+
+> **🌐 Language**: [🇨🇳 中文](#) (current) | [🇺🇸 English](./README_EN.md)
+>
+> _This document is in Chinese. For English, click above._
+
+</div>
+
+---
+
 # via54Medit v4.0 — Multi-Source Medical Literature Router
 
 > Algorithm-driven Pn-x processor with 6-layer architecture for PPT citation verification.

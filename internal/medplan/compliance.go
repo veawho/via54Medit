@@ -180,6 +180,7 @@ const semanticUserTmpl = `审查以下面向%s的医学策划方案大纲 (产�
 3. disguised_compare: 变相与其他药品比较功效安全性 (未直接使用"优于")
 4. rx_dtc_risk: 处方药面向公众传播的隐性风险 (如通过疾病教育夹带产品促销)
 5. guideline_misquote: 指南/文献引用失真风险 (夸大推荐级别或断章取义)
+6. literature_pitfalls: 学术文献或数据引用漏洞与陷阱（如混淆 mOS/OS，跨临床试验数据直接进行不科学的对比，虚构/夸大生存率数据，发表时间及作者名捏造或拼写错误）
 
 输出 JSON:
 {"findings":[{"category":"...","severity":"fatal|warn|info","section_title":"...","matched":"原文片段","suggestion":"修改建议"}]}
@@ -213,11 +214,12 @@ func (c *ComplianceChecker) semanticPass(ctx context.Context, o *StrategyOutline
 	}
 	// Map LLM categories to stable rule IDs.
 	categoryRule := map[string]string{
-		"off_label":          "LLM-OFFLABEL",
-		"unsupported_claim":  "LLM-UNSUPPORTED",
-		"disguised_compare":  "LLM-DISGUISED-CMP",
-		"rx_dtc_risk":        "LLM-RXDTC",
-		"guideline_misquote": "LLM-MISQUOTE",
+		"off_label":           "LLM-OFFLABEL",
+		"unsupported_claim":   "LLM-UNSUPPORTED",
+		"disguised_compare":   "LLM-DISGUISED-CMP",
+		"rx_dtc_risk":         "LLM-RXDTC",
+		"guideline_misquote":  "LLM-MISQUOTE",
+		"literature_pitfalls": "LLM-LIT-PITFALL",
 	}
 	out := make([]ComplianceFinding, 0, len(got.Findings))
 	for _, f := range got.Findings {

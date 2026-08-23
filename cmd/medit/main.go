@@ -1,5 +1,8 @@
 // Command medit is the via54Medit CLI entry point.
 //
+// [CN] via54Medit 命令行工具入口。
+// [EN] Command-line interface entry point for via54Medit.
+//
 // Usage:
 //
 //	medit [global flags] <subcommand> [args]

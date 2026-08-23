@@ -66,6 +66,7 @@ var (
 	mpExpandSection   string
 	mpIngestFile      string
 	mpBriefFile       string
+	mpCasesDB         string
 )
 
 func init() {
@@ -88,6 +89,9 @@ func init() {
 	medplanCmd.AddCommand(medplanComplianceCmd)
 	medplanCmd.AddCommand(medplanShowCmd)
 	medplanCmd.AddCommand(medplanListCmd)
+	medplanCmd.AddCommand(medplanMarketAnalysisCmd)
+	medplanCmd.AddCommand(medplanStrategyAnalysisCmd)
+	medplanCmd.AddCommand(medplanMarketingAnalysisCmd)
 }
 
 // --- helpers ---
@@ -689,4 +693,105 @@ func init() {
 	medplanOptimizeCmd.Flags().StringVar(&mpExpandSection, "expand", "", "仅深度扩充指定章节 (节 ID, 如 5 或 5.2)")
 
 	medplanComplianceCmd.Flags().StringVar(&mpAudiences, "audience", "", "hcp|patient|industry|all (默认 brief 全部受众)")
+	medplanMarketingAnalysisCmd.Flags().StringVar(&mpCasesDB, "cases-db", "", "营销案例库目录路径 (例如 via54ADIdeahub)")
 }
+
+// --- market-analysis ---
+
+var medplanMarketAnalysisCmd = &cobra.Command{
+	Use:   "market-analysis [project]",
+	Short: "对医学策略项目进行市场分析 (评估临床需求与竞争格局)",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		store, err := mpStoreOrDie()
+		if err != nil {
+			return err
+		}
+		brief, err := loadBrief(args, store)
+		if err != nil {
+			return err
+		}
+		d, err := store.LoadResearch(brief.Project)
+		if err != nil {
+			d = &medplan.ResearchDossier{Project: brief.Project}
+		}
+		llm := buildMedplanLLM(cmd.ErrOrStderr())
+		analyzer := &medplan.Analyzer{LLM: llm}
+
+		res, err := analyzer.AnalyzeMarket(cmd.Context(), brief, d)
+		if err != nil {
+			return err
+		}
+
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "=== 市场分析结果 [%s] ===\n%s\n", brief.Project, res)
+		return nil
+	},
+}
+
+// --- strategy-analysis ---
+
+var medplanStrategyAnalysisCmd = &cobra.Command{
+	Use:   "strategy-analysis [project]",
+	Short: "对医学策略项目进行推广及准入策略分析",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		store, err := mpStoreOrDie()
+		if err != nil {
+			return err
+		}
+		brief, err := loadBrief(args, store)
+		if err != nil {
+			return err
+		}
+		d, err := store.LoadResearch(brief.Project)
+		if err != nil {
+			d = &medplan.ResearchDossier{Project: brief.Project}
+		}
+		llm := buildMedplanLLM(cmd.ErrOrStderr())
+		analyzer := &medplan.Analyzer{LLM: llm}
+
+		res, err := analyzer.AnalyzeStrategy(cmd.Context(), brief, d)
+		if err != nil {
+			return err
+		}
+
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "=== 策略分析结果 [%s] ===\n%s\n", brief.Project, res)
+		return nil
+	},
+}
+
+// --- marketing-analysis ---
+
+var medplanMarketingAnalysisCmd = &cobra.Command{
+	Use:   "marketing-analysis [project]",
+	Short: "对医学策略项目进行学术营销策划分析 (可参考案例库)",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		store, err := mpStoreOrDie()
+		if err != nil {
+			return err
+		}
+		brief, err := loadBrief(args, store)
+		if err != nil {
+			return err
+		}
+		d, err := store.LoadResearch(brief.Project)
+		if err != nil {
+			d = &medplan.ResearchDossier{Project: brief.Project}
+		}
+		llm := buildMedplanLLM(cmd.ErrOrStderr())
+		analyzer := &medplan.Analyzer{LLM: llm}
+
+		res, err := analyzer.AnalyzeMarketing(cmd.Context(), brief, d, mpCasesDB)
+		if err != nil {
+			return err
+		}
+
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "=== 学术营销分析结果 [%s] ===\n%s\n", brief.Project, res)
+		return nil
+	},
+}
+
