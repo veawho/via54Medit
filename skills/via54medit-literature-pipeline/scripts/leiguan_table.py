@@ -86,7 +86,8 @@ if __name__ == '__main__':
         print('已写入飞书在线表')
 
 ### v4 更新(2026-08-14)
-- H 列补充: 主文件块含「📥 在线访问」(DOI 解析 / PMC / UpToDate; 中文期刊标暂无)
-- DOI 列与 H 列用 Markdown 链接 [doi](https://doi.org/doi) → 飞书自动转可点击超链接
-- 4-tier 二级: DOI/在线链接
-- 注意: file:// 中文路径在飞书会被截断, 本地路径用反引号纯文本
+# - H 列补充: 主文件块含「📥 在线访问」(DOI 解析 / PMC / UpToDate; 中文期刊标暂无)
+# - DOI 列与 H 列用 Markdown 链接 [doi](https://doi.org/doi) → 飞书自动转可点击超链接
+# - 4-tier 二级: DOI/在线链接
+# - 注意: file:// 中文路径在飞书会被截断, 本地路径用反引号纯文本
+

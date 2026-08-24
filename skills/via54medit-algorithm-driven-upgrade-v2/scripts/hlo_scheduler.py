@@ -1,11 +1,11 @@
-# HLO Scheduler — 算法驱动 cron 调度 (Phase 3 + Phase 5.1)
-
-> 算法驱动 cron, 替代硬编码表达式 + 永远跑
-> 4 算法: adaptive_interval (EWMA) + should_skip (smart skip) + bayesian_should_run (Beta 分布) + check_mutex (文件锁)
-
-## 完整代码
-
-```python
+# # HLO Scheduler — 算法驱动 cron 调度 (Phase 3 + Phase 5.1)
+# 
+# > 算法驱动 cron, 替代硬编码表达式 + 永远跑
+# > 4 算法: adaptive_interval (EWMA) + should_skip (smart skip) + bayesian_should_run (Beta 分布) + check_mutex (文件锁)
+# 
+# ## 完整代码
+# 
+# ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -198,31 +198,31 @@ def main():
 
 if __name__ == '__main__':
     main()
-```
-
-## 测试结果
-
-```bash
-$ python3 hlo_scheduler.py --job hlo_realtime_evolve --min-new-content 0 --mutex-group hlo_evolve
-[adaptive_interval] hlo_realtime_evolve → every 2h
-[run] hlo_realtime_evolve: interval=every 2h
-
-$ python3 hlo_scheduler.py --job hlo_daily_summary --min-new-content 0 --bayes-min-prob 0.3
-[adaptive_interval] hlo_daily_summary → every 2h
-[run] hlo_daily_summary: interval=every 2h
-```
-
-## 集成到 cron yml
-
-```yaml
-name: hlo_realtime_evolve
-schedule: "every 10m"
-prompt: |
-  步骤 0: 跑算法 scheduler 决定是否真跑
-  /usr/bin/python3 /Users/david/.hermes/cron/algorithms/hlo_scheduler.py \
-    --job hlo_realtime_evolve --min-new-content 1 \
-    --mutex-group hlo_evolve --bayes-min-prob 0.3
-
-  如果 exit code = 0 → 真跑下面 6 步
-  如果 exit code != 0 (skip) → 不跑 (算法决策)
-```
+# ```
+# 
+# ## 测试结果
+# 
+# ```bash
+# $ python3 hlo_scheduler.py --job hlo_realtime_evolve --min-new-content 0 --mutex-group hlo_evolve
+# [adaptive_interval] hlo_realtime_evolve → every 2h
+# [run] hlo_realtime_evolve: interval=every 2h
+# 
+# $ python3 hlo_scheduler.py --job hlo_daily_summary --min-new-content 0 --bayes-min-prob 0.3
+# [adaptive_interval] hlo_daily_summary → every 2h
+# [run] hlo_daily_summary: interval=every 2h
+# ```
+# 
+# ## 集成到 cron yml
+# 
+# ```yaml
+# name: hlo_realtime_evolve
+# schedule: "every 10m"
+# prompt: |
+#   步骤 0: 跑算法 scheduler 决定是否真跑
+#   /usr/bin/python3 /Users/david/.hermes/cron/algorithms/hlo_scheduler.py \
+#     --job hlo_realtime_evolve --min-new-content 1 \
+#     --mutex-group hlo_evolve --bayes-min-prob 0.3
+# 
+#   如果 exit code = 0 → 真跑下面 6 步
+#   如果 exit code != 0 (skip) → 不跑 (算法决策)
+# ```
