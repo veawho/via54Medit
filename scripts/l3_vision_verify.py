@@ -18,9 +18,9 @@ import sys
 import os
 import json
 
-# 调用 sensenova_vision.py
+# 调用 provider_vision.py (默认 mmx-cli, VISION_PROVIDER 可切 sensenova/glm)
 script_dir = os.path.dirname(os.path.abspath(__file__))
-vision_script = os.path.join(script_dir, "sensenova_vision.py")
+vision_script = os.path.join(script_dir, "provider_vision.py")
 
 
 def verify_highlight(image_path, allegation_text, json_mode=False):

@@ -1,0 +1,13 @@
+# via54Medit Cursor & Codex Rules
+
+## Stack & Conventions
+- **Go 1.22+**: CLI & MCP server in `cmd/`, core logic in `internal/`, public types in `pkg/types/`.
+- **Python 3.10+**: PDF parsing and annotation in `scripts/hl_v3_final/hl_lib.py`, vision in `scripts/provider_vision.py`, LLM in `scripts/provider_llm.py`.
+- **Supported Providers**: DeepSeek (V3/R1), Hermes Agent, MiniMax, OpenAI/Codex, SenseNova.
+
+## Core Rules
+1. **Never alter or overwrite target PDF files** unless explicitly requested.
+2. **Deterministic execution**: Sort maps before iteration in Go, fix seeds where applicable.
+3. **Tri-modal annotation in PDF**: Yellow highlights for exact sentences, Red Square for figures/tables, Red FreeText for claim badges (A, B, C).
+4. **Slide-Scoped Filtering**: Use `filter_sentences_by_slide_context` to prevent multi-slide PDF annotation pollution.
+5. **Quality Gates**: Always ensure `go test ./...` and `python3 scripts/hl_v3_final/test_hl_lib.py` pass.

@@ -23,6 +23,23 @@ COM_ENGINES = [
     ("WPS 演示", "KWPP.Application"),
 ]
 
+# 渲染引擎偏好 (2026-09-04 用户规范): 默认 PowerPoint 并禁用其他引擎自动切换。
+# 覆盖: 环境变量 RENDER_ENGINE=powerpoint|wps|libreoffice|python_pptx|auto
+#   auto = 旧行为 (按可用性自动降级, 仅显式要求时启用)
+def _engine_pref():
+    return os.environ.get("RENDER_ENGINE", "powerpoint").strip().lower()
+
+# 偏好引擎 → 引擎标识
+_PREF_MAP = {
+    "powerpoint": ("PowerPoint", "com", "PowerPoint.Application"),
+    "ppt": ("PowerPoint", "com", "PowerPoint.Application"),
+    "wps": ("WPS 演示", "com", "KWPP.Application"),
+    "libreoffice": ("LibreOffice (soffice)", "soffice", None),
+    "soffice": ("LibreOffice (soffice)", "soffice", None),
+    "python_pptx": ("python-pptx 近似渲染", "python_pptx", ""),
+    "python-pptx": ("python-pptx 近似渲染", "python_pptx", ""),
+}
+
 
 def _progid_available(progid):
     """注册表检查 COM ProgID 是否已注册 (Windows)"""
@@ -72,6 +89,18 @@ def _com_probe(progid):
         return False
 
 
+def _macos_powerpoint_available():
+    """检查 macOS 系统中是否安装有 Microsoft PowerPoint"""
+    if sys.platform != "darwin":
+        return False
+    try:
+        r = subprocess.run(["osascript", "-e", 'id of app "Microsoft PowerPoint"'],
+                           capture_output=True, text=True, timeout=5)
+        return r.returncode == 0 and "com.microsoft.Powerpoint" in r.stdout
+    except Exception:
+        return False
+
+
 def _find_soffice():
     """探测 LibreOffice 可执行文件 (soffice/libreoffice), 全平台"""
     import shutil
@@ -83,18 +112,55 @@ def _find_soffice():
 
 
 def detect_engines():
-    """返回可用引擎列表 [(name, kind), ...], kind: com | soffice | python_pptx"""
+    """返回可用引擎列表 [(name, kind, target), ...], kind: com | macos_ppt | soffice | python_pptx"""
     out = []
     if os.name == "nt":
         for name, progid in COM_ENGINES:
             if _progid_available(progid):
                 if _ensure_pywin32(progid) and _com_probe(progid):
                     out.append((name, "com", progid))
+    if sys.platform == "darwin" and _macos_powerpoint_available():
+        out.append(("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint"))
     soffice = _find_soffice()
     if soffice:
         out.append(("LibreOffice (soffice)", "soffice", soffice))
     out.append(("python-pptx 近似渲染", "python_pptx", ""))
     return out
+
+
+# ============ macOS 原生 PowerPoint 真实渲染 ============
+def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
+    """macOS 下通过 AppleScript 控制原生 Microsoft PowerPoint 导出 PDF，再由 PyMuPDF 导出高清 PNG"""
+    import tempfile
+    import fitz
+    abs_pptx = os.path.abspath(pptx_path)
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
+    tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
+    script = f'''
+    tell application "Microsoft PowerPoint"
+        set origApp to current application
+        open POSIX file "{abs_pptx}"
+        set thePres to active presentation
+        save thePres in POSIX file "{tmp_pdf}" as save as PDF
+        close thePres saving no
+    end tell
+    '''
+    try:
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+        if res.returncode != 0 or not os.path.exists(tmp_pdf):
+            raise RuntimeError("PowerPoint AppleScript error: %s" % (res.stderr or res.stdout)[-200:])
+        doc = fitz.open(tmp_pdf)
+        n = 0
+        for i, page in enumerate(doc, start=1):
+            pix = page.get_pixmap(dpi=dpi)
+            pix.save(os.path.join(out_dir, "slide_%03d.png" % i))
+            n += 1
+        doc.close()
+        return n
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # ============ COM 真实渲染 ============
@@ -264,15 +330,57 @@ def render_via_python_pptx(pptx_path, out_dir, dpi=120):
     return n
 
 
+def _build_engine_list():
+    """按引擎偏好构造待尝试引擎列表 (默认 powerpoint 自动适配 Windows COM 与 macOS 原生 PowerPoint)."""
+    pref = _engine_pref()
+    if pref == "auto":
+        return detect_engines()
+    spec = _PREF_MAP.get(pref)
+    if spec is None:
+        raise RuntimeError("未知 RENDER_ENGINE=%r (可选: powerpoint|wps|libreoffice|python_pptx|auto)" % pref)
+    name, kind, progid = spec
+    if kind == "com":
+        if os.name == "nt":
+            if not (_progid_available(progid) and _ensure_pywin32(progid) and _com_probe(progid)):
+                raise RuntimeError("[render] 偏好引擎 %s (COM %s) 在 Windows 不可用" % (name, progid))
+            return [(name, kind, progid)]
+        elif sys.platform == "darwin" and _macos_powerpoint_available():
+            return [("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")]
+        else:
+            # 尝试检测是否有 LibreOffice 替代，否则提示
+            soffice = _find_soffice()
+            if soffice:
+                return [("LibreOffice (soffice 备选)", "soffice", soffice)]
+            return [("python-pptx 近似渲染 (兜底)", "python_pptx", "")]
+    if kind == "soffice":
+        p = _find_soffice()
+        if not p:
+            raise RuntimeError("[render] 偏好引擎 LibreOffice (soffice) 不可用")
+        return [(name, kind, p)]
+    return [(name, kind, "")]  # python_pptx 兜底恒可用
+
+
 def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
-    """自动选择引擎渲染全部 slide, 返回 (count, engine_name)"""
+    """按引擎偏好渲染全部 slide, 返回 (count, engine_name).
+    默认偏好 = PowerPoint (Windows COM / macOS 原生 PowerPoint).
+    """
     os.makedirs(out_dir, exist_ok=True)
-    engines = detect_engines()
+    try:
+        engines = _build_engine_list()
+    except Exception as e:
+        print("  [render] %s" % str(e), flush=True)
+        print("  [render] 提示: 引擎偏好由 RENDER_ENGINE 控制 (默认 powerpoint)", flush=True)
+        return 0, "none"
     for name, kind, progid in engines:
         try:
             if kind == "com":
                 print("  [render] 引擎=%s (COM %s)" % (name, progid), flush=True)
                 n = render_via_com(progid, pptx_path, out_dir, width_px)
+                if n > 0:
+                    return n, name
+            elif kind == "macos_ppt":
+                print("  [render] 引擎=%s (AppleScript)" % name, flush=True)
+                n = render_via_macos_powerpoint(pptx_path, out_dir)
                 if n > 0:
                     return n, name
             elif kind == "soffice":

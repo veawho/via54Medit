@@ -1,0 +1,30 @@
+{
+  "name": "via54Medit",
+  "version": "0.1.0",
+  "description": "Multi-Source Medical Literature Router & Tri-Modal EBM Annotation Engine",
+  "tools": [
+    {
+      "name": "medit_ask",
+      "command": "go run ./cmd/medit ask \"{{query}}\"",
+      "description": "Query PubMed, OpenAlex, Semantic Scholar, and Crossref for clinical evidence",
+      "parameters": {
+        "query": { "type": "string", "description": "Clinical question or disease keyword", "required": true }
+      }
+    },
+    {
+      "name": "medit_mcp",
+      "command": "go run ./cmd/medit-mcp",
+      "type": "mcp_stdio",
+      "description": "Start the via54Medit MCP stdio server"
+    },
+    {
+      "name": "medit_llm_reason",
+      "command": "python3 scripts/provider_llm.py \"{{prompt}}\" --model \"{{model}}\"",
+      "description": "Execute DeepSeek / Hermes reasoning over medical texts",
+      "parameters": {
+        "prompt": { "type": "string", "description": "Prompt content", "required": true },
+        "model": { "type": "string", "description": "Model name (e.g. deepseek-reasoner, deepseek-chat)", "default": "deepseek-chat" }
+      }
+    }
+  ]
+}

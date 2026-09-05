@@ -169,7 +169,7 @@ print(json.dumps(result, ensure_ascii=False))
     code = f"""
 import sys
 sys.path.insert(0, '{PROJECT_ROOT}/scripts')
-from sensenova_vision import vision_analyze
+from provider_vision import vision_analyze
 
 result = vision_analyze(sys.argv[1], '''这张图里有多少处黄色高亮? 这些高亮是否覆盖了以下关键词: {", ".join(expected_terms[:6])}''')
 print('SUCCESS' if result.get('success') else 'FAIL')

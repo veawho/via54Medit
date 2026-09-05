@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
-from sensenova_vision import vision_analyze, get_api_key, encode_image, get_image_mime
+from provider_vision import vision_analyze, get_api_key, encode_image, get_image_mime
 
 
 TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"

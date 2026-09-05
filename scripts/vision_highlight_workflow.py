@@ -20,7 +20,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sensenova_vision import vision_analyze
+from provider_vision import vision_analyze
 from via54_highlight_fix_v10 import process_pn_x, DEFAULT_HIGHLIGHT_MODE
 
 

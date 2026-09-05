@@ -1,7 +1,7 @@
 # AGENTS.md — via54Medit 跨工具协作规约
 
-> 适用于 **Claude Code / Cursor / GitHub Copilot / Hermes Agent / OpenCode / Codex** 等所有 AI 工具。
-> 本文件等价于 `CLAUDE.md` / `.cursorrules` / `.github/copilot-instructions.md`，各工具自动识别同名约定。
+> 适用于 **Trae / Traework / Hermes Agent / Claude Code / Cursor / GitHub Copilot / Codex / OpenClaw / DeepSeek** 等所有 AI Agent 工具。
+> 本文件等价于 `.trae/rules/project_rules.md` / `CLAUDE.md` / `.cursorrules` / `.github/copilot-instructions.md` / `.openclaw/openclaw.json`，各工具自动识别同名约定。
 
 ---
 

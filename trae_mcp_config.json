@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "via54Medit": {
+      "command": "/usr/local/go/bin/go",
+      "args": ["run", "./cmd/medit-mcp"],
+      "env": {
+        "LLM_PROVIDER": "deepseek",
+        "VISION_PROVIDER": "mmx"
+      }
+    }
+  }
+}

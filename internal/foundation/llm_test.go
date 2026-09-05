@@ -10,13 +10,30 @@ import (
 )
 
 func TestRegisterAndNewLLM(t *testing.T) {
-	// hermes and openai should be registered via init().
+	// hermes, openai, and deepseek should be registered via init().
 	if !contains(registeredLLMs(), "hermes") {
 		t.Error("hermes not registered (init() didn't fire?)")
 	}
 	if !contains(registeredLLMs(), "openai") {
 		t.Error("openai not registered")
 	}
+	if !contains(registeredLLMs(), "deepseek") {
+		t.Error("deepseek not registered")
+	}
+}
+
+func TestNewDeepSeek(t *testing.T) {
+	p, err := newDeepSeek(map[string]any{
+		"api_key": "sk-test-deepseek",
+		"model":   "deepseek-reasoner",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name() != "deepseek" {
+		t.Errorf("Name = %q, want deepseek", p.Name())
+	}
+	var _ LLMProvider = p
 }
 
 func TestNewLLMUnknown(t *testing.T) {

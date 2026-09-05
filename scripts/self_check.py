@@ -143,7 +143,7 @@ def main():
         code = f"""
 import sys
 sys.path.insert(0, '{Path("/Users/david/Desktop/developments/via54Medit/scripts")}')
-from sensenova_vision import vision_analyze
+from provider_vision import vision_analyze
 result = vision_analyze(sys.argv[1], '这张图里有几处黄色高亮? 简单描述每处覆盖的内容.')
 print('SUCCESS' if result.get('success') else 'FAIL')
 print('---')

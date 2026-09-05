@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -233,6 +234,57 @@ func (o *OpenAIProvider) Name() string { return "openai" }
 
 func (o *OpenAIProvider) Complete(ctx context.Context, system, user string) (string, error) {
 	return o.CompleteWithOptions(ctx, CompleteOptions{System: system, User: user})
+}
+
+// --- deepseek backend (OpenAI-compatible DeepSeek V3 / R1) ---
+
+type DeepSeekProvider struct {
+	endpoint string
+	model    string
+	apiKey   string
+	client   *http.Client
+}
+
+func init() {
+	RegisterLLM("deepseek", newDeepSeek)
+}
+
+func newDeepSeek(cfg map[string]any) (LLMProvider, error) {
+	d := &DeepSeekProvider{
+		endpoint: "https://api.deepseek.com",
+		model:    "deepseek-chat",
+		client:   &http.Client{Timeout: 90 * time.Second},
+	}
+	if v, ok := cfg["endpoint"].(string); ok && v != "" {
+		d.endpoint = v
+	}
+	if v, ok := cfg["model"].(string); ok && v != "" {
+		d.model = v
+	}
+	if v, ok := cfg["api_key"].(string); ok && v != "" {
+		d.apiKey = v
+	}
+	if d.apiKey == "" {
+		// Fallback to environment variable
+		d.apiKey = os.Getenv("DEEPSEEK_API_KEY")
+	}
+	return d, nil
+}
+
+func (d *DeepSeekProvider) Name() string { return "deepseek" }
+
+func (d *DeepSeekProvider) Complete(ctx context.Context, system, user string) (string, error) {
+	return d.CompleteWithOptions(ctx, CompleteOptions{System: system, User: user})
+}
+
+func (d *DeepSeekProvider) CompleteWithOptions(ctx context.Context, opts CompleteOptions) (string, error) {
+	h := &HermesProvider{
+		endpoint: d.endpoint,
+		model:    d.model,
+		apiKey:   d.apiKey,
+		client:   d.client,
+	}
+	return h.CompleteWithOptions(ctx, opts)
 }
 
 func (o *OpenAIProvider) CompleteWithOptions(ctx context.Context, opts CompleteOptions) (string, error) {

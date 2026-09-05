@@ -40,7 +40,7 @@ from semantic_highlight_workflow import (
     _cache_key,
     TMA_ROOT, LEIDA_ROOT, RENDER_ZOOM,
 )
-from sensenova_vision import vision_analyze, get_api_key, encode_image, get_image_mime
+from provider_vision import vision_analyze, get_api_key, encode_image, get_image_mime
 import urllib.request
 import hashlib
 

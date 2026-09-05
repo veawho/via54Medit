@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "via54Medit": {
+      "command": "go",
+      "args": ["run", "./cmd/medit-mcp"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LLM_PROVIDER": "deepseek",
+        "VISION_PROVIDER": "mmx",
+        "DEEPSEEK_API_KEY": "${env:DEEPSEEK_API_KEY}",
+        "OPENAI_API_KEY": "${env:OPENAI_API_KEY}",
+        "MINIMAX_API_KEY": "${env:MINIMAX_API_KEY}"
+      },
+      "description": "via54Medit Multi-Source Medical Literature Router & EBM Verification Engine"
+    }
+  }
+}

@@ -26,9 +26,9 @@ def extract_data_points_from_image(image_path, prompt=None):
     
     result = subprocess.run([
         sys.executable,
-        os.path.join(os.path.dirname(__file__), "sensenova_vision.py"),
+        os.path.join(os.path.dirname(__file__), "provider_vision.py"),
         image_path, prompt, "--json"
-    ], capture_output=True, text=True, timeout=60)
+    ], capture_output=True, text=True, timeout=120)
     
     if result.returncode != 0:
         return []
