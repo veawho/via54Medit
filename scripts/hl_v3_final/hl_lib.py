@@ -123,19 +123,29 @@ def locate_sentence(text, sentence, occurrence=0):
             return pure_to_ridx[pure_idx], pure_to_ridx[pure_idx + len(sk_pure) - 1] + 1
 
     # 4. 首尾双锚点自愈匹配 (Head-Tail Anchor Matching):
-    # 处理超长句子尾部被省略号截断或中间有少量 OCR 错字的情况
+    # 处理超长句子尾部被省略号截断、中间插入置信区间 (95% CI) 或少量 OCR 错字的情况
     if len(sk) >= 16:
-        head_anchor = re.sub(_PUNCT_REGEX, '', sk[:12])
-        tail_anchor = re.sub(_PUNCT_REGEX, '', sk[-12:])
-        if len(head_anchor) >= 6 and len(tail_anchor) >= 6:
-            h_idx = ns.find(head_anchor)
+        ns_pure_chars = []
+        pure_to_ridx = []
+        for char_idx, ch in enumerate(ns):
+            if not re.match(_PUNCT_REGEX, ch):
+                ns_pure_chars.append(ch)
+                pure_to_ridx.append(ridx[char_idx])
+        ns_pure = ''.join(ns_pure_chars)
+        
+        sk_pure = re.sub(_PUNCT_REGEX, '', sk)
+        if len(sk_pure) >= 12 and len(ns_pure) >= len(sk_pure):
+            head_anchor = sk_pure[:8]
+            tail_anchor = sk_pure[-8:]
+            h_idx = ns_pure.find(head_anchor)
             if h_idx >= 0:
-                t_idx = ns.find(tail_anchor, h_idx + len(head_anchor))
-                # 距离限制: 首尾距离不超过句子长度的 1.4 倍
-                if t_idx > 0 and (t_idx + len(tail_anchor) - h_idx) <= int(n * 1.4):
-                    return ridx[h_idx], ridx[t_idx + len(tail_anchor) - 1] + 1
+                t_idx = ns_pure.find(tail_anchor, h_idx + len(head_anchor))
+                # 距离限制: 首尾距离合理扩展 (应对中段插入置信区间或统计注释)
+                if t_idx > 0 and (t_idx + len(tail_anchor) - h_idx) <= int(len(sk_pure) * 2.2):
+                    return pure_to_ridx[h_idx], pure_to_ridx[t_idx + len(tail_anchor) - 1] + 1
                     
     return None
+
 
 def sentence_rects(chars, start, end, pad=0.35):
     """将 chars[start:end] 按行(y 中心相近)分组,返回每行合并后的 rect.

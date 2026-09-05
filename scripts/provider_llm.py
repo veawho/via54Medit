@@ -137,6 +137,10 @@ def _call_openai_compatible(endpoint, api_key, payload, timeout=120):
         }
 
 
+# 兼容性别名
+llm_complete = complete
+
+
 def main():
     parser = argparse.ArgumentParser(description="via54Medit unified LLM provider")
     parser.add_argument("prompt", help="Prompt text")
