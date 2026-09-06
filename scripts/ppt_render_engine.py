@@ -15,7 +15,7 @@ CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Not
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
   n, engine = render_ppt_slides_auto("D:/x.pptx", "D:/out")
 """
-import os, io, sys, subprocess
+import os, io, sys, subprocess, time
 
 # 引擎探测优先级
 COM_ENGINES = [
@@ -137,14 +137,20 @@ def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
     os.makedirs(out_dir, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
     tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
+    # 清理可能残留的卡死实例(模态对话框会阻塞 Apple 事件, 表现为 -9074/超时)
+    subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)
+    time.sleep(2.0)
     script = f'''
+    with timeout of 300 seconds
     tell application "Microsoft PowerPoint"
-        set origApp to current application
+        launch
+        delay 3
         open POSIX file "{abs_pptx}"
         set thePres to active presentation
         save thePres in POSIX file "{tmp_pdf}" as save as PDF
         close thePres saving no
     end tell
+    end timeout
     '''
     try:
         res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)

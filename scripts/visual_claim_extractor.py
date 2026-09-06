@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import json
+import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from PIL import Image
