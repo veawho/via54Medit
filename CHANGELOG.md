@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [4.9.0] - 2026-09-07 (step5 真·视觉双对齐终版 + 文献高亮复核闭环)
+
+### Added (文献高亮 · Step5 终版)
+- **scripts/step5_vision_final.py**: Step5 真·视觉双对齐终版脚本。对每个 Pn-x 以「左=引用位置裁剪图(claim_visual)、右=文献含高亮候选页」送入 mmx 视觉模型, 逐条返回支撑该引用位置论点的完整原句(附页码) → 原文流整句定位 → 单 Highlight 落位。
+- 覆盖乱码/图像型 PDF: 复用 `hl_v3_final/hl_lib.py` 词级定位 + `provider_vision.py` 视觉降级链。
+
+### Changed (复核闭环)
+- 引用高亮复核规范固化: 整句完整性 / 头部元数据与作者区禁盖 / 跨栏行带收敛至词级(双栏 x 约束) / 图像型 PDF 走 OCR 行带——已在本轮 RSV 50 文件全量复核落地(0 高亮文件从 10 → 5, 余 5 为脚注型设计 0 与缺源待补)。
+
+### 验证
+- test_hl_lib 36/36 passed; step5_vision_final.py 语法检查通过; 密钥泄漏扫描无命中
+
 ## [4.8.0] - 2026-08-21 (跨平台部署: 任意设备自动接入软件/工具/包 + skills 仓库化)
 
 ### Added (跨平台自动接入)
