@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (文献高亮 · Step5 终版)
 - **scripts/step5_vision_final.py**: Step5 真·视觉双对齐终版脚本。对每个 Pn-x 以「左=引用位置裁剪图(claim_visual)、右=文献含高亮候选页」送入 mmx 视觉模型, 逐条返回支撑该引用位置论点的完整原句(附页码) → 原文流整句定位 → 单 Highlight 落位。
 - 覆盖乱码/图像型 PDF: 复用 `hl_v3_final/hl_lib.py` 词级定位 + `provider_vision.py` 视觉降级链。
+- **scripts/hl_v3_final/verify_sentence_set.py**: 句集定位复现验证器。读整句清单 TSV, 用 hl_lib 在 PDF 逐句重新定位, 报告 NOT FOUND/OCR 通道分布 (RSV 745 句实测: 730 文本定位 OK + 15 OCR 通道句)。
+- **scripts/hl_v3_final/hl_ocr_band.py**: OCR 词级高亮器 (乱码/纯图像 PDF 通道)。渲染→tesseract TSV(line 分组)→分栏阅读序词流→start/end 短语窗口→行 band→Highlight quads(仅栏内 x 不跨栏); 支持 --crop-top/bottom(整页 psm 漏检灰框区域)、--psm、--replace-page、--dry-run。
 
 ### Changed (复核闭环)
 - 引用高亮复核规范固化: 整句完整性 / 头部元数据与作者区禁盖 / 跨栏行带收敛至词级(双栏 x 约束) / 图像型 PDF 走 OCR 行带——已在本轮 RSV 50 文件全量复核落地(0 高亮文件从 10 → 5, 余 5 为脚注型设计 0 与缺源待补)。
