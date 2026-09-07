@@ -1,0 +1,126 @@
+[
+  {
+    "pnx": "P3-2",
+    "official_placed": 0,
+    "total_sent": 1,
+    "today_annots": 7,
+    "official_annots": 0,
+    "today_pages": {
+      "2": 7
+    }
+  },
+  {
+    "pnx": "P3-3",
+    "official_placed": 0,
+    "total_sent": 2,
+    "today_annots": 10,
+    "official_annots": 0,
+    "today_pages": {
+      "2": 10
+    }
+  },
+  {
+    "pnx": "P6-1",
+    "official_placed": 0,
+    "total_sent": 3,
+    "today_annots": 16,
+    "official_annots": 0,
+    "today_pages": {
+      "3": 7,
+      "7": 9
+    }
+  },
+  {
+    "pnx": "P8-4",
+    "official_placed": 0,
+    "total_sent": 2,
+    "today_annots": 8,
+    "official_annots": 0,
+    "today_pages": {
+      "7": 8
+    }
+  },
+  {
+    "pnx": "P8-10",
+    "official_placed": 2,
+    "total_sent": 3,
+    "today_annots": 10,
+    "official_annots": 5,
+    "today_pages": {
+      "1": 2,
+      "2": 8
+    }
+  },
+  {
+    "pnx": "P9-10",
+    "official_placed": 1,
+    "total_sent": 3,
+    "today_annots": 8,
+    "official_annots": 2,
+    "today_pages": {
+      "2": 8
+    }
+  },
+  {
+    "pnx": "P15-3",
+    "official_placed": 0,
+    "total_sent": 3,
+    "today_annots": 8,
+    "official_annots": 0,
+    "today_pages": {
+      "2": 3,
+      "8": 5
+    }
+  },
+  {
+    "pnx": "P15-4",
+    "official_placed": 0,
+    "total_sent": 2,
+    "today_annots": 5,
+    "official_annots": 0,
+    "today_pages": {
+      "1": 5
+    }
+  },
+  {
+    "pnx": "P21-3",
+    "official_placed": 1,
+    "total_sent": 2,
+    "today_annots": 6,
+    "official_annots": 3,
+    "today_pages": {
+      "6": 6
+    }
+  },
+  {
+    "pnx": "P23-3",
+    "official_placed": 0,
+    "total_sent": 2,
+    "today_annots": 4,
+    "official_annots": 0,
+    "today_pages": {
+      "8": 4
+    }
+  },
+  {
+    "pnx": "P27-2",
+    "official_placed": 0,
+    "total_sent": 4,
+    "today_annots": 9,
+    "official_annots": 0,
+    "today_pages": {
+      "1": 6,
+      "2": 3
+    }
+  },
+  {
+    "pnx": "P27-3",
+    "official_placed": 0,
+    "total_sent": 2,
+    "today_annots": 6,
+    "official_annots": 0,
+    "today_pages": {
+      "1": 6
+    }
+  }
+]
