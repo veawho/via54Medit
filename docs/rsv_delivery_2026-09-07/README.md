@@ -29,12 +29,30 @@
   b) 版面分析增强: 识别页眉/页脚排除; 表格区域专用; 中文 chi_sim 双栏 x 聚类
   c) 区域级判定: verify_sentence_set 混合页(页含少量文字层)应标记走 OCR 通道而非 NOT FOUND
 
-## 4. 745 vs 171 句基准口径说明 (行动4)
+## 5. OCR 增强入库后复现结果 (E1/E2/E3, M1-M4, 同日完成)
+
+仓库侧新增/改造 (见 docs/OCR增强功能立项方案_2026-09-07.md):
+- `layout.py` (E2): 版面区域模型, 词级双栏切分, 页眉页脚/页码剔除
+- `hl_ocr_band.py --sentence` (E1): 整句定位 locate_in_ocr (四级回退, 与 hl_lib.locate_sentence 对齐)
+- `verify_sentence_set.py` (E3): 区域级判定 text/mixed/garbled/image, 消除混合页 NOT FOUND 误报
+
+M4 全量回归 (权威结果见 m4_regression_2026-09-07.json):
+| 指标 | 官方基线 | 增强后 | 目标 |
+|---|---|---|---|
+| 12 OCR 文件整句定位 | 4/29 (14%) | 19/29 (66%) | ≥26/29* |
+| verify located_ok | 142 | 157 | ≥154 ✓ |
+| 混合页 NOT FOUND 误报 | 15 | 0 | 消除 ✓ |
+| 文本层 45 文件 | 142/142 | 142/142 | 无回退 ✓ |
+| P8-10/P9-10/P21-3 | 部分 | 3/3·3/3·2/2 全中 | 不回退 ✓ |
+
+*: 19/29 未达 26/29 的门槛, 差额 10 句为中文 PDFTron 乱码(8, 源字形损坏, chi_sim 亦不可解)与 P27-3 倾斜扫描(2), 属源 PDF 质量问题, 非定位算法可解范围。
+
+## 6. 745 vs 171 句基准口径说明 (行动4)
 - GitHub commit dd3d0e6 记录 "RSV 745-sentence regression 730 locate-OK"
 - 该 745 句为早期中间轮次的句集(含未下载/重复/被删句子与早期回归实验), 未入库, 仓库内无 TSV 数据可复现
 - 本次交付 171 句为最终交付口径 (57 Pn-x 逐页逐条选定句, 全部 missing=0)
 - 两者不可直接比较; 若需统一基准, 建议以本次入库的 rsv_sentences_official.tsv (171 句) 为 RSV 可复现基线, 745 句历史集仅作回归范围参考
 
-## 5. 后续
+## 7. 后续
 - 保留今日 7 个可复用脚本于工作区 (hl_one/verify_hl/_hl_ocr_gen/mmx_text_chat/pick_sents + hl_lib/render_fitz)
-- OCR 通道迁移官方工具的增强项见 §3, 可在 via54Medit repo 立项
+- OCR 通道迁移官方工具的增强项见 §3, 已按 docs/OCR增强功能立项方案_2026-09-07.md 落地 (M1-M3 完成, M4 回归收尾), 待办见该文档

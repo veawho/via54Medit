@@ -1,0 +1,104 @@
+{
+  "title": "M4 全量回归报告 (OCR 增强 E1/E2/E3 收尾)",
+  "date": "2026-09-07",
+  "commits": [
+    "198e235 (M1/M2)",
+    "32809b9 (M3)"
+  ],
+  "environment": {
+    "tesseract": "vm/tools/bin/tesseract.cmd",
+    "dpi": 300,
+    "psm": 4
+  },
+  "acceptance": {
+    "A1_ocr_sentence_locate": {
+      "target": ">= 26/29",
+      "measured": "19/29",
+      "baseline_official": "4/29 (14%)",
+      "pass": false,
+      "note": "19/29=66%; 余 10 句为中文 PDFTron 乱码(8, 源字形损坏不可 OCR) + P27-3 倾斜扫描(2)"
+    },
+    "A2_verify_located_ok": {
+      "target": ">= 154",
+      "measured": "157",
+      "pass": true,
+      "note": "142 文本层 + 15 OCR 复现"
+    },
+    "A3_text_layer_no_regression": {
+      "target": "45 文件 142 句保持 100%",
+      "measured": "142/142",
+      "pass": true,
+      "note": "文本层 located_ok=142 全复现, not_found=0"
+    },
+    "A4_existing_cases_no_regression": {
+      "target": "P8-10/P9-10/P21-3 不回退 (定位全中)",
+      "measured": "P8-10 3/3, P9-10 3/3, P21-3 2/2 (annotations 22)",
+      "pass": true
+    }
+  },
+  "e1_detail": {
+    "P3-2": {
+      "located": 0,
+      "total": 1
+    },
+    "P3-3": {
+      "located": 0,
+      "total": 2
+    },
+    "P6-1": {
+      "located": 0,
+      "total": 3
+    },
+    "P8-4": {
+      "located": 0,
+      "total": 2
+    },
+    "P8-10": {
+      "located": 3,
+      "total": 3
+    },
+    "P9-10": {
+      "located": 3,
+      "total": 3
+    },
+    "P15-3": {
+      "located": 3,
+      "total": 3
+    },
+    "P15-4": {
+      "located": 2,
+      "total": 2
+    },
+    "P21-3": {
+      "located": 2,
+      "total": 2
+    },
+    "P23-3": {
+      "located": 2,
+      "total": 2
+    },
+    "P27-2": {
+      "located": 4,
+      "total": 4
+    },
+    "P27-3": {
+      "located": 0,
+      "total": 2
+    }
+  },
+  "verify": {
+    "located_ok": 157,
+    "not_found": 0,
+    "ocr_channel_unrepro": 14,
+    "text_layer_ok": 142,
+    "ocr_repro": 15,
+    "total": 171
+  },
+  "summary": {
+    "e1_locate": "19/29",
+    "e1_baseline_official": "4/29",
+    "verify_located_ok": 157,
+    "verify_baseline": "142 (page-level)",
+    "unresolved": "P3-2/P3-3/P6-1/P8-4 源字形损坏 + P27-3 倾斜: 需源 PDF 修复或倾斜校正(算法外)"
+  }
+}
