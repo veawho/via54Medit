@@ -1,0 +1,279 @@
+{
+ "title": "OCR 通道真实整句定位成功率严格评估",
+ "date": "2026-09-07",
+ "scope": "12 个 OCR/乱码文件 29 句 (rsv_sentences_official.tsv flag=ocr), 词流 = layout.reading_columns (col_resort 后), 句子源 = _sentences/{pnx}.json, 页 = 回归 CAND 候选页",
+ "method": "内联复刻 locate_in_ocr 四级回退记录命中级 (L1 精确/L2 连字符/L3 标点脱敏=strong; L4 首尾锚点=weak) + 窗口词覆盖率 lcs_frac; anchor 命中经 mmx VLM 视觉抽查确认",
+ "summary": {
+  "total": 29,
+  "strong": 20,
+  "weak_anchor": 1,
+  "miss": 8,
+  "real_success_rate": "21/29 = 72.4%",
+  "note_anchor_verified": "P21-3#1 (anchor, frac 0.71) 经 mmx 视觉抽查确认窗口覆盖完整 3 行句子(Days 1 被 OCR 读作 Days | 致 frac 偏低, 定位真实正确)",
+  "note_miss": "8 句 MISS 全为 4 个中文 PDFTron 乱码文件 (P3-2/P3-3/P6-1/P8-4), tesseract chi_sim 对字形损坏源逐字含错; 已由 mmx 视觉校准闭环 8/8 覆盖 (见 cn_font_calib_2026-09-07.json), 非本通道算法可解范围",
+  "conclusion": "真实整句定位成功率 = 21/29 (72%), 与先前列报一致; 其中 20/21 为强命中(L1 精确, 窗口覆盖率 1.0), 1/21 为锚点命中(视觉确认完整)"
+ },
+ "rows": [
+  {
+   "pnx": "P15-3",
+   "idx": 0,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "This is a Phase 2b/3 double-blind, randomized, placebo-controlled study to evaluate the efficacy and safety of clesrovimab for the prevention of RSV-associated ",
+   "text": "This is a Phase 2b/3 double-blind, randomized, placebo-controlled study to evaluate the efficacy and safety of clesrovimab for the prevention of RSV-associated MALRI in healthy preterm and full-term i"
+  },
+  {
+   "pnx": "P15-3",
+   "idx": 1,
+   "level": "exact",
+   "page": 8,
+   "frac": 1.0,
+   "window": "The efficacy ofa single dose of clesrovimab was demonstrated in China healthy preterm and full-term infants, based on the results of RSV-associated MALRI (outpa",
+   "text": "The efficacy of a single dose of clesrovimab was demonstrated in China healthy preterm and full-term infants, based on the results of RSV-associated MALRI (outpatient and inpatient) and RSV-associated"
+  },
+  {
+   "pnx": "P15-3",
+   "idx": 2,
+   "level": "exact",
+   "page": 8,
+   "frac": 1.0,
+   "window": "Clesrovimab is well tolerated in China healthy preterm and full-term infants born during or entering their first RSV season, with a safety profile generally com",
+   "text": "Clesrovimab is well tolerated in China healthy preterm and full-term infants born during or entering their first RSV season, with a safety profile generally comparable to placebo."
+  },
+  {
+   "pnx": "P15-4",
+   "idx": 0,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "The primary objectives of this phase 2b/3 double-blind, randomized, placebo-controlled study are to evaluate the efficacy and safety of clesrovimab in healthy p",
+   "text": "The primary objectives of this phase 2b/3 double-blind, randomized, placebo-controlled study are to evaluate the efficacy and safety of clesrovimab in healthy pre-term and full-term infants."
+  },
+  {
+   "pnx": "P15-4",
+   "idx": 1,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "It is hypothesized that clesrovimab will reduce the incidence of respiratory syncytial virus (RSV)-associated medically attended lower respiratory infection (MA",
+   "text": "It is hypothesized that clesrovimab will reduce the incidence of respiratory syncytial virus (RSV)-associated medically attended lower respiratory infection (MALRI) from Days 1 through 150 postdose co"
+  },
+  {
+   "pnx": "P21-3",
+   "idx": 0,
+   "level": "exact",
+   "page": 6,
+   "frac": 1.0,
+   "window": "Administration of clesrovimab reduced the incidence of RS V-associated MALRI (outpatient and inpatient) from Days 1 through 150 postdose compared with placebo, ",
+   "text": "Administration of clesrovimab reduced the incidence of RSV-associated MALRI (outpatient and inpatient) from Days 1 through 150 postdose compared with placebo, with efficacy of 89.6% (95% CI: 11.0%, 98"
+  },
+  {
+   "pnx": "P21-3",
+   "idx": 1,
+   "level": "anchor",
+   "page": 6,
+   "frac": 0.71,
+   "window": "The observed incidence rate of RSV-associated hospitalization was lower in the MK-1654 group compared with the placebo group from Days | through 150 postdose, w",
+   "text": "The observed incidence rate of RSV-associated hospitalization was lower in the MK-1654 group compared with the placebo group from Days 1 through 150 postdose, with efficacy of 74.0% (95% CI: -185.8%, "
+  },
+  {
+   "pnx": "P23-3",
+   "idx": 0,
+   "level": "exact",
+   "page": 8,
+   "frac": 1.0,
+   "window": "Clesrovimab is well tolerated in China healthy preterm and full-term infants born during or entering their first RSV season, with a safety profile generally com",
+   "text": "Clesrovimab is well tolerated in China healthy preterm and full-term infants born during or entering their first RSV season, with a safety profile generally comparable to placebo."
+  },
+  {
+   "pnx": "P23-3",
+   "idx": 1,
+   "level": "exact",
+   "page": 8,
+   "frac": 1.0,
+   "window": "The safety profile in the China subpopulation was generally consistent with that of the overall study population.",
+   "text": "The safety profile in the China subpopulation was generally consistent with that of the overall study population."
+  },
+  {
+   "pnx": "P27-2",
+   "idx": 0,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "Worldwide, a large number of children are prescribed drugs on an outpatient basis.",
+   "text": "Worldwide, a large number of children are prescribed drugs on an outpatient basis."
+  },
+  {
+   "pnx": "P27-2",
+   "idx": 1,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "Medication errors can be defined as errors that may occur at any step, starting from ordering a medication, to dispensing, administration of the drug and the su",
+   "text": "Medication errors can be defined as errors that may occur at any step, starting from ordering a medication, to dispensing, administration of the drug and the subsequent monitoring."
+  },
+  {
+   "pnx": "P27-2",
+   "idx": 2,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "The outcomes of such errors are variable and may range between those that are clinically insignificant to a life-threatening event.",
+   "text": "The outcomes of such errors are variable and may range between those that are clinically insignificant to a life-threatening event."
+  },
+  {
+   "pnx": "P27-2",
+   "idx": 3,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "Overdosing and under-dosing (10-fold calculation errors), an increased or a decreased frequency of dosing or an inappropriate duration of administration of the ",
+   "text": "Overdosing and under-dosing (10-fold calculation errors), an increased or a decreased frequency of dosing or an inappropriate duration of administration of the medication, are frequently detected erro"
+  },
+  {
+   "pnx": "P27-3",
+   "idx": 0,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "A total of 1,115 clinically significant prescribing errors involving medication dosage forms were detected during the 60-month study period.",
+   "text": "A total of 1,115 clinically significant prescribing errors involving medication dosage forms were detected during the 60-month study period."
+  },
+  {
+   "pnx": "P27-3",
+   "idx": 1,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "Hospitalized patients are at risk for adverse outcomes due to prescribing errors related to inappropriate use of medication dosage forms.",
+   "text": "Hospitalized patients are at risk for adverse outcomes due to prescribing errors related to inappropriate use of medication dosage forms."
+  },
+  {
+   "pnx": "P3-2",
+   "idx": 0,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "其中G和F蛋白是RSV胶表面糖蛋白,C虾白主要负责病毒与宿主细胞黏附,F蛋白介导病毒与宿主细胞膜融合,二者亦是刺激机体产生中和抗体的主要病毒抗原虾白"
+  },
+  {
+   "pnx": "P3-3",
+   "idx": 0,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "RSV是导致婴儿呼吸道感染最常见的病毒,具有明显的季节性,传染性较强,其R为4.5(IQR:1.7~8.2)"
+  },
+  {
+   "pnx": "P3-3",
+   "idx": 1,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "80%以上儿童在1岁前被感染,儿乎所有儿童在2岁前均感染过RSV"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 0,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "RSV感染属于自限性疾病,绝大多数感染患儿预后良好,不遗留后遗症。"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 1,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "少数患儿感染后期可出现反复喘息、支气管哮喘,部分遗留感染后闭塞性细支气管炎等。"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 2,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "发生重症和危重症的高危人群为早产儿(不32周).出生低体重儿.具有支气管肺发育不良.慢性肺疾病血流动力学改变的先天性心脏病,囊性纤维化、神经肌肉疾病等潜在基础疾病和免疫功能不全的儿童(如原发性免疫缺陷病,移植患儿和人类免疫缺陷病毒感染者)“。"
+  },
+  {
+   "pnx": "P8-10",
+   "idx": 0,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "On September 22, 2023, ACIP and CDC recommended RSVpreF vaccine using seasonal administration (i.e., during September through end of January in most of the cont",
+   "text": "On September 22, 2023, ACIP and CDC recommended RSVpreF vaccine using seasonal administration (i.e., during September through end of January in most of the continental United States) for pregnant pers"
+  },
+  {
+   "pnx": "P8-10",
+   "idx": 1,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "On August 3, 2023, CDC’s Advisory Committee on Immunization Practices (ACIP) and CDC recommended nirsevimab (Beyfortus, Sanofi and AstraZeneca), a long-acting m",
+   "text": "On August 3, 2023, CDC’s Advisory Committee on Immunization Practices (ACIP) and CDC recommended nirsevimab (Beyfortus, Sanofi and AstraZeneca), a long-acting monoclonal antibody for prevention of sev"
+  },
+  {
+   "pnx": "P8-10",
+   "idx": 2,
+   "level": "exact",
+   "page": 1,
+   "frac": 1.0,
+   "window": "CDC recommends protecting all infants against RSV-associated LRTI through use of either the maternal RSV vaccine or infant receipt of nirsevimab.",
+   "text": "CDC recommends protecting all infants against RSV-associated LRTI through use of either the maternal RSV vaccine or infant receipt of nirsevimab."
+  },
+  {
+   "pnx": "P8-4",
+   "idx": 0,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "推荐RSV流行季节出生的新生儿和即将进入第1个RSV流行季节的婴儿注射尼塞韦单抗，预防RSV引起的下呼吸道感染。"
+  },
+  {
+   "pnx": "P8-4",
+   "idx": 1,
+   "level": "miss",
+   "page": null,
+   "frac": null,
+   "window": null,
+   "text": "与RSV感染患儿直接接触的人员均应在接触患儿前后消毒双手，如无法使用乙醇类消毒剂，应用肥皂和水洗手，并使用个人防护用品。"
+  },
+  {
+   "pnx": "P9-10",
+   "idx": 0,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "On September 22, 2023, ACIP and CDC recommended RSVpreF vaccine using seasonal administration (i.e., during September through end of January in most of the cont",
+   "text": "On September 22, 2023, ACIP and CDC recommended RSVpreF vaccine using seasonal administration (i.e., during September through end of January in most of the continental United States) for pregnant pers"
+  },
+  {
+   "pnx": "P9-10",
+   "idx": 1,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "Either maternal RSVpreF vaccination during pregnancy or nirsevimab administration to the infant is recommended to prevent RSV-associated LRTI among infants, but",
+   "text": "Either maternal RSVpreF vaccination during pregnancy or nirsevimab administration to the infant is recommended to prevent RSV-associated LRTI among infants, but both are not needed for most infants."
+  },
+  {
+   "pnx": "P9-10",
+   "idx": 2,
+   "level": "exact",
+   "page": 2,
+   "frac": 1.0,
+   "window": "All infants should be protected against RSV-associated LRTI through use of one of these products.",
+   "text": "All infants should be protected against RSV-associated LRTI through use of one of these products."
+  }
+ ]
+}
