@@ -92,6 +92,33 @@ def margin_classify(words, page_h_px, top_frac=0.06, bottom_frac=0.06):
     return body, margin
 
 
+def col_resort(col, tol_scale=0.55):
+    """栏内紧凑聚行排序: 修正 group_lines 跨栏行错位/并行的排序错误.
+
+    分栏后栏内仅本栏词, y 层叠清晰; 按词 y 中心贪心聚行(容差=中位词高*0.55),
+    行内按 x 排序, 行间按 y 中心排序。解决轻微倾斜/双栏错位页 group_lines
+    把不同物理行并成一行导致栏内词序断裂的问题 (如 JGIM 摘要页)。
+    """
+    if not col:
+        return []
+    hs = sorted(w['h'] for w in col)
+    tol = max(4.0, hs[len(hs) // 2] * tol_scale)
+    rows = []
+    for w in sorted(col, key=lambda z: (_yc(z), z['x'])):
+        yc = _yc(w)
+        if rows and abs(yc - rows[-1]['yc']) <= tol:
+            r = rows[-1]
+            r['ws'].append(w)
+            r['yc'] = (r['yc'] * (len(r['ws']) - 1) + yc) / len(r['ws'])
+        else:
+            rows.append(dict(yc=yc, ws=[w]))
+    out = []
+    for r in sorted(rows, key=lambda z: z['yc']):
+        r['ws'].sort(key=lambda z: z['x'])
+        out.extend(r['ws'])
+    return out
+
+
 def column_split_words(lines, min_gap_px=90, vote_frac=0.35, min_count=8):
     """把物理行按全局栏间隙切成词级列流 (真正双栏版面, 不把整行归入单侧).
 
@@ -103,7 +130,7 @@ def column_split_words(lines, min_gap_px=90, vote_frac=0.35, min_count=8):
     """
     total_words = sum(len(L['words']) for L in lines)
     if total_words < min_count:
-        return [[w for L in lines for w in L['words']]]
+        return [col_resort([w for L in lines for w in L['words']])]
     votes = []
     for L in lines:
         ws = sorted(L['words'], key=lambda z: z['x'])
@@ -121,7 +148,7 @@ def column_split_words(lines, min_gap_px=90, vote_frac=0.35, min_count=8):
             if lc >= 2 and rc >= 2:
                 votes.append((best, len(ws)))
     if not votes:
-        return [[w for L in lines for w in L['words']]]
+        return [col_resort([w for L in lines for w in L['words']])]
     # cut 一维聚类 (容差 60px), 取支持词数最多的簇中点
     vs = sorted(votes, key=lambda t: t[0])
     clusters = []
@@ -134,7 +161,7 @@ def column_split_words(lines, min_gap_px=90, vote_frac=0.35, min_count=8):
     best = max(clusters, key=lambda c: c['nw'])
     cut = int(sum(best['items']) / len(best['items']))
     if best['nw'] < total_words * vote_frac:
-        return [[w for L in lines for w in L['words']]]
+        return [col_resort([w for L in lines for w in L['words']])]
     left, right = [], []
     for L in lines:
         ws = sorted(L['words'], key=lambda z: z['x'])
@@ -152,8 +179,11 @@ def column_split_words(lines, min_gap_px=90, vote_frac=0.35, min_count=8):
         # tesseract 词 bbox y 抖动(descender 等)把行内词打散到相邻桶
         side.sort(key=lambda t: t[0])
         colw = [w for _, row in side for w in row]
-        cols.append(colw)
-    return cols if len(cols) == 2 else [[w for L in lines for w in L['words']]]
+        cols.append(col_resort(colw))
+    if len(cols) != 2:
+        flat = [w for L in lines for w in L['words']]
+        return [col_resort(flat)] if flat else []
+    return cols
 
 
 def page_zones(words, page_h_px, lang='eng', top_frac=0.06, bottom_frac=0.06):
@@ -176,6 +206,7 @@ def page_zones(words, page_h_px, lang='eng', top_frac=0.06, bottom_frac=0.06):
                           words=col))
     if margin_lines:
         mw = [w for L in margin_lines for w in L['words']]
+        mw = col_resort(mw)
         zones.append(dict(kind='margin', x0=min(L['x0'] for L in margin_lines),
                           y0=min(L['y0'] for L in margin_lines),
                           x1=max(L['x1'] for L in margin_lines),
