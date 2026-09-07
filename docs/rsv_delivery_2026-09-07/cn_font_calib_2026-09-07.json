@@ -1,0 +1,128 @@
+{
+ "title": "RSV 中文乱码文件 8 句 视觉模型校准报告",
+ "date": "2026-09-07",
+ "method": "mmx VLM: 页面纵向分带转录(300dpi) + 最长公共子串定位; 逐句人工核对转录",
+ "files": {
+  "P3-2/P6-1/P8-4": "中国儿童呼吸道合胞病毒感染诊疗及预防指南(2024医生版) (10页, 三个下载版本)",
+  "P3-3": "谢正德 等. 中华实用儿科临床杂志 2022;37(7):481-485 (5页)"
+ },
+ "notes": [
+  "源 PDF 文字层 ToUnicode 缺失(方正书版私有字体, glyph 名 G21..), 文本层不可提取; 渲染正常",
+  "句集(rsv_sentences_official.tsv)含 OCR 噪声字(如 胶表面糖蛋白→膜表面糖蛋白, C虾白→G蛋白, 儿乎→几乎), 视觉转录显示为实际印刷文本",
+  "P6-1 句1/句2 实际位于 p7(TSV 页字段误记 p3); 句3 在 p3"
+ ],
+ "results": [
+  {
+   "pnx": "P3-2",
+   "idx": 0,
+   "tsv_page": null,
+   "actual_page": 2,
+   "location_hint": "页面中部\"1 RSV病原学\"节",
+   "band_pct": [
+    30,
+    53
+   ],
+   "confirmed": true,
+   "calib_sentence": "其中G和F蛋白是RSV膜表面糖蛋白，G蛋白主要负责病毒与宿主细胞黏附，F蛋白介导病毒与宿主细胞膜融合，二者亦是刺激机体产生中和抗体的主要病毒抗原蛋白。",
+   "orig_sentence": "其中G和F蛋白是RSV胶表面糖蛋白,C虾白主要负责病毒与宿主细胞黏附,F蛋白介导病毒与宿主细胞膜融合,二者亦是刺激机体产生中和抗体的主要病毒抗原虾白"
+  },
+  {
+   "pnx": "P3-3",
+   "idx": 0,
+   "tsv_page": null,
+   "actual_page": 2,
+   "location_hint": "页顶摘要区",
+   "band_pct": [
+    0,
+    20
+   ],
+   "confirmed": true,
+   "calib_sentence": "RSV是导致婴儿呼吸道感染最常见的病毒，具有明显的季节性，传染性较强，其R0为4.5（IQR：1.7～8.2）。",
+   "orig_sentence": "RSV是导致婴儿呼吸道感染最常见的病毒,具有明显的季节性,传染性较强,其R为4.5(IQR:1.7~8.2)"
+  },
+  {
+   "pnx": "P3-3",
+   "idx": 1,
+   "tsv_page": null,
+   "actual_page": 2,
+   "location_hint": "页顶摘要区",
+   "band_pct": [
+    0,
+    20
+   ],
+   "confirmed": true,
+   "calib_sentence": "80%以上儿童在1岁前被感染，几乎所有儿童在2岁前均感染过RSV。",
+   "orig_sentence": "80%以上儿童在1岁前被感染,儿乎所有儿童在2岁前均感染过RSV"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 0,
+   "tsv_page": null,
+   "actual_page": 7,
+   "location_hint": "左栏\"8 儿童RSV感染的预后\"节",
+   "band_pct": [
+    60,
+    78
+   ],
+   "confirmed": true,
+   "calib_sentence": "RSV感染属于自限性疾病，绝大多数感染患儿预后良好，不遗留后遗症。",
+   "orig_sentence": "RSV感染属于自限性疾病,绝大多数感染患儿预后良好,不遗留后遗症。"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 1,
+   "tsv_page": null,
+   "actual_page": 7,
+   "location_hint": "左栏\"8 儿童RSV感染的预后\"节",
+   "band_pct": [
+    60,
+    78
+   ],
+   "confirmed": true,
+   "calib_sentence": "少数患儿感染后期可出现反复喘息、支气管哮喘，部分遗留感染后闭塞性细支气管炎等。",
+   "orig_sentence": "少数患儿感染后期可出现反复喘息、支气管哮喘,部分遗留感染后闭塞性细支气管炎等。"
+  },
+  {
+   "pnx": "P6-1",
+   "idx": 2,
+   "tsv_page": null,
+   "actual_page": 3,
+   "location_hint": "\"3.2\"段高危人群",
+   "band_pct": [
+    64,
+    86
+   ],
+   "confirmed": true,
+   "calib_sentence": "发生重症和危重症的高危人群为早产儿（≤32周）、出生低体重儿、具有支气管肺发育不良、慢性肺疾病、血流动力学改变的先天性心脏病等。",
+   "orig_sentence": "发生重症和危重症的高危人群为早产儿(不32周).出生低体重儿.具有支气管肺发育不良.慢性肺疾病血流动力学改变的先天性心脏病,囊性纤维化、神经肌肉疾病等潜在基础疾病和免疫功能不全的儿童(如原发性免疫缺陷病,移植患儿和人类免疫缺陷病毒感染者)“。"
+  },
+  {
+   "pnx": "P8-4",
+   "idx": 0,
+   "tsv_page": null,
+   "actual_page": 7,
+   "location_hint": "推荐意见15",
+   "band_pct": [
+    30,
+    53
+   ],
+   "confirmed": true,
+   "calib_sentence": "推荐RSV流行季节出生的新生儿和即将进入第1个RSV流行季节的婴儿注射尼塞韦单抗，预防RSV引起的下呼吸道感染（1A）。",
+   "orig_sentence": "推荐RSV流行季节出生的新生儿和即将进入第1个RSV流行季节的婴儿注射尼塞韦单抗，预防RSV引起的下呼吸道感染。"
+  },
+  {
+   "pnx": "P8-4",
+   "idx": 1,
+   "tsv_page": null,
+   "actual_page": 7,
+   "location_hint": "医院预防段",
+   "band_pct": [
+    14,
+    36
+   ],
+   "confirmed": true,
+   "calib_sentence": "与RSV感染患儿直接接触的人员均应在接触患儿前后消毒双手，如无法使用乙醇类消毒剂，应用肥皂和水洗手，并使用个人防护用品。",
+   "orig_sentence": "与RSV感染患儿直接接触的人员均应在接触患儿前后消毒双手，如无法使用乙醇类消毒剂，应用肥皂和水洗手，并使用个人防护用品。"
+  }
+ ]
+}
