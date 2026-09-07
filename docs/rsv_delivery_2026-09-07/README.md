@@ -11,6 +11,40 @@
   - 17 句整页 OCR (GARBLED/IMAGE 通道句, 官方验证器按设计排除)
   - 12 句为"页含少量文字层(页眉/页码)+正文图像"的混合页, 官方验证器判 NOT FOUND (页级文本检测为真, 但句子在图像区) —— 这些实际由今日 OCR 高亮覆盖, 属官方验证器"整页非空即有文本层"的页级判定局限, 建议后续增强为区域级判定或这些页统一走 OCR 通道
 
+## 2.1 TSV 列与 flag 取值说明 (rsv_sentences_official.tsv)
+
+TSV 为 5 列制表符分隔, 首行为表头:
+
+| 列 | 含义 | 取值 |
+|---|---|---|
+| file | 文献 PDF 文件名 (无路径) | 如 `P3-2.pdf`; 57 个文件, 对应 57 个 Pn-x 引用 |
+| page | 句子所在页 (1-based) | 1..N (个别句子实际页与 TSV 记录有出入, 如 P6-1 两句实际 p7, 见 cn_font_calib_2026-09-07.json) |
+| type | 句子类型/来源 | 恒为 `hl` (本次交付为高亮句集; 预留其他取值空间) |
+| flag | 句子在**构建时**分配的定位通道 | 见下表 |
+| text | 句子原文 (含当日从乱码文字层侧转录引入的 OCR 噪声字, 视觉校准句见 cn_font_calib_2026-09-07.json) | — |
+
+flag 取值 (构建时静态通道标记, 共 171 句):
+
+| flag | 数量 | 文件数 | 含义 |
+|---|---|---|---|
+| (空) | 142 | 45 | 文本层通道: PDF 有正常文字层, 句子经 hl_lib.locate_sentence 直接定位 |
+| ocr | 29 | 12 | OCR 通道: PDF 文字层乱码/缺失(渲染正常), 句子须经渲染+OCR 词流定位 |
+
+flag=ocr 的 12 个文件与句数: P15-3(3)、P15-4(2)、P21-3(2)、P23-3(2)、P27-2(4)、P27-3(2)、P3-2(1)、P3-3(2)、P6-1(3)、P8-10(3)、P8-4(2)、P9-10(3)。
+
+注意: flag 是构建交付时的静态分配, **运行验证时以 verify_sentence_set.py 的区域级判定 (text/mixed/garbled/image) 动态归类为准**。例如 P27-3 经 layout.col_resort 修复后运行时已可由 OCR 复现 (计入 located_ok), 但 TSV flag 保持交付原值 `ocr` 不变, 二者不冲突。
+
+verify_sentence_set.py (E3) 运行时的区域级通道判定取值 (见 scripts/hl_v3_final/verify_sentence_set.py):
+
+| 判定 | 判定依据 (正文区字符量 + 有效字母率) | 路由 |
+|---|---|---|
+| text | 正文区(去边距版心)字符 ≥ 150 且有效字母率 ≥ 0.5 | hl_lib 文本层定位 |
+| mixed | 页有少量文字层(页眉/页码)但正文区字符 < 150 | OCR 通道 |
+| garbled | 正文区字符 ≥ 150 但有效字母率 < 0.5 (字形映射乱码) | OCR 通道 |
+| image | 整页无有效字母/CJK | OCR 通道 |
+
+TSV 静态 flag 与运行时判定是"交付口径 vs 复现口径"两层: 交付时按文件整体文字层可用性标 `ocr`(12 个乱码/图片文件), 复现时按页面区域细判, 故 `ocr` 文件内的句在运行时可能落入 mixed/garbled/image 任一通道。
+
 ## 3. 官方 hl_ocr_band.py 对 12 个 OCR 文件的复现 (行动1)
 对照 (official_placed/total vs 今日 annots):
 | pnx | official placed | today annots | 说明 |
@@ -36,16 +70,16 @@
 - `hl_ocr_band.py --sentence` (E1): 整句定位 locate_in_ocr (四级回退, 与 hl_lib.locate_sentence 对齐)
 - `verify_sentence_set.py` (E3): 区域级判定 text/mixed/garbled/image, 消除混合页 NOT FOUND 误报
 
-M4 全量回归 (权威结果见 m4_regression_2026-09-07.json):
+M4 全量回归 (权威结果见 m4_regression_2026-09-07.json; 其后 col_resort 修复见立项方案 §13):
 | 指标 | 官方基线 | 增强后 | 目标 |
 |---|---|---|---|
-| 12 OCR 文件整句定位 | 4/29 (14%) | 19/29 (66%) | ≥26/29* |
-| verify located_ok | 142 | 157 | ≥154 ✓ |
+| 12 OCR 文件整句定位 | 4/29 (14%) | 21/29 (72%) | ≥26/29* |
+| verify located_ok | 142 | 159 | ≥154 ✓ |
 | 混合页 NOT FOUND 误报 | 15 | 0 | 消除 ✓ |
 | 文本层 45 文件 | 142/142 | 142/142 | 无回退 ✓ |
 | P8-10/P9-10/P21-3 | 部分 | 3/3·3/3·2/2 全中 | 不回退 ✓ |
 
-*: 19/29 未达 26/29 的门槛, 差额 10 句为中文 PDFTron 乱码(8, 源字形损坏, chi_sim 亦不可解)与 P27-3 倾斜扫描(2), 属源 PDF 质量问题, 非定位算法可解范围。中文乱码 8 句后续经 mmx 视觉校准闭环 (见 cn_font_calib_2026-09-07.json 与立项方案 §12)。
+*: 21/29 未达 26/29 的门槛, 差额 8 句为中文 PDFTron 乱码(源字形损坏, chi_sim 亦不可解), 已全部经 mmx 视觉校准闭环 (见 cn_font_calib_2026-09-07.json 与立项方案 §12)。
 
 ## 6. 745 vs 171 句基准口径说明 (行动4)
 - GitHub commit dd3d0e6 记录 "RSV 745-sentence regression 730 locate-OK"
