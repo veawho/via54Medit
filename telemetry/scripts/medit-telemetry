@@ -1,0 +1,78 @@
+#!/bin/sh
+# medit-telemetry 受保护启动器 (环境自检 + 冲突拦截)
+#
+# 为什么需要外壳层:
+#   终端里若被注入指向「另一个 Python」的 PYTHONHOME / PYTHONPATH (常见于 IDE、沙箱、
+#   构建工具), 本命令所用的解释器可能在**启动阶段**就崩溃:
+#
+#     Fatal Python error: init_fs_encoding: failed to get the Python codec of the
+#     filesystem encoding ... ModuleNotFoundError: No module named 'encodings'
+#
+#   这种崩溃发生在任何 Python 代码执行之前, 因此无法由 telemetry/envcheck.py 给出提示,
+#   只能在这里拦截: 检测到冲突时改用 `-E` 重新执行 (忽略全部 PYTHON* 变量) 并打印提示。
+#
+# 未检测到冲突时, 行为与直接调用解释器完全一致 (不传 -E, 环境变量照常生效)。
+#
+# 安装: telemetry/deploy.py 会把本文件中的占位符替换为真实解释器路径后写到
+#       medit-telemetry / traework-telemetry 命令所在目录。
+
+PYTHON="__MEDITELEMETRY_PYTHON__"
+
+if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 2>/dev/null || true)"
+fi
+if [ -z "$PYTHON" ]; then
+    echo "medit-telemetry: 找不到可用的 Python 3 解释器, 请先安装 Python 3.8+" >&2
+    exit 127
+fi
+
+# 真实路径解析 (不依赖 coreutils 的 realpath)
+resolve() {
+    (cd "$1" 2>/dev/null && pwd -P) || printf '%s' "$1"
+}
+
+need_isolate=0
+reason=""
+
+# --- 检查 1: PYTHONHOME 是否指向别的解释器 ------------------------------------
+if [ -n "${PYTHONHOME:-}" ]; then
+    prefix="$("$PYTHON" -E -c 'import sys;print(sys.base_prefix)' 2>/dev/null)"
+    if [ -n "$prefix" ] && [ "$(resolve "$PYTHONHOME")" != "$(resolve "$prefix")" ]; then
+        need_isolate=1
+        reason="PYTHONHOME 指向 $PYTHONHOME, 而本命令使用 $prefix"
+    fi
+fi
+
+# --- 检查 2: PYTHONPATH 是否注入了别的 Python 版本的库路径 --------------------
+if [ "$need_isolate" = "0" ] && [ -n "${PYTHONPATH:-}" ]; then
+    ver="$("$PYTHON" -E -c 'import sys;print("%d.%d" % sys.version_info[:2])' 2>/dev/null)"
+    if [ -n "$ver" ]; then
+        old_ifs="$IFS"
+        IFS=':'
+        for entry in $PYTHONPATH; do
+            case "$entry" in
+                *python[0-9].[0-9]*)
+                    got="$(printf '%s' "$entry" | sed -n 's/.*python\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')"
+                    if [ -n "$got" ] && [ "$got" != "$ver" ]; then
+                        need_isolate=1
+                        reason="PYTHONPATH 含 Python $got 的库路径, 而本命令使用 Python $ver"
+                        break
+                    fi
+                    ;;
+            esac
+        done
+        IFS="$old_ifs"
+    fi
+fi
+
+if [ "$need_isolate" = "1" ]; then
+    echo "⚠️  medit-telemetry 环境自检: $reason" >&2
+    echo "    → 本次已忽略 PYTHON* 变量执行, 功能与结果不受影响。" >&2
+    echo "    → 根治: 在 ~/.zshrc 或 ~/.bashrc 中删除对应 export。自查: medit-telemetry --env-check" >&2
+    # 置位交接标记: 本模块已提示过, telemetry/envcheck.py 不再重复刷屏
+    MEDITELEMETRY_ENV_ISOLATED=1
+    export MEDITELEMETRY_ENV_ISOLATED
+    exec "$PYTHON" -E -m telemetry.cli "$@"
+fi
+
+exec "$PYTHON" -m telemetry.cli "$@"

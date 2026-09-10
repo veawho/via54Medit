@@ -110,6 +110,9 @@ python -m telemetry.cli backfill
 python -m telemetry.cli token --status             # 查询真实调用明细
 python -m telemetry.cli token --log 3200 800       # 手动核对补登控制台账单
 python -m telemetry.cli token --mode exact         # 设置默认模式 (exact / estimated)
+
+# 8. 运行环境自检 (排查 PYTHONHOME / PYTHONPATH 冲突)
+python -m telemetry.cli --env-check
 ```
 
 ---
@@ -155,6 +158,7 @@ record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_n
 - **本地 SQLite 数据库**：`~/.medit/telemetry.db`
 - **守护进程日志与心跳**：`~/.medit/daemon.log`、`~/.medit/daemon_heartbeat.json`
 - **公共表本地双备份**：`~/.medit/company_public_stats.csv`
+- **多维表格本地备份**：`~/.medit/team_bitable_backup.csv`（恒以标准字段名、固定 15 列落盘，与目标表采用哪种 schema 无关）
 - **TraeWork 预装飞书源** (`channel_config.json`)：由 `telemetry/platform_paths.py` 统一解析，当前平台根目录优先，其余平台根目录兜底：
 
 | 平台 | 应用数据根 | 完整路径 |
@@ -164,3 +168,34 @@ record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_n
 | Linux | `$XDG_CONFIG_HOME` 或 `~/.config` | `<XDG>/TRAE SOLO CN/User/globalStorage/cloudide.icube-im-bridge/feishu-bridge/<workspace>/channel_config.json` |
 
 `<workspace>` 为 workspace 槽位号；解析器会扫描 `feishu-bridge` 下的任意子目录，换机后槽位号变化仍可命中。
+
+---
+
+## 5. 故障排查
+
+### 5.1 报错 `Fatal Python error: init_fs_encoding ... No module named 'encodings'`
+
+**原因**：终端里被预置了指向**另一个 Python** 的 `PYTHONHOME`（常见于 IDE、沙箱、构建工具链），本工具的解释器在**启动阶段**就崩溃，因此任何 Python 层的自检都来不及执行。
+
+**自检**：
+
+```bash
+python -m telemetry.cli --env-check
+```
+
+会打印解释器路径、`PYTHONHOME` / `PYTHONPATH` 的实际取值与冲突结论。
+
+**修复**：
+
+```bash
+env -u PYTHONHOME -u PYTHONPATH medit-telemetry status   # 临时规避 (立即生效)
+unset PYTHONHOME PYTHONPATH                              # 或在当前终端先清掉
+```
+
+根治方式是在 shell 启动脚本（`~/.zshrc` / `~/.bashrc`）中删除对这两个变量的 `export`。本工具只依赖标准库，移除后不影响任何功能；后台守护进程由 LaunchAgent / 计划任务拉起，不继承终端环境，始终不受影响。
+
+**自动拦截**：`medit-telemetry` 命令本身是一个环境自检启动器（由 `telemetry/scripts/medit-telemetry` 安装）。它在解释器启动前比对 `PYTHONHOME` 与本解释器前缀、以及 `PYTHONPATH` 里的版本目录，发现冲突时改用 `-E` 忽略全部 `PYTHON*` 变量执行并打印一行说明——把崩溃变成可用的命令。未检测到冲突时行为与直接调用解释器完全一致，原命令备份为同目录下的 `*.orig`。
+
+### 5.2 仅 `PYTHONPATH` 被污染（解释器能启动，但导入异常）
+
+`PYTHONPATH` 若注入了别的 Python 版本的 `site-packages`，可能导入到 ABI 不兼容的扩展模块。此类情形解释器能正常启动，因此在 `cli.main()` 入口的运行时自检（`telemetry/envcheck.py`）会直接给出冲突明细与修复命令，无需依赖外壳启动器。两条路径用 `MEDITELEMETRY_ENV_ISOLATED` 标记交接，只提示一次、不重复刷屏。

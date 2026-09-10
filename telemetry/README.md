@@ -92,7 +92,38 @@ medit-telemetry bitable --report           # 自动汇总全员数据生成可�
 medit-telemetry config --nickname "星云"
 medit-telemetry config --set-weekly "Friday 18:00"
 medit-telemetry config --set-monthly "last 18:00"
+
+# 9. 运行环境自检 (排查 PYTHONHOME / PYTHONPATH 冲突)
+medit-telemetry --env-check
 ```
+
+---
+
+## 🩺 运行环境自检
+
+部分 IDE、沙箱与构建工具会在终端里预置指向**它们自带 Python** 的 `PYTHONHOME` / `PYTHONPATH`。若该 Python 与本工具所用解释器不一致，可能出现两类故障：
+
+| 现象 | 原因 |
+| :--- | :--- |
+| 报错 `Fatal Python error: init_fs_encoding ... No module named 'encodings'` | `PYTHONHOME` 指向了另一个解释器，解释器在**启动阶段**就崩溃 |
+| 导入 PDF 相关扩展报 ABI 不兼容 / 找不到模块 | `PYTHONPATH` 注入了别的 Python 版本的 `site-packages` |
+
+本工具用两层机制处理，且**不改变正常环境下的行为**：
+
+1. **外壳启动器**（`medit-telemetry` 命令本身）：启动前先比对 `PYTHONHOME` 与本解释器前缀、以及 `PYTHONPATH` 里的版本目录。发现冲突时改用 `-E` 执行（忽略全部 `PYTHON*` 变量）并打印一行说明，把一个唬人的崩溃变成可用的命令。这一步必须在解释器启动前完成，因为上面第一种故障发生时任何 Python 代码都来不及执行。
+2. **运行时自检**（`telemetry/envcheck.py`）：在 `cli.main()` 入口复查一次，覆盖「解释器还能起来」的情形（如仅 `PYTHONPATH` 被污染），给出冲突明细与修复命令。两条路径都会提示，因此用 `MEDITELEMETRY_ENV_ISOLATED` 标记交接，避免重复刷屏。
+
+排查与修复：
+
+```bash
+medit-telemetry --env-check                    # 打印解释器、变量值与冲突结论
+env -u PYTHONHOME -u PYTHONPATH medit-telemetry status   # 临时规避 (立即生效)
+unset PYTHONHOME PYTHONPATH                    # 或在当前终端先清掉
+```
+
+根治方式是在 shell 启动脚本（`~/.zshrc` / `~/.bashrc`）中删除对这两个变量的 `export`。本工具只依赖标准库，移除后不影响任何功能。后台守护进程由 LaunchAgent / 计划任务拉起，不继承终端环境，因此始终不受影响。
+
+> 部署时 `telemetry/deploy.py` 会把外壳启动器安装为 `medit-telemetry` / `traework-telemetry`，原命令备份为同目录下的 `*.orig`；重复部署幂等。若之后又执行了 `pip install -e`，命令会被还原成 pip 版本，重新跑一次部署即可再次接管。
 
 ---
 
@@ -165,6 +196,9 @@ telemetry/
 ├── watcher.py            # 工作区产出物主动感知器
 ├── feishu_sync.py        # 飞书卡片构建与消息推送
 ├── bitable_sync.py       # 飞书多维表格 (Bitable Base) OpenAPI 与 Upsert
+├── envcheck.py           # 运行环境自检 (PYTHONHOME / PYTHONPATH 冲突识别与提示)
 ├── chart_reporter.py     # 团队多人数据汇总与可视化图表报告
+├── scripts/
+│   └── medit-telemetry   # 外壳启动器模板 (环境冲突拦截, 由 deploy.py 安装)
 └── README.md             # 本说明文档
 ```

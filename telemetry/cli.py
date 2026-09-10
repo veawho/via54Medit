@@ -18,6 +18,7 @@ if hasattr(sys.stderr, "reconfigure"):
         pass
 
 from .aggregator import TelemetryAggregator
+from . import envcheck
 from .config import (
     load_config,
     save_config,
@@ -437,6 +438,8 @@ def cmd_deploy(args):
 
 def main():
     parser = argparse.ArgumentParser(description="TraeWork 文献整理与 Highlight 监控统计及飞书同步工具")
+    parser.add_argument("--env-check", action="store_true",
+                        help="自检运行环境 (PYTHONHOME / PYTHONPATH 冲突) 后退出")
     subparsers = parser.add_subparsers(dest="subcommand", help="子命令")
 
     # init (向导)
@@ -541,6 +544,14 @@ def main():
     p_deploy.set_defaults(func=cmd_deploy)
 
     args = parser.parse_args()
+
+    if getattr(args, "env_check", False):
+        print(envcheck.render_self_check())
+        return
+
+    # 环境自检: 只在检测到冲突时提示, 且不影响任何子命令的正常执行
+    envcheck.warn_if_needed()
+
     if hasattr(args, "func"):
         args.func(args)
     else:

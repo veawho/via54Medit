@@ -794,6 +794,112 @@ class TestTelemetry(unittest.TestCase):
         self.assertIn("文献检索量", captured["fields"], "其他列应正常更新")
         self.assertNotIn("手工备注", captured["fields"], "人工备注不应被覆盖")
 
+    def test_envcheck_detects_conflicting_python_env(self):
+        """测试：环境自检识别 PYTHONHOME / PYTHONPATH 冲突并给出可复制的修复命令。"""
+        import sys as _sys
+        from telemetry import envcheck
+
+        ver = envcheck.current_version()
+        other = "3.10" if ver != "3.10" else "3.11"
+
+        # 1) 干净环境 -> 无冲突
+        self.assertEqual(envcheck.collect_issues({}), [])
+
+        # 2) PYTHONHOME 指向别的解释器 -> 严重 (实测会导致解释器启动阶段崩溃)
+        issues = envcheck.collect_issues({"PYTHONHOME": "/opt/other/python/3.10"})
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].level, "error")
+        self.assertIn("PYTHONHOME", issues[0].title)
+
+        # 3) PYTHONHOME 与本解释器前缀一致 -> 不误报
+        self.assertEqual(envcheck.collect_issues({"PYTHONHOME": _sys.base_prefix}), [])
+
+        # 4) PYTHONPATH 注入别的 Python 版本的库路径 -> 提示; 同版本 -> 不报
+        foreign = f"/opt/other/python{other}/lib/python{other}/site-packages"
+        issues = envcheck.collect_issues({"PYTHONPATH": foreign})
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].level, "warning")
+        same = f"/opt/same/python{ver}/lib/python{ver}/site-packages"
+        self.assertEqual(envcheck.collect_issues({"PYTHONPATH": same}), [])
+
+        # 5) 渲染出人话提示与可直接复制的修复命令; 无冲突时渲染为空
+        text = envcheck.render(
+            envcheck.collect_issues({"PYTHONHOME": "/opt/other/python/3.10"}))
+        self.assertIn("env -u PYTHONHOME -u PYTHONPATH", text)
+        self.assertIn("unset PYTHONHOME PYTHONPATH", text)
+        self.assertIn("后台守护进程", text)
+        self.assertEqual(envcheck.render([]), "")
+
+    def test_envcheck_warns_only_once(self):
+        """测试：同一进程内只提示一次；显式自检无论如何都给出结论。"""
+        import io
+        from unittest import mock
+        from telemetry import envcheck
+
+        conflict = {"PYTHONHOME": "/opt/other/python/3.10"}
+        with mock.patch.dict(os.environ, conflict, clear=False):
+            envcheck.reset_warning_state()
+            buf = io.StringIO()
+            self.assertTrue(envcheck.warn_if_needed(stream=buf))
+            self.assertIn("运行环境自检", buf.getvalue())
+            # 第二次不再重复刷屏
+            self.assertFalse(envcheck.warn_if_needed(stream=io.StringIO()))
+            # 显式自检始终有结论
+            report = envcheck.render_self_check()
+            self.assertIn("medit-telemetry 运行环境自检", report)
+            self.assertIn("检测到 Python 环境变量冲突", report)
+            envcheck.reset_warning_state()
+
+        # 外壳启动器已拦截并提示过时, 不再重复刷屏
+        with mock.patch.dict(os.environ,
+                             {**conflict, envcheck.ISOLATED_ENV_VAR: "1"}, clear=False):
+            envcheck.reset_warning_state()
+            self.assertFalse(envcheck.warn_if_needed(stream=io.StringIO(), force=True))
+            # 但显式自检仍完整给出结论, 并标注本次已被启动器接管
+            report = envcheck.render_self_check()
+            self.assertIn("启动器", report)
+            self.assertIn("本次已忽略 PYTHON* 变量执行", report)
+            envcheck.reset_warning_state()
+
+        # 无冲突时自检给出通过结论
+        with mock.patch.dict(os.environ, {"PYTHONHOME": "", "PYTHONPATH": ""}, clear=False):
+            self.assertIn("未发现冲突", envcheck.render_self_check())
+
+        # 无冲突时不打印任何东西
+        with mock.patch.dict(os.environ, {"PYTHONHOME": "", "PYTHONPATH": ""}, clear=False):
+            envcheck.reset_warning_state()
+            self.assertFalse(envcheck.warn_if_needed(stream=io.StringIO()))
+
+    def test_guarded_launcher_template(self):
+        """测试：外层启动器模板存在、shell 语法合法、占位符与兜底路径正确。"""
+        import subprocess
+        import sys as _sys
+        from telemetry import deploy
+
+        template = os.path.join(
+            os.path.dirname(os.path.abspath(deploy.__file__)), "scripts", "medit-telemetry")
+        self.assertTrue(os.path.exists(template), "启动器模板缺失")
+
+        with open(template, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("__MEDITELEMETRY_PYTHON__", content)
+        self.assertIn('exec "$PYTHON" -m telemetry.cli "$@"', content)
+        # 冲突时才传 -E, 平静环境下不得改变行为
+        self.assertIn('exec "$PYTHON" -E -m telemetry.cli "$@"', content)
+
+        # shell 语法检查 (只解析, 不执行): 模板与替换解释器后的成品都要合法
+        for payload in (content, content.replace("__MEDITELEMETRY_PYTHON__", _sys.executable)):
+            with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False,
+                                             encoding="utf-8") as tmp:
+                tmp.write(payload)
+                tmp_path = tmp.name
+            try:
+                res = subprocess.run(["sh", "-n", tmp_path],
+                                     capture_output=True, text=True)
+                self.assertEqual(res.returncode, 0, res.stderr)
+            finally:
+                os.unlink(tmp_path)
+
 
 if __name__ == "__main__":
     unittest.main()

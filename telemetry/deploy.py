@@ -17,6 +17,7 @@ deploy.py — medit-telemetry (via54Medit 监控与飞书同步工具) 一键独
 
 import argparse
 import os
+import shutil
 import site
 import subprocess
 import sys
@@ -36,6 +37,9 @@ if hasattr(sys.stderr, "reconfigure"):
 
 TELEMETRY_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TELEMETRY_DIR)
+
+# 启动器里用于识别「该命令已被本启动器接管」的标记, 靠它保证重复部署幂等
+LAUNCHER_MARKER = "medit-telemetry 受保护启动器"
 
 # Ensure telemetry is importable even before pip install
 if TELEMETRY_DIR not in sys.path:
@@ -108,6 +112,71 @@ def install_package_locally() -> bool:
     except Exception as e:
         print(f"    [~] pip 异常 ({e})，使用备选 .pth 方案...")
         return _fallback_pth_install()
+
+
+def install_guarded_launcher() -> bool:
+    """把「环境自检启动器」安装为 medit-telemetry / traework-telemetry 命令。
+
+    pip 生成的 console script 只是一段 Python 代码，解释器若因 PYTHONHOME 冲突在启动
+    阶段就崩溃，它根本来不及执行（详见 telemetry/envcheck.py 的说明）。因此这里用同名
+    的 shell 启动器覆盖它：未检测到冲突时行为完全一致，检测到冲突则改用 -E 忽略
+    PYTHON* 变量并打印人话提示，把一个唬人的崩溃变成可用的命令。
+
+    重新执行 `pip install -e` 会把命令还原成 pip 版本，重新跑本部署即可再次覆盖。
+    """
+    print(f"\n[*] 步骤 2b/6: 安装环境自检启动器...")
+    template = os.path.join(TELEMETRY_DIR, "scripts", "medit-telemetry")
+    if not os.path.exists(template):
+        print("    [~] 未找到启动器模板，跳过（命令仍可正常使用）。")
+        return False
+    try:
+        with open(template, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"    [!] 读取启动器模板失败: {e}")
+        return False
+
+    content = content.replace("__MEDITELEMETRY_PYTHON__", sys.executable)
+
+    targets = []
+    for name in ("medit-telemetry", "traework-telemetry"):
+        found = shutil.which(name)
+        if found:
+            targets.append(found)
+    if not targets:
+        targets = [os.path.join(os.path.dirname(sys.executable), "medit-telemetry")]
+
+    installed = 0
+    for path in targets:
+        # pip 生成的 console script 常常是软链接 (指向解释器 bin 目录里的真实脚本),
+        # 必须写到软链指向的真实文件上, 否则改的是链接、真正被执行的还是旧脚本。
+        real = os.path.realpath(path)
+        try:
+            existing = ""
+            if os.path.exists(real):
+                with open(real, "r", encoding="utf-8", errors="replace") as f:
+                    existing = f.read()
+                # 只在首次覆盖 pip 原版时留档, 重复部署不会把备份冲成启动器自身
+                if LAUNCHER_MARKER not in existing and not os.path.exists(real + ".orig"):
+                    shutil.copy2(real, real + ".orig")
+                    print(f"    • 原命令已备份: {real}.orig")
+
+            if existing == content:
+                print(f"    ✓ 已是最新: {path}")
+                installed += 1
+                continue
+
+            with open(real, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.chmod(real, 0o755)
+            shown = f"{path} -> {real}" if real != path else path
+            print(f"    ✓ 已安装: {shown}")
+            installed += 1
+        except Exception as e:
+            print(f"    [!] 安装提示 ({path}): {e}")
+    if not installed:
+        print("    [~] 启动器未安装，命令仍可正常使用（仅缺少环境冲突自检）。")
+    return installed > 0
 
 
 def _fallback_pth_install() -> bool:
@@ -328,6 +397,7 @@ def main():
         sys.exit(1)
 
     install_package_locally()
+    install_guarded_launcher()
     cfg = setup_configuration(args)
     setup_autostart_and_launcher(args)
     launch_daemon_service(args)
