@@ -29,27 +29,70 @@ DEFAULT_ANNOTS = 5
 #: 检索环节的单篇均摊耗时 (基准, 与历史实现一致)
 RETRIEVAL_SECONDS_PER_PAPER = 12.0
 
+#: 引用串中的样板噪声 (归一化时剔除), 这些片段不承载文献身份
+_REF_BOILERPLATE = (
+    r"available\s*at\s*:.*$",
+    r"accessed\s*:?.*$",
+    r"retrieved\s+from.*$",
+    r"\(accessed[^)]*\)",
+    r"\[accessed[^]]*\]",
+    r"https?://\S+",
+    r"\b\d{2}-\d{4}-[A-Z]{2}-[A-Z]{3}-\d{5}\b",  # 文档编号, 如 07-2028-CN-RSM-00086
+)
 
-def _norm_ref(text: str) -> str:
-    """文献引用串归一化, 用于去重 (忽略大小写与各类空白)。"""
-    return re.sub(r"[\s\u3000]+", "", text or "").casefold()
+#: 具有独立文献含义的限定词 —— 命中则不得与主文献合并 (如 正文 vs 补充附录)
+_REF_QUALIFIER_RE = re.compile(
+    r"(supplementary|suppl\.?|appendix|erratum|corrigendum|correction|reply|comment|abstract|poster|protocol)"
+)
+
+#: 前缀归并要求的最短公共长度, 防止短串误合
+_REF_MIN_PREFIX = 30
+
+#: 允许被忽略的"良性尾巴" (仅数字/日期/文号一类, 无文献含义)
+_REF_BENIGN_TAIL_RE = re.compile(r"[\d.\-/a-z]{0,20}")
 
 
-def _collect_reference_records(project_dir: str):
-    """从「高亮引用清单」读取被引文献, 按文献去重。
+def _normalize_doi(doi: str) -> str:
+    """DOI 归一化: 去掉 URL / ``doi:`` 前缀与大小写差异, 便于精确去重。"""
+    text = (doi or "").strip()
+    text = re.sub(r"^(https?://(dx\.)?doi\.org/|doi:\s*)", "", text, flags=re.IGNORECASE)
+    return text.strip().rstrip(".").casefold()
 
-    指标口径: 检索数 = 去重后的唯一被引文献数 (与"下载"指标同为唯一文献口径,
-    重复引用同一篇文献只计一次)。
 
-    数据源优先级:
-      1. ``高亮结果/*_meta.json`` —— 每 Pn-x 一条, reference_field 完整, 并可能带 doi/pmid;
-      2. ``高亮结果清单.tsv`` —— meta 缺失时回退。注意该 TSV 的 reference_field
-         可能被导出截断, 故仅在无 meta 时使用。
+def _ref_identity(text: str) -> str:
+    """引用串 -> 文献身份串 (去空白与样板尾巴, 大小写折叠)。"""
+    value = re.sub(r"[\s\u3000]+", "", text or "").casefold()
+    for pattern in _REF_BOILERPLATE:
+        # 值已 casefold, 故这里统一忽略大小写 (否则 [A-Z] 类模式会失配)
+        value = re.sub(pattern, "", value, flags=re.IGNORECASE)
+    return value.strip(".,;:()[] ")
 
-    返回 ``(records, source)``; records 为 ``(paper_id, doi, url, citation_text)`` 列表。
+
+def _same_reference(identity_a: str, identity_b: str) -> bool:
+    """判断两个身份串是否指向同一文献。
+
+    仅在「其一为另一者的前缀」且「多出的尾巴属良性噪声」时判为同一文献;
+    若尾巴含 supplementary / appendix / erratum 等有独立意义的限定词则不合并,
+    避免把正文与其补充附录、勘误等误并成一篇。
     """
-    records: Dict[str, tuple] = {}
-    source = ""
+    if not identity_a or not identity_b:
+        return False
+    if identity_a == identity_b:
+        return True
+    longer, shorter = (
+        (identity_a, identity_b) if len(identity_a) >= len(identity_b) else (identity_b, identity_a)
+    )
+    if len(shorter) < _REF_MIN_PREFIX or not longer.startswith(shorter):
+        return False
+    extra = longer[len(shorter):].strip(".,;:()[] ")
+    if _REF_QUALIFIER_RE.search(extra):
+        return False
+    return bool(_REF_BENIGN_TAIL_RE.fullmatch(extra))
+
+
+def _collect_reference_candidates(project_dir: str):
+    """收集 ``(doi, reference, url)`` 候选, 并返回 (候选列表, 数据源名)。"""
+    candidates = []
 
     for meta_path in sorted(glob.glob(os.path.join(project_dir, HL_META_GLOB))):
         try:
@@ -60,14 +103,12 @@ def _collect_reference_records(project_dir: str):
         reference = (meta.get("reference_field") or "").strip()
         doi = (meta.get("doi") or "").strip()
         pmid = (meta.get("pmid") or "").strip()
-        key = _norm_ref(doi) or _norm_ref(reference)
-        if not key:
+        if not reference and not doi:
             continue
         url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else ""
-        records.setdefault(key, (key, doi, url, reference))
-
-    if records:
-        return list(records.values()), f"{HL_DIRNAME}/*_meta.json"
+        candidates.append((doi, reference, url))
+    if candidates:
+        return candidates, f"{HL_DIRNAME}/*_meta.json"
 
     tsv_path = os.path.join(project_dir, HL_LIST_TSV)
     if os.path.exists(tsv_path):
@@ -75,15 +116,67 @@ def _collect_reference_records(project_dir: str):
             with open(tsv_path, "r", encoding="utf-8") as fp:
                 for row in csv.DictReader(fp, delimiter="\t"):
                     reference = (row.get("reference_field") or row.get("reference") or "").strip()
-                    key = _norm_ref(reference)
-                    if not key:
-                        continue
-                    records.setdefault(key, (key, "", "", reference))
-            source = os.path.basename(tsv_path)
+                    if reference:
+                        candidates.append(("", reference, ""))
         except Exception:
-            pass
+            return [], ""
+        return candidates, os.path.basename(tsv_path)
 
-    return list(records.values()), source
+    return [], ""
+
+
+def _collect_reference_records(project_dir: str):
+    """从「高亮引用清单」读取被引文献并去重。
+
+    指标口径: 检索数 = 去重后的唯一被引文献数 (与"下载/高亮"同为唯一文献口径,
+    重复引用同一篇文献只计一次)。
+
+    去重分两层:
+      1. **DOI 优先 (精确)**: 有 DOI 时以归一化 DOI 为身份, 跨著录写法稳定;
+      2. **引用身份 + 保守前缀归并**: 无 DOI 时按引用串归一化身份去重, 并对
+         "同一文献的不同著录写法"做保守归并 (规则见 ``_same_reference``)。
+
+    数据源优先级:
+      1. ``高亮结果/*_meta.json`` —— 每 Pn-x 一条, ``reference_field`` 完整, 可能带 doi/pmid;
+      2. ``高亮结果清单.tsv`` —— 兜底。注意该 TSV 的 ``reference_field`` 会被导出截断,
+         故仅在无 meta 时使用。
+
+    返回 ``(records, source)``; records 为 ``(paper_id, doi, url, citation_text)`` 列表。
+    """
+    candidates, source = _collect_reference_candidates(project_dir)
+
+    accepted = []   # [(key, identity)] 已采纳的唯一文献
+    doi_index = {}  # 归一化 DOI -> key
+    records = []
+
+    for doi, reference, url in candidates:
+        norm_doi = _normalize_doi(doi)
+        identity = _ref_identity(reference)
+
+        # 1) DOI 是否已见过
+        if norm_doi and norm_doi in doi_index:
+            continue
+
+        # 2) 引用身份是否与已采纳文献为同一篇 (DOI 缺失时的保守归并)
+        matched = None
+        for exist_key, exist_identity in accepted:
+            if _same_reference(identity, exist_identity):
+                matched = exist_key
+                break
+        if matched is not None:
+            if norm_doi:
+                doi_index[norm_doi] = matched
+            continue
+
+        key = norm_doi or identity
+        if not key:
+            continue
+        accepted.append((key, identity))
+        if norm_doi:
+            doi_index[norm_doi] = key
+        records.append((key, doi, url, reference))
+
+    return records, source
 
 
 def _sibling_verify_annots(hl_pdf: str) -> int:

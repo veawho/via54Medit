@@ -213,6 +213,52 @@ class TestTelemetry(unittest.TestCase):
         stats = WorkspaceScanner(self.db).scan_project(project_dir, "TSVProj")
         self.assertEqual(stats["retrieval"], 2)
 
+    def test_retrieval_dedup_by_doi(self):
+        """带 DOI 时按 DOI 精确去重: 著录写法不同但 DOI 相同只计 1 篇。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        project_dir = os.path.join(self.test_dir, "proj_doi")
+        hl_dir = os.path.join(project_dir, "高亮结果")
+        os.makedirs(hl_dir)
+        entries = [
+            ("P1-1", "Zar HJ, et al. N Engl J Med. 2025;393(13):1292-1303.", "10.1056/NEJMoa2502600"),
+            # 同一 DOI 的不同写法 (带 URL 前缀) -> 应去重
+            ("P1-2", "Zar HJ et al. NEJM 2025", "https://doi.org/10.1056/NEJMoa2502600"),
+            ("P1-3", "Fleming-Dutra KE, et al. MMWR. 2023;72(41):1115-1122.", "10.15585/mmwr.mm7241a1"),
+        ]
+        for pn_x, reference, doi in entries:
+            with open(os.path.join(hl_dir, f"{pn_x}_meta.json"), "w", encoding="utf-8") as fp:
+                json.dump(
+                    {"pn_x": pn_x, "reference_field": reference, "doi": doi},
+                    fp, ensure_ascii=False,
+                )
+
+        stats = WorkspaceScanner(self.db).scan_project(project_dir, "DoiProj")
+        self.assertEqual(stats["retrieval"], 2, "同一 DOI 的不同著录写法应只计 1 篇")
+
+    def test_retrieval_merges_noise_suffix_but_keeps_appendix(self):
+        """尾部仅文号/日期噪声时归并; 补充附录属独立文献, 必须保持独立。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        project_dir = os.path.join(self.test_dir, "proj_merge")
+        hl_dir = os.path.join(project_dir, "高亮结果")
+        os.makedirs(hl_dir)
+        base = "Fleming-Dutra KE, et al. MMWR Morb Mortal Wkly Rep. 2023;72(41):1115-1122."
+        zar = "Zar HJ, et al. N Engl J Med. 2025;393(13):1343-1345."
+        entries = [
+            ("P1-1", base),
+            ("P1-2", base + "07-2028-CN-RSM-00086"),                      # 尾部文号 -> 归并
+            ("P2-1", zar),
+            ("P2-2", zar + " Supplementary Appendix."),                    # 独立文献 -> 不归并
+        ]
+        for pn_x, reference in entries:
+            with open(os.path.join(hl_dir, f"{pn_x}_meta.json"), "w", encoding="utf-8") as fp:
+                json.dump({"pn_x": pn_x, "reference_field": reference}, fp, ensure_ascii=False)
+
+        stats = WorkspaceScanner(self.db).scan_project(project_dir, "MergeProj")
+        # 1 (MMWR 两条归并) + 1 (正文) + 1 (补充附录独立) = 3
+        self.assertEqual(stats["retrieval"], 3, "尾部噪声应归并, 补充附录应独立计一篇")
+
     def test_platform_paths(self):
         """路径解析必须跨平台正确，不得出现 Windows 反斜杠字面量。"""
         from telemetry import platform_paths as pp
