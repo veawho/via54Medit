@@ -46,7 +46,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "company_sheet_token": "",
         "company_bitable_token": "",
         "company_bitable_table_id": "",
-        "company_bitable_url": ""
+        "company_bitable_url": "",
+        # 目标表 schema 适配（留空则自动探测）
+        "company_bitable_schema": "",       # "standard" | "company" | "" (自动识别)
+        "company_bitable_project": "",      # 目标表「项目任务类型」单选值，如 via54Medit
+        "company_bitable_member": "",       # 目标表「提交成员」显示名，留空则用 user.nickname
+        "company_bitable_field_map": {}     # 可选：自定义 标准字段名 -> 目标表字段名 覆盖
     },
     "schedule": {
         "weekly": {

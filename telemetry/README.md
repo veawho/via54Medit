@@ -85,6 +85,7 @@ medit-telemetry daemon --start      # 重新拉起后台服务
 medit-telemetry bitable --create           # 在飞书云端直接新建团队监控多维表格
 medit-telemetry bitable --bind <TOKEN/URL> # 绑定团队已有多维表格
 medit-telemetry bitable --sync             # 手动将本周战报同步到团队多维表格
+medit-telemetry bitable --sync --dry-run   # 仅打印 schema 判定与将写入的字段, 不落库不写备份
 medit-telemetry bitable --report           # 自动汇总全员数据生成可视化图表大屏
 
 # 8. 修改花名与定时汇报时间
@@ -100,6 +101,22 @@ medit-telemetry config --set-monthly "last 18:00"
 团队多人模式下，每位成员的周报自动通过 Upsert 算法汇入公共多维表格（以“汇报周期 + 成员花名”为主键避免重复）。同时内置两种全景呈现：
 1. **飞书互动富媒体卡片**：每周推送团队排行榜（🥇 🥈 🥉 勋章、全员节约工时汇总、人均阅读量），点击按钮直达多维表格；
 2. **离线与本地交互式图表大屏 (`HTML Dashboard`)**：自动渲染生成 KPI 统计卡片与全员横向工时节省柱状对比图，双击即可直接在浏览器交互。
+
+### 接入公司既有表（字段自适应）
+
+目标表的字段命名与本模块自建表不同也能直接写入：同步前先读取目标表实际字段名，自动判定 schema —— 自建标准表（15 字段）或公司既有「监控数据周报明细」表（13 字段）。写入时按映射改名，目标表没有的列自动丢弃、不报错；读取时反向归一化为标准字段名，因此图表大屏与战报逻辑无需改动。
+
+| 配置键（`feishu` 段） | 说明 |
+| :--- | :--- |
+| `company_bitable_schema` | `standard` / `company` / 留空则自动识别 |
+| `company_bitable_project` | 目标表「项目任务类型」的单选值，如 `via54Medit` |
+| `company_bitable_member` | 目标表「提交成员」显示名，留空则用 `user.nickname` |
+| `company_bitable_field_map` | 自定义「标准字段名 → 目标表字段名」覆盖 |
+
+- **幂等**：以「汇报周期 + 成员」为 upsert 键；显示名映射同时作用于写入与查找，避免写成 A、查找按 B 而重复新增记录。
+- **备注保护**：目标表备注列已有人工内容时，同步不会覆盖该格。
+- **dry-run 无副作用**：`--sync --dry-run` 只输出 schema 判定结果与将写入的字段，不提交、也不写本地备份。
+- **本地备份固定口径**：`~/.medit/team_bitable_backup.csv` 恒以标准字段名、固定 15 列落盘，与目标表是哪一种 schema 无关，便于回读与排查。
 
 ---
 

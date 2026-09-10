@@ -152,7 +152,10 @@ def cmd_bitable(args):
         db = TelemetryDB()
         agg = TelemetryAggregator(db)
         rep = agg.get_weekly_report() if args.period == "week" else (agg.get_monthly_report() if args.period == "month" else agg.get_all_time_report())
-        ok, msg = mgr.sync_weekly_report(rep)
+        dry = getattr(args, "dry_run", False)
+        if dry:
+            print("[*] DRY-RUN: 仅展示将要写入的字段, 不实际提交。")
+        ok, msg = mgr.sync_weekly_report(rep, dry_run=dry)
         print(f"[*] {msg}")
         return
 
@@ -494,6 +497,7 @@ def main():
     p_bitable.add_argument("--name", default="", help="自定义多维表格名称")
     p_bitable.add_argument("--bind", default="", help="绑定已有飞书多维表格 URL 或 Token")
     p_bitable.add_argument("--sync", action="store_true", help="上传本周监控数据至多维表格")
+    p_bitable.add_argument("--dry-run", action="store_true", help="仅展示 schema 判定与将写入的字段, 不实际提交")
     p_bitable.add_argument("--period", choices=["week", "month", "all"], default="week", help="统计周期")
     p_bitable.add_argument("--report", action="store_true", help="汇总团队所有成员数据生成图表看板")
     p_bitable.add_argument("--open-browser", action="store_true", help="生成报告后在浏览器打开")

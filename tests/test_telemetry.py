@@ -508,6 +508,292 @@ class TestTelemetry(unittest.TestCase):
         out_html = render_html_dashboard(records, os.path.join(self.test_dir, "test_dash.html"))
         self.assertTrue(os.path.exists(out_html))
 
+    def test_bitable_schema_adapter(self):
+        """测试：多维表格 schema 自适应（探测、写入映射、读取归一化、周期标签）。"""
+        from telemetry.bitable_sync import (
+            FeishuBitableManager, detect_schema_profile, week_label,
+            SCHEMA_STANDARD, SCHEMA_COMPANY, COMPANY_TABLE_FIELDS, TABLE_SCHEMA_FIELDS,
+        )
+        from telemetry.models import AggregateReport
+
+        # 1) schema 探测：公司既有表 vs 自建标准表 vs 无法识别
+        company_names = {
+            "记录标识", "统计周次", "提交成员", "统计日期", "文献检索量",
+            "成功下载量", "高亮标注量", "解析物理总页数", "节省工时(小时)",
+            "Token消耗量", "项目任务类型", "数据状态", "备注说明",
+        }
+        self.assertEqual(company_names, COMPANY_TABLE_FIELDS)
+        self.assertEqual(detect_schema_profile(company_names), SCHEMA_COMPANY)
+        standard_names = {f["field_name"] for f in TABLE_SCHEMA_FIELDS}
+        self.assertEqual(detect_schema_profile(standard_names), SCHEMA_STANDARD)
+        self.assertEqual(detect_schema_profile({"甲", "乙"}), "")
+
+        # 2) 周期标签
+        rep = AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13",
+            retrieval_count=44, download_count=215,
+            highlight_count=150, highlight_pages=2917, total_saved_hours=20.19,
+        )
+        self.assertEqual(week_label(rep), "2026-W37")
+        self.assertEqual(week_label(AggregateReport(
+            period_type="monthly", period_name="2026年09月",
+            start_date="2026-09-01", end_date="2026-09-30")), "2026-09")
+        self.assertEqual(week_label(AggregateReport(
+            period_type="all_time", period_name="历史累计",
+            start_date="", end_date="")), "历史累计")
+
+        # 3) 写入映射：payload 字段必须与目标表完全一致，多余字段被丢弃
+        cfg = {
+            "user": {"nickname": "Devin"},
+            "feishu": {
+                "company_bitable_schema": "company",
+                "company_bitable_project": "via54Medit",
+                "company_bitable_member": "Devin Wei",
+            },
+        }
+        mgr = FeishuBitableManager(config=cfg)
+        payload = mgr.build_company_payload(rep, "Devin")
+        self.assertEqual(set(payload.keys()), COMPANY_TABLE_FIELDS)
+        self.assertEqual(payload["记录标识"], "2026-W37_Devin_via54Medit")
+        self.assertEqual(payload["统计周次"], "2026-W37")
+        self.assertEqual(payload["提交成员"], "Devin Wei")
+        self.assertEqual(payload["文献检索量"], 44)
+        self.assertEqual(payload["成功下载量"], 215)
+        self.assertEqual(payload["高亮标注量"], 150)
+        self.assertEqual(payload["解析物理总页数"], 2917)
+        self.assertEqual(payload["节省工时(小时)"], 20.19)
+        self.assertEqual(payload["项目任务类型"], "via54Medit")
+        self.assertEqual(payload["数据状态"], "已自动同步")
+        # 日期字段必须是毫秒时间戳：ISO 字符串会被飞书拒绝 (1254064)
+        self.assertIsInstance(payload["统计日期"], int)
+        self.assertEqual(payload["统计日期"], 1788710400000)  # 2026-09-07 00:00 +08:00
+        for absent in ("成员OpenID", "检索节约工时(h)", "API调用次数", "汇报周期"):
+            self.assertNotIn(absent, payload)
+
+        # 4) 标准表路径不受影响
+        std_payload = mgr.build_standard_payload(rep, "Devin", "ou_x")
+        self.assertEqual(set(std_payload.keys()), standard_names)
+        self.assertEqual(std_payload["上报状态"], "🟢 自动同步")
+
+        # 5) 读取归一化：公司表字段 -> 标准字段，未知字段原样保留
+        norm = FeishuBitableManager.normalize_record_fields({
+            "统计周次": "2026-W37", "提交成员": "Devin Wei",
+            "文献检索量": 44, "成功下载量": 215, "自定义列": "保留",
+        }, SCHEMA_COMPANY)
+        self.assertEqual(norm["汇报周期"], "2026-W37")
+        self.assertEqual(norm["成员花名"], "Devin Wei")
+        self.assertEqual(norm["文献检索篇数"], 44)
+        self.assertEqual(norm["文献下载篇数"], 215)
+        self.assertEqual(norm["自定义列"], "保留")
+        # 标准表记录不做改动
+        raw = {"汇报周期": "2026年 第37周", "成员花名": "wtg"}
+        self.assertEqual(
+            FeishuBitableManager.normalize_record_fields(raw, SCHEMA_STANDARD), raw)
+
+    def test_bitable_company_upsert_key_consistency(self):
+        """测试：幂等查找键必须与写入值一致，否则同一周会重复新增记录。"""
+        from telemetry.bitable_sync import FeishuBitableManager, SCHEMA_COMPANY
+        from telemetry.models import AggregateReport
+
+        cfg = {
+            "user": {"nickname": "Devin"},
+            "feishu": {
+                "company_bitable_schema": "company",
+                "company_bitable_project": "via54Medit",
+                "company_bitable_member": "Devin Wei",
+            },
+        }
+        rep = AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13")
+        mgr = FeishuBitableManager(config=cfg)
+
+        # 写入用的是映射后的显示名
+        self.assertEqual(mgr.build_company_payload(rep, "Devin")["提交成员"], "Devin Wei")
+        # 显式传入其他成员名时不被本机映射覆盖
+        self.assertEqual(mgr.build_company_payload(rep, "Sarah")["提交成员"], "Sarah")
+
+        # 表中已存在同一周、成员显示名为 Devin Wei 的记录
+        existing = [{
+            "record_id": "rec_existing",
+            "fields": {"统计周次": "2026-W37", "提交成员": "Devin Wei"},
+        }]
+        mgr._api_request = lambda *a, **k: {"code": 0, "data": {"items": existing}}
+        found = mgr._find_existing_record(rep, "Devin", SCHEMA_COMPANY)
+        self.assertIsNotNone(found, "同周同成员应命中已有记录，否则会重复新增")
+        self.assertEqual(found[0], "rec_existing")
+        # 其他成员不应命中
+        self.assertIsNone(mgr._find_existing_record(rep, "Sarah", SCHEMA_COMPANY))
+
+    def test_bitable_local_backup_is_schema_agnostic(self):
+        """测试：本地备份固定 15 列标准字段名，兼容并修复历史错位行。"""
+        import csv as _csv
+        from telemetry.bitable_sync import (
+            FeishuBitableManager, BACKUP_FIELDS, COMPANY_PAYLOAD_ORDER,
+            SCHEMA_COMPANY, SCHEMA_STANDARD,
+        )
+        from telemetry.models import AggregateReport
+
+        cfg = {
+            "user": {"nickname": "Devin"},
+            "feishu": {"company_bitable_member": "Devin Wei",
+                       "company_bitable_project": "via54Medit"},
+        }
+        rep = AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13",
+            retrieval_count=44, download_count=215,
+            highlight_count=150, highlight_pages=2917, total_saved_hours=20.19)
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "backup.csv")
+            mgr = FeishuBitableManager(config=cfg)
+            mgr._backup_csv_path = lambda: path
+
+            # 1) 公司 schema 落盘后仍是 15 列标准表头，不再产生 13 列错位行
+            mgr._record_local_csv(mgr.build_company_payload(rep, "Devin"), SCHEMA_COMPANY)
+            with open(path, encoding="utf-8-sig", newline="") as f:
+                rows = list(_csv.reader(f))
+            self.assertEqual(rows[0], BACKUP_FIELDS)
+            self.assertEqual(len(rows[0]), 15)
+            self.assertEqual(len(rows[1]), 15)
+            self.assertEqual(
+                rows[0][:4], ["汇报周期", "成员花名", "成员OpenID", "上报时间"])
+
+            # 2) 标准 schema 落盘后列语义不变，同一文件可混写
+            mgr._record_local_csv(
+                mgr.build_standard_payload(rep, "Devin", "ou_x"), SCHEMA_STANDARD)
+            with open(path, encoding="utf-8-sig", newline="") as f:
+                rows = list(_csv.reader(f))
+            self.assertTrue(all(len(r) == 15 for r in rows), "所有行必须与表头等宽")
+
+            # 3) 回读：两种 schema 的记录都归一化为标准字段名
+            recs = mgr._load_local_csv_records()
+            self.assertEqual(len(recs), 2)
+            self.assertEqual({r.get("汇报周期") for r in recs}, {"2026-W37", "2026年 第37周"})
+            for r in recs:
+                self.assertIn("成员花名", r)
+                self.assertNotIn("统计周次", r, "不应残留公司字段名")
+                self.assertNotIn("提交成员", r, "不应残留公司字段名")
+
+            # 4) 历史错位行：13 列公司数据被追加到 15 列标准表头下，按列序还原
+            legacy = os.path.join(d, "legacy.csv")
+            mgr._backup_csv_path = lambda: legacy
+            self.assertEqual(len(COMPANY_PAYLOAD_ORDER), 13)
+            legacy_values = [
+                "2026-W37_Devin_via54Medit", "2026-W37", "Devin Wei",
+                "2026-09-07T00:00:00.000+08:00", 44, 215, 150, 2917,
+                20.19, 0, "via54Medit", "已自动同步", "自动同步",
+            ]
+            with open(legacy, "w", encoding="utf-8-sig", newline="") as f:
+                w = _csv.writer(f)
+                w.writerow(BACKUP_FIELDS)
+                w.writerow(legacy_values)
+            recs = mgr._load_local_csv_records()
+            self.assertEqual(len(recs), 1)
+            self.assertEqual(recs[0]["汇报周期"], "2026-W37")
+            self.assertEqual(recs[0]["成员花名"], "Devin Wei")
+            self.assertEqual(recs[0]["文献检索篇数"], "44")
+            self.assertEqual(recs[0]["文献下载篇数"], "215")
+            # 标注篇数 / 阅读页数是易错的一对，必须各归各位
+            self.assertEqual(recs[0]["Highlight标注篇数"], "150")
+            self.assertEqual(recs[0]["Highlight阅读页数"], "2917")
+            self.assertEqual(recs[0]["总节约工时(h)"], "20.19")
+
+            # 5) 追加写会留下重复行，回读时按 (周期, 成员) 折叠，避免图表数据翻倍
+            with open(legacy, "a", encoding="utf-8-sig", newline="") as f:
+                _csv.writer(f).writerow(legacy_values)
+            self.assertEqual(len(mgr._load_local_csv_records()), 1)
+
+            # 6) 完全无法对齐的脏行跳过，不猜测
+            with open(legacy, "a", encoding="utf-8-sig", newline="") as f:
+                _csv.writer(f).writerow(["只有", "三", "列"])
+            self.assertEqual(len(mgr._load_local_csv_records()), 1)
+
+    def test_bitable_dry_run_has_no_side_effect(self):
+        """测试：dry-run 只输出 payload，不写本地备份、不发起 API 请求。"""
+        from telemetry.bitable_sync import (
+            FeishuBitableManager, SCHEMA_COMPANY, COMPANY_TABLE_FIELDS)
+        from telemetry.models import AggregateReport
+
+        cfg = {
+            "user": {"nickname": "Devin"},
+            "feishu": {"company_bitable_member": "Devin Wei",
+                       "company_bitable_project": "via54Medit"},
+        }
+        rep = AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13",
+            retrieval_count=44, download_count=215,
+            highlight_count=150, highlight_pages=2917, total_saved_hours=20.19)
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "backup.csv")
+            mgr = FeishuBitableManager(config=cfg)
+            mgr._backup_csv_path = lambda: path
+            mgr.app_token, mgr.table_id = "bascn_test", "tbl_test"
+            mgr.resolve_schema = lambda: (SCHEMA_COMPANY, "test")
+            calls = []
+            mgr._api_request = lambda *a, **k: calls.append(a) or {"code": 0}
+
+            ok, msg = mgr.sync_weekly_report(rep, "Devin", dry_run=True)
+
+            self.assertTrue(ok, msg)
+            payload = json.loads(msg)
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(set(payload["fields"].keys()), COMPANY_TABLE_FIELDS)
+            self.assertFalse(os.path.exists(path), "dry-run 不应写本地备份")
+            self.assertEqual(calls, [], "dry-run 不应发起任何 API 请求")
+
+    def test_bitable_note_protection_follows_custom_field_map(self):
+        """测试：备注列被配置改名后，人工填写的备注仍受保护。"""
+        from telemetry.bitable_sync import FeishuBitableManager, SCHEMA_COMPANY
+        from telemetry.models import AggregateReport
+
+        cfg = {
+            "user": {"nickname": "Devin"},
+            "feishu": {
+                "company_bitable_member": "Devin Wei",
+                "company_bitable_project": "via54Medit",
+                "company_bitable_field_map": {"备注说明": "手工备注"},
+            },
+        }
+        rep = AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13",
+            retrieval_count=44, download_count=215,
+            highlight_count=150, highlight_pages=2917, total_saved_hours=20.19)
+        mgr = FeishuBitableManager(config=cfg)
+
+        payload = mgr.build_company_payload(rep, "Devin")
+        self.assertIn("手工备注", payload, "写入侧应使用改名后的备注列")
+        self.assertNotIn("备注说明", payload)
+
+        captured = {}
+
+        def fake_api(endpoint, method="GET", body=None):
+            if method == "PUT":
+                captured["fields"] = (body or {}).get("fields", {})
+                return {"code": 0}
+            return {"code": 0, "data": {"items": [{
+                "record_id": "rec_note",
+                "fields": {"统计周次": "2026-W37", "提交成员": "Devin Wei",
+                           "手工备注": "人工填写的说明"},
+            }]}}
+
+        with tempfile.TemporaryDirectory() as d:
+            mgr._backup_csv_path = lambda: os.path.join(d, "backup.csv")
+            mgr.app_token, mgr.table_id = "bascn_test", "tbl_test"
+            mgr.resolve_schema = lambda: (SCHEMA_COMPANY, "test")
+            mgr._api_request = fake_api
+
+            ok, msg = mgr.sync_weekly_report(rep, "Devin")
+
+        self.assertTrue(ok, msg)
+        self.assertIn("文献检索量", captured["fields"], "其他列应正常更新")
+        self.assertNotIn("手工备注", captured["fields"], "人工备注不应被覆盖")
+
 
 if __name__ == "__main__":
     unittest.main()

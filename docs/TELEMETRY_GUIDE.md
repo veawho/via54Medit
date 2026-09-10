@@ -23,6 +23,10 @@
    - **后台主动嗅探**：守护进程每 30 秒主动轮询工作区，发现新下载/新高亮成果实时自动入库。
    - **周报/月报自由排程**：支持自定义每周、每月推送时间（如“每周五 18:00”、“每月 1 日 09:00”）。
    - 到点自动推送交互式战报卡片至绑定飞书账号，并自动同步至公司公共统计表。
+5. **飞书多维表格 (Bitable) 团队协作**：
+   - **字段自适应**：同步前读取目标表实际字段名自动判定 schema（自建标准表 15 字段 / 公司既有「监控数据周报明细」表 13 字段）。写入时按映射改名并丢弃目标表没有的列，读取时反向归一化为标准字段名，因此接入公司既有表无需改动图表大屏与战报逻辑。
+   - **幂等上传**：以「汇报周期 + 成员」为 upsert 键，同一周重复上传只更新原记录不新增；目标表备注列已有人工内容时不覆盖。
+   - **演练与备份**：`bitable --sync --dry-run` 先看 schema 判定与将写入字段，不提交也不写备份；本地 `~/.medit/team_bitable_backup.csv` 恒以标准字段名、固定 15 列落盘，与目标表 schema 无关。
 
 ---
 
@@ -88,6 +92,13 @@ python -m telemetry.cli push --period month --dry-run  # 演练预览
 
 # 4. 同步成绩至公司公共统计表 (追加一行)
 python -m telemetry.cli sync --period week
+
+# 4b. 团队飞书多维表格 (Bitable): 创建 / 绑定 / 上传 / 图表看板
+python -m telemetry.cli bitable --create             # 云端新建团队监控多维表格
+python -m telemetry.cli bitable --bind <URL_OR_TOKEN>  # 绑定团队已有多维表格
+python -m telemetry.cli bitable --sync               # 上传本周数据 (按「周期+成员」幂等 upsert)
+python -m telemetry.cli bitable --sync --dry-run     # 演练: 只看 schema 判定与将写入的字段, 不落库
+python -m telemetry.cli bitable --report             # 汇总全员数据生成图表大屏
 
 # 5. 扫描指定项目目录成果并自动入库
 python -m telemetry.cli scan C:\Users\via54\Desktop\RSV --name RSV
