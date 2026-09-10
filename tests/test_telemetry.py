@@ -152,6 +152,25 @@ class TestTelemetry(unittest.TestCase):
             self.assertIsNone(windows_startup_dir())
             self.assertIsNone(vbs_path)
 
+    def test_launchd_agent_paths(self):
+        """macOS LaunchAgent 路径与加载状态查询应按平台返回。"""
+        from telemetry.daemon import (
+            LAUNCHD_LABEL,
+            get_launchd_plist_path,
+            get_launchd_status,
+        )
+
+        plist = get_launchd_plist_path()
+        status = get_launchd_status()
+        if sys.platform == "darwin":
+            self.assertIsNotNone(plist)
+            self.assertTrue(os.path.isabs(plist))
+            self.assertTrue(plist.endswith(f"LaunchAgents/{LAUNCHD_LABEL}.plist"))
+            self.assertIn(status, (True, False), "macOS 下应为布尔加载状态")
+        else:
+            self.assertIsNone(plist, "非 macOS 不应返回 LaunchAgent 路径")
+            self.assertIsNone(status, "非 macOS 不应返回 LaunchAgent 状态")
+
     def test_platform_paths(self):
         """路径解析必须跨平台正确，不得出现 Windows 反斜杠字面量。"""
         from telemetry import platform_paths as pp
@@ -183,6 +202,39 @@ class TestTelemetry(unittest.TestCase):
         self.assertTrue(os.path.isabs(pp.desktop_dir()))
         self.assertTrue(os.path.isabs(pp.trae_work_dir()))
         self.assertNotIn("\\", pp.trae_work_dir())
+
+    def test_scanner_recognizes_chinese_highlight_dir(self):
+        """高亮产物放在 高亮结果/ 目录 (RSV 布局) 时, 扫描器必须识别并计入。"""
+        try:
+            import fitz
+        except ImportError:
+            self.skipTest("PyMuPDF 不可用")
+
+        from telemetry.watcher import WorkspaceScanner
+
+        project_dir = os.path.join(self.test_dir, "proj_rsv")
+        hl_dir = os.path.join(project_dir, "高亮结果")
+        os.makedirs(hl_dir)
+
+        pdf_path = os.path.join(hl_dir, "P1-1.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        page.add_rect_annot(fitz.Rect(50, 50, 200, 90))
+        page.add_rect_annot(fitz.Rect(60, 120, 220, 160))
+        doc.save(pdf_path)
+        doc.close()
+
+        stats = WorkspaceScanner(self.db).scan_project(project_dir, "RSV")
+        self.assertEqual(stats["highlight"], 1, "高亮结果/ 下的 PDF 应计为 1 篇高亮")
+
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.highlight_count, 1)
+        # 标注数应取 PDF 内真实标注数 (2), 而非固定基准值
+        with self.db.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT num_annots FROM highlight_items WHERE pdf_path = ?", (pdf_path,)
+            ).fetchall()
+        self.assertEqual(rows[0][0], 2)
 
     def test_highlight_pdf_distinct_pages_and_count(self):
         """测试：完成标注多少篇对应多少个PDF文献文件；阅读页数对应所有高亮PDF文献文件的页数总和。"""

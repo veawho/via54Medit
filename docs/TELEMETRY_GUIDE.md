@@ -61,7 +61,7 @@ python -m telemetry.cli daemon --status
 python -m telemetry.cli daemon --stop
 
 # 4. 开机自启与伴随启动 (两种联动方案任选):
-# 方案 A (推荐): 注册到 Windows Startup 启动文件夹 (电脑重启/登录后后台自动静默自启)
+# 方案 A (推荐): 注册开机自启 (macOS 写入 LaunchAgent; Windows 写入 Startup VBS; 登录后后台自动静默自启)
 python -m telemetry.cli daemon --install-startup
 # (若需取消自启): python -m telemetry.cli daemon --uninstall-startup
 

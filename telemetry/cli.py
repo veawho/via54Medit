@@ -35,6 +35,8 @@ from .daemon import (
     install_startup_vbs,
     uninstall_startup_vbs,
     install_traework_companion_launcher,
+    install_launchd_agent,
+    uninstall_launchd_agent,
 )
 from .db import TelemetryDB
 from .feishu_sync import FeishuSyncClient
@@ -306,6 +308,22 @@ def cmd_config(args):
     print("=======================================================\n")
 
 
+def _install_autostart():
+    """跨平台注册开机自启: macOS -> LaunchAgent; 其余 -> Windows Startup VBS。"""
+    if sys.platform == "darwin":
+        install_launchd_agent()
+    else:
+        install_startup_vbs()
+
+
+def _uninstall_autostart():
+    """跨平台移除开机自启。"""
+    if sys.platform == "darwin":
+        uninstall_launchd_agent()
+    else:
+        uninstall_startup_vbs()
+
+
 def cmd_daemon(args):
     """后台主动监控与调度守护进程管理。"""
     if args.start:
@@ -315,9 +333,9 @@ def cmd_daemon(args):
     elif args.stop:
         stop_daemon_process()
     elif args.install_startup:
-        install_startup_vbs()
+        _install_autostart()
     elif args.uninstall_startup:
-        uninstall_startup_vbs()
+        _uninstall_autostart()
     elif args.create_launcher:
         install_traework_companion_launcher()
     elif args.install_task:
@@ -441,8 +459,8 @@ def main():
     p_daemon.add_argument("--stop", action="store_true", help="停止后台守护进程")
     p_daemon.add_argument("--status", action="store_true", help="查询守护进程运行状态")
     p_daemon.add_argument("--foreground", action="store_true", help="在前台控制台直接运行")
-    p_daemon.add_argument("--install-startup", action="store_true", help="注册到 Windows Startup 开机自启文件夹 (无弹窗静默)")
-    p_daemon.add_argument("--uninstall-startup", action="store_true", help="移除 Windows Startup 开机自启")
+    p_daemon.add_argument("--install-startup", action="store_true", help="注册开机自启 (macOS LaunchAgent / Windows Startup VBS)")
+    p_daemon.add_argument("--uninstall-startup", action="store_true", help="移除开机自启")
     p_daemon.add_argument("--create-launcher", action="store_true", help="在桌面创建 TraeWork 伴随启动器 (点击同启监控)")
     p_daemon.add_argument("--install-task", action="store_true", help="一键注册为 Windows 开机计划任务")
     p_daemon.set_defaults(func=cmd_daemon)

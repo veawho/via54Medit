@@ -365,6 +365,130 @@ WshShell.Run """{trae_exe}""", 1, False
         print(f"[Companion] 创建伴随启动器异常: {e}")
 
 
+LAUNCHD_LABEL = "com.via54medit.telemetry"
+
+
+def get_launchd_plist_path() -> Optional[str]:
+    """macOS LaunchAgent plist 路径; 非 macOS 返回 None。"""
+    if sys.platform != "darwin":
+        return None
+    return os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
+
+
+def _launchd_domain() -> str:
+    return f"gui/{os.getuid()}"
+
+
+def _launchctl(*args: str) -> bool:
+    """执行 launchctl 子命令, 返回是否成功。"""
+    try:
+        res = subprocess.run(["launchctl", *args], capture_output=True, text=True)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def get_launchd_status() -> Optional[bool]:
+    """LaunchAgent 是否已加载; 非 macOS 返回 None。"""
+    if sys.platform != "darwin":
+        return None
+    try:
+        res = subprocess.run(
+            ["launchctl", "print", f"{_launchd_domain()}/{LAUNCHD_LABEL}"],
+            capture_output=True, text=True,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def install_launchd_agent():
+    """把守护服务注册为 macOS LaunchAgent: 登录后自动后台常驻 (KeepAlive)。"""
+    plist_path = get_launchd_plist_path()
+    if not plist_path:
+        print("[Autostart] 跳过: LaunchAgent 仅支持 macOS。")
+        return
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    py_exe = sys.executable
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+    plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{py_exe}</string>
+        <string>-m</string>
+        <string>telemetry.cli</string>
+        <string>daemon</string>
+        <string>--foreground</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{project_root}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>{project_root}</string>
+        <key>HOME</key>
+        <string>{os.path.expanduser("~")}</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{LOG_FILE}</string>
+    <key>StandardErrorPath</key>
+    <string>{LOG_FILE}</string>
+</dict>
+</plist>
+'''
+    try:
+        # 先卸载旧实例并停掉手工启动的游离进程, 避免双跑/重复加载
+        _launchctl("bootout", f"{_launchd_domain()}/{LAUNCHD_LABEL}")
+        stop_daemon_process()
+
+        os.makedirs(os.path.dirname(plist_path), exist_ok=True)
+        with open(plist_path, "w", encoding="utf-8") as f:
+            f.write(plist)
+
+        ok = (_launchctl("bootstrap", _launchd_domain(), plist_path)
+              or _launchctl("load", "-w", plist_path))
+        if ok:
+            print("[Autostart] 已注册 macOS 开机自启 LaunchAgent:")
+            print(f"  • plist: {plist_path}")
+            print("  • 效果: 登录后守护服务自动后台常驻, 异常退出也会被拉起。")
+        else:
+            print(f"[Autostart] plist 已写入但 launchctl 加载失败; 可手动执行: launchctl load -w {plist_path}")
+    except Exception as e:
+        print(f"[Autostart] 注册 LaunchAgent 异常: {e}")
+
+
+def uninstall_launchd_agent():
+    """移除 macOS LaunchAgent。"""
+    plist_path = get_launchd_plist_path()
+    if not plist_path:
+        print("[Autostart] 跳过: LaunchAgent 仅支持 macOS。")
+        return
+
+    if not (_launchctl("bootout", f"{_launchd_domain()}/{LAUNCHD_LABEL}")
+            or _launchctl("unload", "-w", plist_path)):
+        print("[Autostart] launchctl 卸载未成功 (可能本就未加载)。")
+
+    if os.path.exists(plist_path):
+        try:
+            os.remove(plist_path)
+            print(f"[Autostart] 已移除 LaunchAgent: {plist_path}")
+        except Exception as e:
+            print(f"[Autostart] 移除异常: {e}")
+    else:
+        print("[Autostart] 未检测到 LaunchAgent plist。")
+
+
 def install_windows_startup_task():
     """将守护进程注册为 Windows 开机计划任务。"""
     if sys.platform != "win32":

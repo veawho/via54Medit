@@ -45,7 +45,7 @@ python scripts/via54.py auto "在新设备上单独部署监控"
 1. **Python 环境与标准库自检** (零强制外部依赖)；
 2. **`medit-telemetry` 独立包注册** (打通全局 `medit-telemetry` 与 `traework-telemetry` 命令)；
 3. **花名与飞书凭据绑定** (自动优先继承本机 TraeWork 飞书连接凭据)；
-4. **Windows 开机无感自启注册** (向 Startup 目录写入 `traework_telemetry_silent.vbs`，重启自动存活)；
+4. **开机无感自启注册** (macOS 写入 LaunchAgent `com.via54medit.telemetry.plist`，Windows 写入 Startup 目录的 `traework_telemetry_silent.vbs`；重启/登录自动存活)；
 5. **桌面伴生启动器生成** (桌面生成 `启动 TraeWork (带自动监控).vbs`，点击 Trae 同启监控)；
 6. **后台主动监控守护进程拉起** (30秒主动巡检工作区，大模型 Token 默认 100% 服务商控制台对齐)。
 

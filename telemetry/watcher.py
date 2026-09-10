@@ -16,6 +16,40 @@ from .db import TelemetryDB
 from .models import DownloadItem, HighlightItem, RetrievalItem, TaskRecord, TaskType
 from .pdf_utils import get_pdf_page_count
 
+#: 中文项目常用的高亮产物目录名 (RSV 等): <项目>/高亮结果/*.pdf
+HL_DIRNAME = "高亮结果"
+#: 无法取得标注数时的均摊基准 (沿用既有行为)
+DEFAULT_ANNOTS = 5
+
+
+def _sibling_verify_annots(hl_pdf: str) -> int:
+    """同级 ``*_verify.json`` / ``*_verify_hl.json`` 记录的标注数; 无则 0。"""
+    for suffix in ("_verify.json", "_verify_hl.json"):
+        candidate = hl_pdf.replace("_highlight.pdf", suffix)
+        if os.path.exists(candidate):
+            try:
+                with open(candidate, "r", encoding="utf-8") as fp:
+                    data = json.load(fp)
+                return int(data.get("n_annots", len(data.get("annotations", []))) or 0)
+            except Exception:
+                return 0
+    return 0
+
+
+def _count_pdf_annots(pdf_path: str) -> int:
+    """用 PyMuPDF 数出 PDF 内真实标注总数; 不可用或异常时返回 0。
+
+    中文目录布局 (``高亮结果/``) 没有伴生 verify.json, 因此以 PDF 内实际
+    标注数作为依据, 避免用固定值臆测。
+    """
+    if fitz is None:
+        return 0
+    try:
+        with fitz.open(pdf_path) as doc:
+            return sum(1 for page in doc for _ in (page.annots() or []))
+    except Exception:
+        return 0
+
 
 class WorkspaceScanner:
     def __init__(self, db: Optional[TelemetryDB] = None):
@@ -85,18 +119,21 @@ class WorkspaceScanner:
                 self.db.record_download_item(f"scan_{pname}", item)
                 stats["download"] += 1
 
-        # 3. 扫描 Highlight 成果 (*_highlight.pdf, *_verify.json, *_verify_hl.json)
+        # 3. 扫描 Highlight 成果
+        #    命名约定: *_highlight.pdf (TMA) / 高亮结果/*.pdf (RSV 等中文项目)
         hl_pdfs = glob.glob(os.path.join(project_dir, "*_highlight.pdf")) + \
                   glob.glob(os.path.join(project_dir, "_highlight_nested", "*", "*_highlight.pdf")) + \
-                  glob.glob(os.path.join(project_dir, "rsv_hl", "P*", "*_highlight.pdf"))
-        
+                  glob.glob(os.path.join(project_dir, "rsv_hl", "P*", "*_highlight.pdf")) + \
+                  glob.glob(os.path.join(project_dir, HL_DIRNAME, "*.pdf")) + \
+                  glob.glob(os.path.join(project_dir, "*", HL_DIRNAME, "*.pdf"))
+
         seen_hl = set()
         for hp in hl_pdfs:
             base = os.path.basename(hp)
             if base not in seen_hl:
                 seen_hl.add(base)
-                paper_id = base.replace("_highlight.pdf", "")
-                
+                paper_id = base.replace("_highlight.pdf", "").replace(".pdf", "")
+
                 # 获取 PDF 文件的真实总页数 (pypdf/fitz/二进制解析)
                 pages = get_pdf_page_count(hp)
 
@@ -105,25 +142,15 @@ class WorkspaceScanner:
                     # 若已收录，更新其真实页数确保一致性
                     self.db.update_highlight_page_count(hp, pages)
                     continue
-                
-                # 尝试读取同级 verify.json 获取标注数与修正状态
-                annots = 0
-                verify_json = hp.replace("_highlight.pdf", "_verify.json")
-                if not os.path.exists(verify_json):
-                    verify_json = hp.replace("_highlight.pdf", "_verify_hl.json")
-                if os.path.exists(verify_json):
-                    try:
-                        with open(verify_json, "r", encoding="utf-8") as vfp:
-                            vd = json.load(vfp)
-                            annots = vd.get("n_annots", len(vd.get("annotations", [])))
-                    except Exception:
-                        pass
+
+                # 标注数: 优先同级 verify.json, 否则数 PDF 内真实标注
+                annots = _sibling_verify_annots(hp) or _count_pdf_annots(hp)
 
                 item = HighlightItem(
                     paper_id=paper_id,
                     pdf_path=hp,
                     page_count=pages,
-                    num_annots=annots or 5,
+                    num_annots=annots or DEFAULT_ANNOTS,
                     highlight_duration_seconds=25.0,  # 均摊基准
                     correction_duration_seconds=10.0,
                     status="yellow_ok",

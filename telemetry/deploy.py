@@ -62,6 +62,8 @@ from telemetry.daemon import (
     start_daemon_process,
     stop_daemon_process,
     uninstall_startup_vbs,
+    install_launchd_agent,
+    uninstall_launchd_agent,
 )
 
 
@@ -197,13 +199,17 @@ def setup_configuration(args) -> dict:
 
 
 def setup_autostart_and_launcher(args):
-    """注册开机自启脚本与桌面 TraeWork 伴生启动器。"""
-    print(f"\n[*] 步骤 4/6: 注册 Windows 开机自启与伴生启动器...")
+    """注册开机自启与桌面伴生启动器 (macOS LaunchAgent / Windows Startup VBS)。"""
+    print(f"\n[*] 步骤 4/6: 注册开机自启与伴生启动器...")
 
-    if not args.no_startup and sys.platform == "win32":
+    if args.no_startup:
+        print("    - 跳过开机自启注册 (--no-startup)")
+    elif sys.platform == "darwin":
+        install_launchd_agent()
+    elif sys.platform == "win32":
         install_startup_vbs()
     else:
-        print("    - 跳过开机自启脚本注册 (--no-startup 或非 Windows 系统)")
+        print("    - 跳过开机自启注册 (当前系统无内置实现: Windows 走 Startup VBS, macOS 走 LaunchAgent)")
 
     if not args.no_launcher and sys.platform == "win32":
         install_traework_companion_launcher()
@@ -241,7 +247,11 @@ def display_deployment_summary(cfg: dict):
     bitable_url = cfg.get("feishu", {}).get("company_bitable_url", "")
     print(f"  • 团队多维表格: {bitable_url if bitable_url else '未绑定 (运行 medit-telemetry bitable --create 或 --bind 绑定)'}")
     print(f"  • Token 统计模式: 🟢 exact (100% 服务商真实控制台账单对齐)")
-    print(f"  • 开机无感自启: {'✓ 已启用 (Startup VBS 静默自启)' if sys.platform == 'win32' else 'N/A'}")
+    autostart_desc = {
+        "win32": "✓ 已启用 (Startup VBS 静默自启)",
+        "darwin": "✓ 已启用 (LaunchAgent 登录自启)",
+    }.get(sys.platform, "N/A")
+    print(f"  • 开机无感自启: {autostart_desc}")
     print("\n  📌 常用快捷命令:")
     print("    - 查看统计总览:      medit-telemetry status")
     print("    - 查看周报/战报:     medit-telemetry report --period week")
@@ -259,6 +269,8 @@ def uninstall_deployment():
     stop_daemon_process()
     if sys.platform == "win32":
         uninstall_startup_vbs()
+    elif sys.platform == "darwin":
+        uninstall_launchd_agent()
     print("✓ 已停止后台服务并移除开机自启。")
 
 

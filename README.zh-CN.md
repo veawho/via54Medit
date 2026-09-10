@@ -100,7 +100,7 @@ medit version               # 版本信息
   2. **Token 与控制台 100% 绝对一致**：默认 `exact` 模式，仅记录真实 API 网关回执，杜绝估算与虚高。
   3. **PDF 物理真实总页数求和**：自动去重唯一文献并解析累加真实物理总页数。
   4. **全时段主动守护与飞书同步**：30秒工作区主动巡检，周报/月报自动推送飞书并同步公共表格。
-  5. **开机无感自启与桌面伴随启动**：Windows Startup 静默拉起，点击桌面 TraeWork 自动同启监控。
+  5. **开机无感自启与桌面伴随启动**：macOS 走 LaunchAgent、Windows 走 Startup，登录自动静默拉起；点击桌面 TraeWork 自动同启监控。
 
 完整部署与参数指南详见：[docs/TELEMETRY_DEPLOY.md](docs/TELEMETRY_DEPLOY.md) 与 [telemetry/README.md](telemetry/README.md)。
 
