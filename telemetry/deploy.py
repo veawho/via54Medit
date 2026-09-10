@@ -127,7 +127,12 @@ def install_guarded_launcher() -> bool:
     print(f"\n[*] 步骤 2b/6: 安装环境自检启动器...")
     template = os.path.join(TELEMETRY_DIR, "scripts", "medit-telemetry")
     if not os.path.exists(template):
-        print("    [~] 未找到启动器模板，跳过（命令仍可正常使用）。")
+        # 该模板已通过 package-data 随包分发 (pyproject.toml / setup.py),
+        # 因此缺失基本只意味着安装不完整或包版本过旧, 而不是「正常情况」。
+        print("    [~] 未找到启动器模板: " + template)
+        print("        该文件随包分发, 缺失通常表示安装不完整或版本过旧。")
+        print("        可先重新安装本模块再重试: pip install -U medit-telemetry")
+        print("        (继续安装, 命令仍可用, 仅缺少环境冲突自检。)")
         return False
     try:
         with open(template, "r", encoding="utf-8") as f:
@@ -176,6 +181,7 @@ def install_guarded_launcher() -> bool:
             print(f"    [!] 安装提示 ({path}): {e}")
     if not installed:
         print("    [~] 启动器未安装，命令仍可正常使用（仅缺少环境冲突自检）。")
+        print("        常见原因是命令所在目录不可写, 可用 sudo 重试或手动执行本步骤。")
     return installed > 0
 
 

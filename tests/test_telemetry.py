@@ -900,6 +900,28 @@ class TestTelemetry(unittest.TestCase):
             finally:
                 os.unlink(tmp_path)
 
+    def test_guarded_launcher_missing_template_is_graceful(self):
+        """测试：模板缺失时给出可操作指引并优雅退出，不写任何文件。"""
+        import contextlib
+        import io
+        from telemetry import deploy
+
+        real_dir = deploy.TELEMETRY_DIR
+        buf = io.StringIO()
+        try:
+            deploy.TELEMETRY_DIR = os.path.join(
+                tempfile.gettempdir(), "medit-no-such-dir-for-test")
+            with contextlib.redirect_stdout(buf):
+                ok = deploy.install_guarded_launcher()
+        finally:
+            deploy.TELEMETRY_DIR = real_dir
+
+        self.assertFalse(ok, "模板缺失时应返回 False 而不是抛异常")
+        out = buf.getvalue()
+        self.assertIn("未找到启动器模板", out)
+        # 模板已随包分发, 缺失即提示重装, 而不是轻描淡写成「正常情况」
+        self.assertIn("pip install -U medit-telemetry", out)
+
     def test_launcher_template_is_declared_as_package_data(self):
         """测试：启动器模板被声明为包数据。
 
