@@ -950,5 +950,92 @@ class TestTelemetry(unittest.TestCase):
         self.assertRegex(setup_py, r'package_data\s*=\s*\{\s*"telemetry"\s*:\s*\["scripts/\*"\]\s*\}')
 
 
+    def test_deploy_pip_pep668_retries_with_break_system_packages(self):
+        """测试：pip 被 PEP 668 拒绝时自动追加 --break-system-packages 重试。
+
+        uv 托管 / 发行版自带 / Homebrew 的解释器都会以该错误拒绝安装, 而这正是本工具的
+        常见运行环境 —— 过去直接退回 .pth, 导致命令根本没被创建。
+        """
+        from unittest import mock
+        from telemetry import deploy
+
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if "--break-system-packages" in cmd:
+                return mock.Mock(returncode=0, stdout="Successfully installed", stderr="")
+            return mock.Mock(
+                returncode=1, stdout="",
+                stderr="error: externally-managed-environment\nhint: See PEP 668")
+
+        with mock.patch.object(deploy.subprocess, "run", side_effect=fake_run):
+            ok = deploy.install_package_locally()
+
+        self.assertTrue(ok)
+        self.assertEqual(len(calls), 2, "应先常规尝试, 再带逃生开关重试一次")
+        self.assertNotIn("--break-system-packages", calls[0])
+        self.assertIn("--break-system-packages", calls[1])
+        self.assertEqual(calls[0][:4], [sys.executable, "-m", "pip", "install"])
+
+    def test_deploy_falls_back_to_pth_when_all_installs_fail(self):
+        """测试：pip / uv 全部失败时才退回 .pth 注入（只保证可导入）。"""
+        from unittest import mock
+        from telemetry import deploy
+
+        fail = mock.Mock(returncode=1, stdout="", stderr="boom: cannot install")
+        with mock.patch.object(deploy.subprocess, "run", return_value=fail), \
+                mock.patch.object(deploy, "_fallback_pth_install",
+                                  return_value=True) as pth:
+            ok = deploy.install_package_locally()
+
+        self.assertTrue(ok)
+        pth.assert_called_once()
+
+    def test_launcher_targets_cover_both_command_names(self):
+        """测试：命令不存在时落到可写 bin 目录新建，而不是放弃安装。"""
+        from unittest import mock
+        from telemetry import deploy
+
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(deploy, "shutil") as fake_shutil, \
+                    mock.patch.object(deploy, "_writable_bin_dir", return_value=d):
+                fake_shutil.which.return_value = None
+                targets = deploy._launcher_targets()
+
+            self.assertEqual(len(targets), 2, "两个命令名都要有目标")
+            self.assertEqual(
+                {os.path.basename(p) for p in targets},
+                {"medit-telemetry", "traework-telemetry"})
+            self.assertTrue(all(os.path.dirname(p) == d for p in targets))
+
+            # 已存在的命令优先复用（可能在软链后面）
+            with mock.patch.object(deploy, "shutil") as fake_shutil, \
+                    mock.patch.object(deploy, "_writable_bin_dir", return_value=d):
+                fake_shutil.which.return_value = "/usr/local/bin/medit-telemetry"
+                reused = deploy._launcher_targets()
+            self.assertEqual(reused, ["/usr/local/bin/medit-telemetry"] * 2)
+
+    def test_platform_paths_user_bin_dirs_and_path_check(self):
+        """测试：跨平台 bin 目录候选与 PATH 判定（命令装完能不能被找到）。"""
+        from telemetry import platform_paths as pp
+
+        dirs = pp.user_bin_dirs()
+        self.assertTrue(dirs, "至少应给出一个候选目录")
+        self.assertEqual(len(dirs), len(set(dirs)), "候选目录不应重复")
+        if sys.platform == "win32":
+            self.assertTrue(any(d.endswith("Scripts") for d in dirs))
+        else:
+            self.assertIn(
+                os.path.join(os.path.expanduser("~"), ".local", "bin"), dirs)
+
+        first_on_path = next(
+            (p for p in (os.environ.get("PATH") or "").split(os.pathsep) if p), "")
+        if first_on_path:
+            self.assertTrue(pp.is_on_path(first_on_path))
+        self.assertFalse(pp.is_on_path(
+            os.path.join(tempfile.gettempdir(), "medit-definitely-not-on-path")))
+
+
 if __name__ == "__main__":
     unittest.main()

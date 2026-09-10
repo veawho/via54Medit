@@ -52,6 +52,8 @@ python telemetry/deploy.py --silent
 telemetry\deploy.bat
 ```
 
+> **关于「解释器由外部管理」(PEP 668)**：uv 托管的解释器、发行版自带 Python、Homebrew Python 都会拒绝常规 `pip install -e`。部署脚本会自动识别该情况并追加 `--break-system-packages` 重试；若解释器根本没有 pip，则改用 `uv pip install` 兜底。两者都不可用时退回 `.pth` 注入，并且**仍会把 `medit-telemetry` 命令落到 PATH 目录上**（见下方「运行环境自检」），而不是就此放弃。
+
 ---
 
 ## 常用 CLI 命令
@@ -123,7 +125,7 @@ unset PYTHONHOME PYTHONPATH                    # 或在当前终端先清掉
 
 根治方式是在 shell 启动脚本（`~/.zshrc` / `~/.bashrc`）中删除对这两个变量的 `export`。本工具只依赖标准库，移除后不影响任何功能。后台守护进程由 LaunchAgent / 计划任务拉起，不继承终端环境，因此始终不受影响。
 
-> 部署时 `telemetry/deploy.py` 会把外壳启动器安装为 `medit-telemetry` / `traework-telemetry`，原命令备份为同目录下的 `*.orig`；重复部署幂等。启动器模板通过 `package-data` 随包分发，因此源码安装与 wheel / sdist 安装都能装出启动器。若之后又执行了 `pip install -e`，命令会被还原成 pip 版本，重新跑一次部署即可再次接管。
+> 部署时 `telemetry/deploy.py` 会把外壳启动器安装为 `medit-telemetry` / `traework-telemetry`，原命令备份为同目录下的 `*.orig`；重复部署幂等。启动器模板通过 `package-data` 随包分发，因此源码安装与 wheel / sdist 安装都能装出启动器。若 pip 未能创建命令（例如解释器由外部管理），启动器会直接在 PATH 上的用户级 bin 目录（POSIX 为 `~/.local/bin`）新建它，并在该目录不在 PATH 中时明确提示。若之后又执行了 `pip install -e`，命令会被还原成 pip 版本，重新跑一次部署即可再次接管。
 
 ---
 
@@ -197,6 +199,7 @@ telemetry/
 ├── feishu_sync.py        # 飞书卡片构建与消息推送
 ├── bitable_sync.py       # 飞书多维表格 (Bitable Base) OpenAPI 与 Upsert
 ├── envcheck.py           # 运行环境自检 (PYTHONHOME / PYTHONPATH 冲突识别与提示)
+├── platform_paths.py     # 跨平台路径解析 (应用数据目录 / 桌面 / 启动项 / 用户级 bin 目录)
 ├── chart_reporter.py     # 团队多人数据汇总与可视化图表报告
 ├── scripts/
 │   └── medit-telemetry   # 外壳启动器模板 (环境冲突拦截, 由 deploy.py 安装)

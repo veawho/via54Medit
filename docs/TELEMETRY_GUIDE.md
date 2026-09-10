@@ -199,3 +199,35 @@ unset PYTHONHOME PYTHONPATH                              # 或在当前终端先
 ### 5.2 仅 `PYTHONPATH` 被污染（解释器能启动，但导入异常）
 
 `PYTHONPATH` 若注入了别的 Python 版本的 `site-packages`，可能导入到 ABI 不兼容的扩展模块。此类情形解释器能正常启动，因此在 `cli.main()` 入口的运行时自检（`telemetry/envcheck.py`）会直接给出冲突明细与修复命令，无需依赖外壳启动器。两条路径用 `MEDITELEMETRY_ENV_ISOLATED` 标记交接，只提示一次、不重复刷屏。
+
+### 5.3 部署时 pip 报 `externally-managed-environment`（uv / Homebrew / 发行版 Python）
+
+**现象**：执行 `python telemetry/deploy.py` 时，步骤 2「安装并注册 medit-telemetry 模块」失败，输出类似：
+
+```
+× This environment is externally managed
+╰─> This Python installation is managed by uv and should not be modified.
+hint: See PEP 668 for the detailed specification.
+```
+
+**原因**：PEP 668 规定「由外部工具管理的解释器」拒绝直接写入。uv 托管的 Python、macOS 上的 Homebrew Python、各发行版自带的 Python 都属于这一类。uv 自己的 `uv pip install` 同样会拒绝。这不是权限问题，加 `sudo` 无用。
+
+**部署脚本已自动处理**，按以下顺序降级，无需手工干预：
+
+| 顺序 | 动作 | 说明 |
+| :--- | :--- | :--- |
+| 1 | `pip install -e` | 常规路径 |
+| 2 | 识别到 PEP 668 后追加 `--break-system-packages` 重试 | pip 自己在报错中给出的逃生开关 |
+| 3 | 解释器没有 pip 时改用 `uv pip install -e ... --break-system-packages` | uv 托管环境的常见情况 |
+| 4 | 全部失败则注入 `.pth` 保证「可导入」 | 此时**命令由下一步的启动器直接落到 PATH 目录**（POSIX 为 `~/.local/bin`），不会出现「装完却没有命令」 |
+
+**手工安装**（如需）：
+
+```bash
+# uv 托管解释器
+python -m pip install -e telemetry --no-deps --break-system-packages
+# 或用 uv
+uv pip install -e telemetry --python "$(which python3)" --no-deps --break-system-packages
+```
+
+> 注意顺序：`pip install -e` 会重新生成 console script，把环境自检启动器覆盖回 pip 版本。部署脚本因此在安装之后才执行启动器接管步骤（步骤 2b）；手工安装后请重新跑一次部署，或手动重装启动器。

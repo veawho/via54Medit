@@ -114,6 +114,44 @@ def windows_startup_dir() -> Optional[str]:
     )
 
 
+def user_bin_dirs() -> List[str]:
+    """可能承载 ``medit-telemetry`` 命令的目录候选（去重保序，当前平台优先）。
+
+    pip 的 ``--user`` 安装与 uv 都把 console script 落在用户级 bin 目录；当 pip 因
+    PEP 668 被拒、需要自己落一个命令时，这里给出该往哪儿放。
+
+    Windows: 解释器 ``Scripts`` 目录 → ``%APPDATA%\\Python\\Scripts`` → 解释器所在目录
+    POSIX:   ``~/.local/bin`` → 解释器所在目录
+    """
+    home = _home()
+    cands: List[str] = []
+    if sys.platform == "win32":
+        cands.append(os.path.join(sys.prefix, "Scripts"))
+        appdata = os.environ.get("APPDATA") or os.path.join(home, "AppData", "Roaming")
+        cands.append(os.path.join(appdata, "Python", "Scripts"))
+    else:
+        cands.append(os.path.join(home, ".local", "bin"))
+    if sys.executable:
+        cands.append(os.path.dirname(sys.executable))
+
+    out: List[str] = []
+    for path in cands:
+        if path and path not in out:
+            out.append(path)
+    return out
+
+
+def is_on_path(dirpath: str) -> bool:
+    """判断目录是否在 ``PATH`` 中 —— 用于确认命令装完真的能找到。"""
+    if not dirpath:
+        return False
+    target = os.path.normcase(os.path.normpath(dirpath))
+    for entry in (os.environ.get("PATH") or "").split(os.pathsep):
+        if entry and os.path.normcase(os.path.normpath(entry)) == target:
+            return True
+    return False
+
+
 def trae_work_exe() -> Optional[str]:
     """Windows 版 TraeWork 可执行文件路径；非 Windows 平台返回 ``None``。"""
     if sys.platform != "win32":
