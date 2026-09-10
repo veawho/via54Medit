@@ -81,6 +81,29 @@ medit anno2ppt <package>    # 证据包 → PPT
 medit version               # 版本信息
 ```
 
+## 📊 文献整理与 Highlight 监控统计独立模块 (`medit-telemetry`)
+
+面向 `via54Medit` 与 `TraeWork` 文献管线（检索、下载、Highlight）打造的独立解耦**人效收益度量、大模型 Token 真实账单 100% 对齐与飞书全自动同步**系统。
+
+* **独立包定义**：标准 Python 独立分发包，零外部强制依赖（纯标准库实现），注册全局命令 `medit-telemetry` 与 `traework-telemetry`。
+* **一句话单独部署**：
+  ```powershell
+  # Windows PowerShell 单行极速部署
+  powershell -ExecutionPolicy Bypass -File .\telemetry\deploy.ps1 -Silent
+  ```
+  ```bash
+  # 跨平台 Python 单行极速部署
+  python telemetry/deploy.py --silent
+  ```
+* **核心亮点**：
+  1. **人效收益自动核算**：文献检索（7min/篇）、成功下载（2min/篇）、文献高亮（4min/篇）精准折算工时节约。
+  2. **Token 与控制台 100% 绝对一致**：默认 `exact` 模式，仅记录真实 API 网关回执，杜绝估算与虚高。
+  3. **PDF 物理真实总页数求和**：自动去重唯一文献并解析累加真实物理总页数。
+  4. **全时段主动守护与飞书同步**：30秒工作区主动巡检，周报/月报自动推送飞书并同步公共表格。
+  5. **开机无感自启与桌面伴随启动**：Windows Startup 静默拉起，点击桌面 TraeWork 自动同启监控。
+
+完整部署与参数指南详见：[docs/TELEMETRY_DEPLOY.md](docs/TELEMETRY_DEPLOY.md) 与 [telemetry/README.md](telemetry/README.md)。
+
 ## 🤖 AI Agent 智能体与 Skill 接入
 
 本项目为各类 AI Agent 提供了开箱即用的对接方式：

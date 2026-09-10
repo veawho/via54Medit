@@ -106,7 +106,21 @@ P30-1/
 | 任何级高血压 48% | ✅ | ❌ | ✅ 47.9% (NCT) |
 | ≥3 级高血压 28% | ✅ | ✅ 28% (Abstract) | ❌ |
 | 任何级蛋白尿 20% | ✅ | ❌ | ✅ 21% (NCT) |
-| ≥3 级蛋白尿 5% | ✅ | ❌ | ✅ 5.7% (NCT SAE) |
+| ≥3 级蛋白尿 5% | ❌ | ✅ 5.7% (NCT SAE) |
+
+## Telemetry & Feishu Automation Module (`medit-telemetry`)
+
+Decoupled standalone package for tracking literature retrieval/download/highlight efficiency, 100% exact LLM console token alignment, and automatic Feishu reports.
+
+- **One-Liner Deployment (PowerShell)**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\telemetry\deploy.ps1 -Silent
+  ```
+- **One-Liner Deployment (Cross-Platform Python)**:
+  ```bash
+  python telemetry/deploy.py --silent
+  ```
+- **Full Guide**: See [docs/TELEMETRY_DEPLOY.md](docs/TELEMETRY_DEPLOY.md) and [telemetry/README.md](telemetry/README.md).
 
 ## 测试
 

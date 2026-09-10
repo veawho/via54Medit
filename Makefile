@@ -128,3 +128,17 @@ build-windows:
 	    $(GO) build -ldflags "$(LDFLAGS)" -o bin/medit.exe ./cmd/medit
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
 	    $(GO) build -ldflags "$(LDFLAGS)" -o bin/medit-mcp.exe ./cmd/medit-mcp
+
+# Telemetry module targets
+.PHONY: telemetry-deploy telemetry-install telemetry-status telemetry-test
+telemetry-deploy:
+	python telemetry/deploy.py --silent
+
+telemetry-install:
+	python -m pip install -e telemetry --no-deps
+
+telemetry-status:
+	medit-telemetry status
+
+telemetry-test:
+	python -m unittest tests/test_telemetry.py

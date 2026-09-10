@@ -20,6 +20,7 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   hl-verify       highlight 质量验证 (annot/黄色像素/图片完整性)
   report          生成 8 列 CSV + 交付报告
   manual-list     生成人工下载清单 (付费墙/中文期刊 + 访问链接)
+  telemetry       文献监控统计、人效分析、Token 对齐与飞书同步工具 (含 deploy 一键部署)
 
 用法:
   python3.11 via54.py rules <project_dir> [--verbose]
@@ -31,15 +32,19 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
   python3.11 via54.py paper-match <pdf> <citation>
   python3.11 via54.py keyword "<citation>" "[context]"
   python3.11 via54.py ppt audit <input.pptx>
+  python3.11 via54.py telemetry status                           # 查看人效与 Token 统计
+  python3.11 via54.py telemetry deploy [--silent]                # 一键独立部署
   python3.11 via54.py diff
   python3.11 via54.py all <project_dir>  # 跑全部
 """
 import os, re, sys, json, argparse, subprocess
 from pathlib import Path
 
-# 让子工具可以被 import
+# 让子工具与 telemetry 可以被 import
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 
 def _run_module(mod_name: str, args: list) -> int:
@@ -395,6 +400,13 @@ def cmd_glm(args):
     return _run_module("glm_integration.py", args)
 
 
+def cmd_telemetry(args):
+    """文献监控统计与飞书同步工具入口"""
+    from telemetry.cli import main as telemetry_main
+    sys.argv = ["telemetry"] + args
+    return telemetry_main() or 0
+
+
 HANDLERS = {
     "rules": cmd_rules,
     "step5": cmd_step5,
@@ -411,6 +423,7 @@ HANDLERS = {
     "manual-list": cmd_manual_list,
     "diff": cmd_diff,
     "glm": cmd_glm,
+    "telemetry": cmd_telemetry,
     "all": cmd_all,
 }
 

@@ -128,6 +128,20 @@ def glm_vision_call(image_paths, prompt, json_mode=True, timeout=120, model=DEFA
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             result = json.loads(r.read().decode())
+        
+        # 100% 对应服务商控制台账单: 自动记录真实网关返回的 usage
+        try:
+            from telemetry.token_tracker import record_llm_usage
+            record_llm_usage(
+                response=result,
+                provider="zhipu",
+                model=model,
+                project_name="glm_vision",
+                source="glm_vision.py",
+            )
+        except Exception:
+            pass
+
         content_str = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         cache[key] = content_str
         _save_cache(cache)

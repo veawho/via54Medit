@@ -585,6 +585,15 @@ def _write_full_lib_table(root):
 def run_pipeline(nl_text=None, ppt=None, project_dir=None, budget_s=DEFAULT_BUDGET_S,
                  limit=0, skip_render=False, skip_download=False, skip_highlight=False,
                  skip_report=False):
+    if nl_text:
+        low = nl_text.lower()
+        if any(k in nl_text for k in ["部署", "安装"]) and any(k in nl_text for k in ["监控", "telemetry", "飞书同步", "人效"]):
+            print("[via54 auto] 识别到文献监控与飞书同步部署意图，正在执行独立部署...", flush=True)
+            from telemetry.deploy import main as deploy_main
+            sys.argv = ["deploy.py", nl_text]
+            deploy_main()
+            return 0
+
     intent = parse_nl(nl_text) if nl_text else {
         "pptx": ppt, "render": True, "extract": True, "download": True, "highlight": True
     }

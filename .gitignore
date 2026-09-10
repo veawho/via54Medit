@@ -24,6 +24,8 @@ rust/Cargo.lock.bak
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+build/
 .venv/
 venv/
 
