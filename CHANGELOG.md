@@ -48,6 +48,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.0] - 2026-09-10 (运行环境自检: 拦截 PYTHONHOME / PYTHONPATH 冲突)
+
+### Added
+- **telemetry/envcheck.py**: 运行环境自检模块 —— 识别被 IDE / 沙箱 / 构建工具注入、且与本解释器不匹配的 `PYTHONHOME` 与 `PYTHONPATH`, 输出冲突明细与可直接复制的修复命令。只做只读检测, 不修改环境变量、不改变命令行为。
+- **telemetry/scripts/medit-telemetry**: 外壳启动器 —— 在解释器启动前比对 `PYTHONHOME` 与本解释器前缀、以及 `PYTHONPATH` 中的 Python 版本目录; 发现冲突时改用 `-E` (忽略全部 `PYTHON*` 变量) 执行并打印一行说明。未检测到冲突时不传 `-E`, 行为与直接调用解释器完全一致。由 `deploy.py` 安装为 `medit-telemetry` / `traework-telemetry` 命令, 原命令备份为同目录 `*.orig`。
+- **telemetry/cli.py**: 新增 `--env-check` 显式自检 (打印解释器路径、变量实际取值与结论); `cli.main()` 入口调用一次运行时自检。
+- **telemetry/deploy.py**: 新增 `install_guarded_launcher()`, 并把安装步骤接入部署主流程 (步骤 2b)。
+- **telemetry/README.md** / **docs/TELEMETRY_GUIDE.md**: 新增「运行环境自检」小节与「故障排查」章节。
+
+### 设计说明 (为什么必须是两层)
+- `Fatal Python error: init_fs_encoding ... No module named 'encodings'` 发生在解释器**启动阶段**, 任何 Python 代码都来不及执行 —— 因此纯 Python 自检无法覆盖该故障, 必须由外壳层在进程启动前拦截。这是本方案引入 shell 启动器的唯一原因。
+- 运行时自检覆盖「解释器能起来但仍受污染」的情形: 例如仅 `PYTHONPATH` 注入了异构版本的 `site-packages`, 可能导入到 ABI 不兼容的扩展模块。
+- 两层用 `MEDITELEMETRY_ENV_ISOLATED` 标记交接 —— 启动器已提示过时运行时自检不再重复; 但 `--env-check` 无论何时都完整给出结论。此项为实测发现「两层各提示一遍」后修正。
+
+### Fixed
+- **启动器安装穿透软链接**: `shutil.which()` 返回的 `~/.local/bin/medit-telemetry` 常是指向解释器 `bin/` 的软链接, 直接写入会让改动落在解释器安装树内的真实文件上。现显式解析真实路径后写入, 并在输出中标注 `软链 -> 真实路径`。
+- **重复部署不幂等**: 新增 `LAUNCHER_MARKER` 识别与内容比对, 第二次部署报「已是最新」, 且不会把 `*.orig` 备份冲成启动器自身。
+- **telemetry/setup.py 版本号长期滞后**: 停留在 1.1.0 (`pyproject.toml` 与 `__init__.py` 已在 1.4.0), 历次发版均遗漏, 本次对齐。
+- 模块版本 1.4.0 → 1.5.0。
+
+### 验证
+- test_telemetry 28/28 passed (新增 `test_envcheck_detects_conflicting_python_env` / `test_envcheck_warns_only_once` / `test_guarded_launcher_template`)。
+- 真机复现与修复对照 (macOS / Python 3.11.15, 终端被注入指向 3.10 framework 的 `PYTHONHOME`):
+  - 修复前 `medit-telemetry --env-check` → `Python path configuration: ... Fatal Python error: init_fs_encoding`;
+  - 修复后同一命令 → 打印冲突说明后正常输出自检报告, `daemon --status` 同时恢复正常;
+  - 干净环境 (`env -u PYTHONHOME -u PYTHONPATH`) → 无任何提示, `--env-check` 报「未发现冲突」, 证明正常路径行为未被改变。
+- 仅 `PYTHONPATH` 注入异构版本、且绕过启动器时, 运行时自检能独立给出提示 —— 确认第二层并非冗余。
+- 启动器通过 `sh -n` 语法校验 (模板与替换解释器后的成品均通过)。
+
+### 已知边界
+- 启动器模板位于 `telemetry/scripts/`, 未纳入 `packages = ["telemetry"]` 的打包范围。从源码仓库执行 `deploy.py` 时可用; 若从 wheel 安装, 该步骤会提示「未找到启动器模板, 跳过」, 命令仍可正常使用 (仅缺少外壳层拦截)。
+
 ## [5.3.0] - 2026-09-10 (多维表格接入公司既有表: schema 自适应 + dry-run + 备份口径修正)
 
 ### Added
