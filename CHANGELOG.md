@@ -48,13 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.4] - 2026-09-10 (变更默认: PEP 668 改为需显式授权的保守策略)
+
+### Changed
+- **[5.4.3] 的「自动绕过」改为「显式授权」**: 上一版识别到 PEP 668 时会自动追加 `--break-system-packages`。这等于由部署脚本替用户决定突破解释器管理方 (uv / 系统 / Homebrew) 划下的边界 —— 不宜作为默认行为。现在**默认不绕过**。
+- **默认行为**: 被拒时打印原因 (含 pip 原报错行) 与开启方式, 随后注入 `.pth` 保证模块可导入, 命令仍由启动器落到 PATH ⇒ **功能照常可用**; 差别只是没有向该解释器登记包元数据 (pip 无法追踪它的升级 / 卸载)。
+- **新增开关** `--allow-break-system-packages` (别名 `--break-system-packages`, 与 pip / uv 同名便于辨识): 显式授权后才原地重试。`deploy.ps1` 对应 `-AllowBreakSystemPackages`; `deploy.bat` 直接透传 `%*`。
+- **自然语言入口同步**: `nlp_deploy.py` 识别「强制安装 / 强制写入 / 允许写入 / 绕过保护」以及字面量 `break-system-packages`, 命中才开启开关; 普通「部署监控」不会开启。命令行显式参数优先。
+- 模块版本 1.5.3 → 1.5.4。
+
+### 验证
+- test_telemetry **36/36 passed** (新增 / 改写 3 项: 默认命令序列不得含逃生开关且必须给出开启指引、显式授权后才重试、自然语言仅在明确表述时开启)。
+- 真机实测 (macOS / uv 托管 Python 3.11.15):
+  - 默认: pip 与 uv 双双被拒 → 打印原因与开启方式 → `.pth` 注入成功 → `medit-telemetry daemon --status` 仍正常返回;
+  - `--allow-break-system-packages`: 「已获授权：追加 --break-system-packages 重试 (pip)...」→ 注册成功, 随后启动器接管。
+- 自然语言实测: 「在新设备上部署监控，花名叫星云」→ 不开启; 「强制安装到系统解释器」/「部署监控 --break-system-packages」→ 开启。
+
 ## [5.4.3] - 2026-09-10 (修复: 部署兼容外部管理的解释器 - PEP 668 / uv)
 
 ### Fixed
 - **uv 托管 / 发行版 / Homebrew 解释器上部署不出命令**: uv 托管的 Python、各发行版自带 Python 与 Homebrew Python 都以 PEP 668 (`externally-managed-environment`) 拒绝常规 `pip install -e`; `uv pip install` 同样拒绝。过去遇到该情况只退回 `.pth` 注入 —— 而 `.pth` **仅解决「模块可导入」, 并不创建 console script**, 于是「命令已就绪」的提示与实际不符, 部署流程末尾打印的那些用法全是摆设。
 - **安装改为四级降级** (`telemetry/deploy.py`):
   1. `pip install -e` (常规路径);
-  2. 识别到 `externally-managed` 特征后追加 `--break-system-packages` 重试 —— 这正是 pip 自己在报错中给出的逃生开关;
+  2. 识别到 `externally-managed` 特征后追加 `--break-system-packages` 重试 —— 这正是 pip 自己在报错中给出的逃生开关; → 已在 [5.4.4] 调整为**需显式授权**才使用;
   3. 解释器根本没有 pip (uv 托管环境常见) 时改用 `uv pip install -e ... --python <解释器> --no-deps --break-system-packages`;
   4. 全部失败才退回 `.pth`, 且**命令改由启动器直接落到 PATH 目录**, 不再出现「装完却没有命令」。
 - **命令落点不再听天由命**: `_launcher_targets()` 在命令不存在时, 挑一个「在 PATH 上且可写」的用户级 bin 目录新建 (POSIX `~/.local/bin`), 而不是退到解释器目录里了事; 装完还会校验该目录是否真在 PATH, 不在就明确提示怎么加。
