@@ -48,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.1.0] - 2026-09-10 (检索指标口径: 按高亮引用清单折算唯一被引文献)
+
+### Changed (指标口径)
+- **telemetry/watcher.py**: 新增 `_collect_reference_records()` 与扫描步骤 1b —— 从「高亮引用清单」折算检索数。数据源优先级: `高亮结果/*_meta.json` (含完整 `reference_field` / `doi` / `pmid`) → `高亮结果清单.tsv` (回退; 该 TSV 的 `reference_field` 会被导出截断, 故仅作兜底)。原先仅从 `*doi_map*.json` / `*inventory*.json` 读取, 导致没有这类清单的项目 (如 RSV) 检索数恒为 0。
+- **口径定义**: 检索数 = **去重后的唯一被引文献数** (重复引用同一篇只计 1 篇), 与"下载/高亮"指标同为唯一文献口径, 也与 `aggregator` 既有去重逻辑 (`doi or url or paper_id`) 对齐; 无 DOI 时以引用串归一化 (忽略大小写与空白) 去重。
+- **telemetry/README.md** / **docs/TELEMETRY_GUIDE.md**: 新增「统计口径 (唯一文献去重)」说明, 明确三项指标的计数口径与数据来源。
+- 模块版本 1.1.1 → 1.2.0。
+
+### 验证
+- test_telemetry 18/18 passed (新增 `test_scanner_retrieval_from_highlight_reference_list` 与 `test_scanner_retrieval_falls_back_to_tsv_list`)
+- RSV 实测: backfill 折算出检索 46 篇 (50 条 Pn-x 记录中含重复引用, 去重后 46 篇唯一文献), 累计节约 20.41h
+- 已知口径边界: 无 DOI 时, 同一文献的不同著录写法 (标点差异、附录后缀等) 可能被计为多条
+
 ## [5.0.1] - 2026-09-10 (medit-telemetry 跨平台修复与 macOS 自启 + README 表格校正)
 
 ### Fixed (medit-telemetry 1.1.0 → 1.1.1)
