@@ -48,6 +48,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.3.0] - 2026-09-10 (多维表格接入公司既有表: schema 自适应 + dry-run + 备份口径修正)
+
+### Added
+- **telemetry/bitable_sync.py**: 目标表 schema 适配层 —— 同步前读取目标表实际字段名, 自动判定是「自建标准表 (15 字段)」还是公司既有「监控数据周报明细」表 (13 字段, 命名与标准表完全不同)。判定取两侧字段命中数较大者且至少命中 3 个, 识别不出时回退标准表并给出原因。
+- **写入映射**: 标准字段名 → 目标表字段名 (`COMPANY_FIELD_MAP`); 目标表没有的列 (成员OpenID / 三个细分工时 / API调用次数) 自动丢弃而不报错。可用 `company_bitable_field_map` 覆盖任意一列。
+- **读取归一化**: 目标表字段名 → 标准字段名 (`normalize_record_fields`), 在线读取与本地备份回退两条路径统一, 因此接入公司表时图表大屏与战报逻辑无需改动。
+- **telemetry/cli.py**: 新增 `bitable --sync --dry-run` —— 只输出 schema 判定依据与将写入的字段, 不提交、不写本地备份; 并新增 `_explain_error()` 把飞书错误码 (99991672 应用缺权限 / SingleSelect 与 Datetime 转换失败 / 字段名不匹配) 翻译成可操作提示。
+- **telemetry/config.py**: 新增 `company_bitable_schema` / `company_bitable_project` / `company_bitable_member` / `company_bitable_field_map` 四个配置键。
+- **telemetry/README.md** / **docs/TELEMETRY_GUIDE.md**: 补充「接入公司既有表 (字段自适应)」说明、四个配置键、`--dry-run` 用法与本地备份口径。
+
+### Fixed
+- **单选字段写库失败 (1254062 SingleSelectFieldConvFail)**: 单选字段必须写字符串, 传数组会被飞书拒绝。此前 payload 直接透传列表导致首次真实写入即失败。
+- **日期字段写库失败 (1254064 DatetimeFieldConvFail)**: 实测该表 datetime 字段只接受毫秒时间戳 —— ISO 字符串无论带不带毫秒、带不带时区均被拒。改由 `_period_start_ms()` 输出周期起始日 00:00 +08:00 的毫秒时间戳。
+- **幂等键写入与查找不一致导致重复新增**: 查找按本机昵称 `Devin`、写入按显示名 `Devin Wei`, 匹配不上于是静默新增了一条重复记录。新增 `_resolve_member()` 使两处取值同源, 并限定该映射只在本机用户上生效, 避免多人场景串号。
+- **本地备份 CSV 表头错位**: `_record_local_csv()` 原样落盘调用方的 payload, 于是 13 列公司数据被追加进 15 列标准表头的同一文件, `csv.DictReader` 回读时列语义全部对错、备份不可信。现固定以标准字段名、固定 15 列 (`BACKUP_FIELDS`) 落盘, 与目标表 schema 无关。
+- **历史错位行修复**: 回读时按列宽识别遗留的 13 列公司行, 用 `COMPANY_PAYLOAD_ORDER` (与写入侧同源) 还原后再反向映射, 而非整行丢弃; 完全无法对齐的脏行才跳过。实测本机 7 行数据中 6 行错位, 修复后正确归位 (标注篇数 / 阅读页数这一对易错项已确认各归各位)。
+- **备份回读重复行**: 备份为追加写, 同一周重复运行会留下多份相同记录, 回退路径因此返回重复数据、把图表放大。现按「周期 + 成员」折叠, 与在线路径的 upsert 语义对齐。
+- **dry-run 有副作用**: 备份写入原先位于 dry_run 判断之前, 每次演练都会向备份追加一行与最终写入不一致的试探数据。现移至真正落库之后。
+- **备注保护未跟随字段改名**: 保护逻辑用字面量 `备注说明` 去 payload 删除, 一旦通过 `company_bitable_field_map` 改名即静默失效, 人工填写的备注会被覆盖。现抽出 `_field_map()` / `_note_field_name()`, 写入与保护共用同一份映射。
+- **兜底时间戳随时区漂移**: `_period_start_ms()` 的异常分支使用不带时区的 `datetime.now()`, 在东八区以外的机器上会偏移出一整天; 现补上 +08:00。
+- 模块版本 1.3.0 → 1.4.0。
+
+### 验证
+- test_telemetry 25/25 passed (新增 `test_bitable_local_backup_is_schema_agnostic` / `test_bitable_dry_run_has_no_side_effect` / `test_bitable_note_protection_follows_custom_field_map`)
+- 真实表格实测 (`hackhealth.feishu.cn` / `tbl6evznoEt4aAD0`): `--sync --dry-run` 判定为 `自动识别 (company; 表内 13 个字段)`, 备份文件 md5 前后一致 (确认无副作用); `--sync` 幂等更新既有记录 `recvuONw2kks7O`, 表内维持 10 条无重复, 人工备注「本机全量监控数据 (RSV/developments/TMA 三目录汇总), 含历史 backfill 补录」原样保留。
+- 前置依赖: 应用需在开发者后台开通 `bitable:app` 并**创建版本后发布** (仅勾选不生效), 这是文档协作者权限之外的另一层; 未开通时返回 99991672。
+
 ## [5.2.0] - 2026-09-10 (检索去重引入 DOI 精确层 + 引用身份保守归并)
 
 ### Changed (指标口径细化)

@@ -1,6 +1,6 @@
 """via54Medit Telemetry Package."""
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 from .models import (
     TaskType,
