@@ -106,7 +106,7 @@ P30-1/
 | 任何级高血压 48% | ✅ | ❌ | ✅ 47.9% (NCT) |
 | ≥3 级高血压 28% | ✅ | ✅ 28% (Abstract) | ❌ |
 | 任何级蛋白尿 20% | ✅ | ❌ | ✅ 21% (NCT) |
-| ≥3 级蛋白尿 5% | ❌ | ✅ 5.7% (NCT SAE) |
+| ≥3 级蛋白尿 5% | ✅ | ❌ | ✅ 5.7% (NCT SAE) |
 
 ## Telemetry & Feishu Automation Module (`medit-telemetry`)
 
