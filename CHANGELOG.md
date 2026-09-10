@@ -48,20 +48,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
-## [5.0.1] - 2026-09-10 (medit-telemetry 跨平台路径修复 + README 表格校正)
+## [5.0.1] - 2026-09-10 (medit-telemetry 跨平台修复与 macOS 自启 + README 表格校正)
 
 ### Fixed (medit-telemetry 1.1.0 → 1.1.1)
 - **telemetry/platform_paths.py** (新增): 跨平台路径解析模块。按 `sys.platform` 给出 TraeWork 应用数据根 (Windows `%APPDATA%` / macOS `~/Library/Application Support` / Linux `$XDG_CONFIG_HOME`), 当前平台优先、其余平台兜底；并扫描 `feishu-bridge` 下任意 workspace 子目录, 换机后槽位号变化仍可命中。
 - **telemetry/config.py**: `TRAE_WORKSPACE_CONFIG` 与 `load_config()` 嗅探改用平台候选链 (原先硬编码 `~\AppData\Roaming\...`, 导致 macOS/Linux 上飞书 app_id/app_secret 永远嗅探不到); 默认 `watch_dirs` 改用 `trae_work_dir()` / `desktop_dir()`, 消除 `~\.trae-cn\work`、`~\Desktop` 反斜杠在 POSIX 下被当作普通字符的问题。
 - **telemetry/feishu_sync.py**: `TRAE_CONFIG_PATH` 改用平台解析。
 - **telemetry/daemon.py**: `get_startup_vbs_path()` 改为返回 `Optional[str]`, 非 Windows 显式返回 `None` (原先返回 `/Users/xxx/\AppData\...` 这类伪路径); `install_startup_vbs` / `uninstall_startup_vbs` / `install_traework_companion_launcher` 增加平台守卫; 伴随启动器路径改用 `desktop_dir()`。
-- **telemetry/cli.py**: `backfill` 扫描目标改用 `desktop_dir()` / `trae_work_dir()`。
-- **tests/test_telemetry.py**: `test_daemon_helpers` 改为平台感知断言; 新增 `test_platform_paths` 覆盖三平台根路径、候选链与默认监控目录反斜杠检查。
+- **telemetry/cli.py**: `backfill` 扫描目标改用 `desktop_dir()` / `trae_work_dir()`; `daemon --install-startup` / `--uninstall-startup` 改为按平台分派。
+- **telemetry/watcher.py**: 修正高亮产物识别 —— 原先只认 `*_highlight.pdf` 命名, 导致 RSV 的 `高亮结果/*.pdf` (50 篇) 全部漏记; 新增该布局及 `*/高亮结果/*.pdf` 的识别, 标注数改为优先读同级 `*_verify.json`、否则用 PyMuPDF 数 PDF 内真实标注 (不再回退到固定值臆测)。
+- **tests/test_telemetry.py**: `test_daemon_helpers` 改为平台感知断言; 新增 `test_platform_paths` (三平台根路径/候选链/反斜杠检查)、`test_launchd_agent_paths`、`test_scanner_recognizes_chinese_highlight_dir`。
 - **README.md**: 修复「数据互补对照」表中 `≥3 级蛋白尿 5%` 行缺列 (4 列表头写成 3 列, v5.0.0 误删一格); 依 `skills/via54medit-anno2ppt-pitfalls-2026-08/references/dual-source-architecture.md` 与 `skills/via54medit-architecture-honest-status/references/v4.1-dual-source-architecture.md` 两份双源参考表恢复为 `PPT 需求 ✅ / main ❌ / fallback ✅ 5.7% (NCT SAE)`。
 
+### Added (macOS 开机自启)
+- **telemetry/daemon.py**: 新增 `install_launchd_agent()` / `uninstall_launchd_agent()` / `get_launchd_status()` —— 生成 `~/Library/LaunchAgents/com.via54medit.telemetry.plist` 并 `launchctl bootstrap` (失败回退 `load -w`); `RunAtLoad` + `KeepAlive` 让守护服务登录后常驻、异常退出自动拉起; 注册前先停掉手工启动的游离实例, 避免双跑。
+- **telemetry/deploy.py**: 步骤 4 与卸载流程接入 macOS 分支, 部署概览显示 LaunchAgent 状态 (原先该步骤在非 Windows 平台直接跳过)。
+
 ### 验证
-- test_telemetry 14/14 passed (原 13 + 新增 1); telemetry 全 16 模块 import 通过; `medit-telemetry config` 正常读取 3 个监控目录
+- test_telemetry 16/16 passed (原 13 + 新增 3); telemetry 全 16 模块 import 通过; `medit-telemetry config` 正常读取 3 个监控目录
 - macOS 实测: 飞书凭据嗅探命中 `~/Library/Application Support/TRAE SOLO CN/.../channel_config.json`, 解析出 app_id / app_secret / open_id / bot_name
+- macOS 实测: LaunchAgent 已加载且 `state = running` (PID 79366), 守护心跳正常
+- backfill 实测 (修复扫描器后): RSV 补录 高亮 50 篇 / 977 页、下载 215 篇, 累计节约 9.51h
 
 ## [5.0.0] - 2026-09-10 (medit-telemetry v1.1.0 独立模块发布)
 
