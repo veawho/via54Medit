@@ -5,11 +5,91 @@ All notable changes to via54Medit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+**版本号说明**: 本仓库有两套编号 —— CHANGELOG 用内部版本号 (4.x / 5.x), GitHub Releases 另用公开发布号。早期两者不同轨, 2026-09 起已对齐。
 
+| 公开 Release | 内部版本 | 日期 | 说明 |
+| --- | --- | --- | --- |
+| `v5.0.0` | 5.0.0 | 2026-09-10 | medit-telemetry v1.1.0 独立模块发布 |
+| `v4.9.0` | 4.9.0 | 2026-09-06 | Step5 视觉双对齐终版 + 文献高亮复核闭环 |
+| `v1.0.0` | 4.5.x (同期内部号) | 2026-07-03 | 首次公开稳定版: Medical RAG Agent & Multi-Agent MCP Server |
 
+## [Unreleased]
 
+### Phase 5.0 升级 (2026-06-30) — 双模式医药决策平台
+> **触发**: 用户提交 TalkMED AgentPilot 7 页 PDF 报告 (123.pdf), 要求融合 EBM 学术 + 商业医药情报 + TalkMED 类报告生成 3 个方向
+> **状态**: 架构升级草稿完成, 等用户拍板
 
+#### Added
+- `integrations/CATALOG.md` — **115+ 数据源全景目录** (EBM 55+ + 商业 60+)
+- `integrations/clinicaltrials_v2.md` — ClinicalTrials.gov v2 P0 集成计划
+- `integrations/openfda.md` — OpenFDA P0 集成计划 (14 tools MCP)
+- `integrations/sec_edgar.md` — SEC EDGAR P0 集成计划 (TalkMED 财报核心)
+- `integrations/europe_pmc.md` — Europe PMC P0 集成计划
+- `integrations/medrxiv_biorxiv.md` — 预印本 P0 集成计划
+- `integrations/fda_orange_book.md` — Orange Book P0 集成计划 (专利+独占期)
+- `integrations/chembl_pubchem.md` — ChEMBL/PubChem P0 集成计划 (化学实体)
+- `integrations/dailymed.md` — DailyMed P0 集成计划 (药物标签)
+- `integrations/pubtator3.md` — PubTator 3.0 P0 集成计划 (NLP 实体)
+- `integrations/aha_acc_eas.md` — AHA/ACC/EAS 会议摘要 P1 集成计划 (TalkMED §4 直接相关)
+- `docs/ARCHITECTURE-V5.md` — v5.0 双模式架构升级草案 (6 层 + 双模式路由)
 
+#### Changed
+- 项目定位: 单模式 EBM 路由器 → **双模式医药决策平台** (EBM 学术 + 商业情报)
+- 架构: 5 层 → **6 层 + 双模式路由** (Layer 4A EBM / Layer 4B 商业)
+- CLI: 13 子命令 → **18 子命令** (+5 商业: intel/market/pipeline/patent/trial)
+- MCP: 4 tools → **7 tools** (+3 商业: medit_intel/medit_market/medit_pipeline)
+- 数据源: 4 现存 → **16 P0** (10 学术 + 12 商业 - 6 重复)
+
+#### Methodology
+- **Subagent #1 (EBM 方向)**: 扫描 GitHub biocontext-ai/registry (60+ MCP) + awesome-evidence-synthesis, 找到 55+ 学术源 + genomoncology/biomcp 超级 MCP (MIT, 12+ 实体类别, 应当借鉴)
+- **Subagent #2 (商业方向)**: 扫描 9 类商业源 (销售/管线/专利/财报/报告/会议/BD), 找到 60+ 商业源 + TalkMED PDF 反推 7 页报告需哪些源
+- **整合**: CATALOG.md + 10 个 P0 集成计划 .md (1-3 天工作量/源)
+
+#### Reference
+- TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
+
+## [5.0.1] - 2026-09-10 (medit-telemetry 跨平台路径修复 + README 表格校正)
+
+### Fixed (medit-telemetry 1.1.0 → 1.1.1)
+- **telemetry/platform_paths.py** (新增): 跨平台路径解析模块。按 `sys.platform` 给出 TraeWork 应用数据根 (Windows `%APPDATA%` / macOS `~/Library/Application Support` / Linux `$XDG_CONFIG_HOME`), 当前平台优先、其余平台兜底；并扫描 `feishu-bridge` 下任意 workspace 子目录, 换机后槽位号变化仍可命中。
+- **telemetry/config.py**: `TRAE_WORKSPACE_CONFIG` 与 `load_config()` 嗅探改用平台候选链 (原先硬编码 `~\AppData\Roaming\...`, 导致 macOS/Linux 上飞书 app_id/app_secret 永远嗅探不到); 默认 `watch_dirs` 改用 `trae_work_dir()` / `desktop_dir()`, 消除 `~\.trae-cn\work`、`~\Desktop` 反斜杠在 POSIX 下被当作普通字符的问题。
+- **telemetry/feishu_sync.py**: `TRAE_CONFIG_PATH` 改用平台解析。
+- **telemetry/daemon.py**: `get_startup_vbs_path()` 改为返回 `Optional[str]`, 非 Windows 显式返回 `None` (原先返回 `/Users/xxx/\AppData\...` 这类伪路径); `install_startup_vbs` / `uninstall_startup_vbs` / `install_traework_companion_launcher` 增加平台守卫; 伴随启动器路径改用 `desktop_dir()`。
+- **telemetry/cli.py**: `backfill` 扫描目标改用 `desktop_dir()` / `trae_work_dir()`。
+- **tests/test_telemetry.py**: `test_daemon_helpers` 改为平台感知断言; 新增 `test_platform_paths` 覆盖三平台根路径、候选链与默认监控目录反斜杠检查。
+- **README.md**: 修复「数据互补对照」表中 `≥3 级蛋白尿 5%` 行缺列 (4 列表头写成 3 列, v5.0.0 误删一格); 依 `skills/via54medit-anno2ppt-pitfalls-2026-08/references/dual-source-architecture.md` 与 `skills/via54medit-architecture-honest-status/references/v4.1-dual-source-architecture.md` 两份双源参考表恢复为 `PPT 需求 ✅ / main ❌ / fallback ✅ 5.7% (NCT SAE)`。
+
+### 验证
+- test_telemetry 14/14 passed (原 13 + 新增 1); telemetry 全 16 模块 import 通过; `medit-telemetry config` 正常读取 3 个监控目录
+- macOS 实测: 飞书凭据嗅探命中 `~/Library/Application Support/TRAE SOLO CN/.../channel_config.json`, 解析出 app_id / app_secret / open_id / bot_name
+
+## [5.0.0] - 2026-09-10 (medit-telemetry v1.1.0 独立模块发布)
+
+> Tag `v5.0.0` (commit `407418d`): via54Medit 文献整理与 Highlight 监控统计独立模块 — 支持跨设备一句话部署、100% 服务商 Token 对齐、飞书多维表格全自动同步与团队可视化图表报告。
+
+### Added (telemetry 独立模块)
+- **telemetry/ (新)**: 独立可分发包 (22 个文件), 含 `setup.py` / `pyproject.toml` / `cli.py`, 注册全局命令 `medit-telemetry` / `traework-telemetry`。
+- **一句话独立部署**: `deploy.ps1` (PowerShell, Windows 首选) / `deploy.py` (跨平台 Python) / `deploy.bat` (CMD) 三种入口; 集成开机静默自启、桌面伴生启动器与后台守护进程。
+- **自然语言部署引擎** `nlp_deploy.py`: 从一句话中提取花名、OpenID、周报/月报排程与多维表格链接, 落地为 `~/.medit/telemetry_config.json`。
+- **Token 100% 控制台对齐** `token_tracker.py`: 拦截大模型 API 真实 `usage` 账单入库, 杜绝估算虚高; 无真实外呼一律计 0。
+- **真实物理页数与文献去重** `pdf_utils.py`: `pypdf` → `fitz` → 原生二进制 `/Count` 三重降级解析, 离线环境亦可正确统计。
+- **飞书多维表格团队同步** `bitable_sync.py`: 自动创建或绑定 Bitable Base, 15 个标准化字段 + 幂等 Upsert 写入。
+- **团队图表报告** `chart_reporter.py`: 汇总全员战报, 生成飞书 Top 5 人效排行卡片与 HTML 可视化交互大屏。
+- **后台守护与调度** `daemon.py` + `watcher.py`: 监控目录轮询、心跳落盘、周报/月报定时推送。
+- **.agents/skills/medit-telemetry-deploy/SKILL.md**: 供智能体直接调用的跨设备一句话部署技能。
+- **docs/TELEMETRY_DEPLOY.md** / **docs/TELEMETRY_GUIDE.md**: 部署手册与使用指南。
+- **Makefile**: 新增 `telemetry-deploy` / `telemetry-install` / `telemetry-status` / `telemetry-test` 四个目标。
+- **tests/test_telemetry.py**: 13 项单元测试。
+
+### Changed (接入与文档)
+- **scripts/via54.py**: 新增 `telemetry` 子命令入口 (转发至 `telemetry.cli`), 并将项目根加入 `sys.path` 以便导入。
+- **scripts/via54_auto.py**: 识别「部署/安装 + 监控/telemetry/飞书同步」自然语言意图后, 自动执行独立部署。
+- **scripts/glm_vision.py** / **scripts/hl_v3_final/vision_check.py**: 接入 `token_tracker`, 分别记录 zhipu 与 sensenova / minimax / zhipu 三路视觉调用的真实 usage。
+- **README.md** / **README.zh-CN.md**: 新增 Telemetry 模块章节与单行部署示例。
+- **.gitignore**: 忽略 `*.egg-info/` 与 `build/`。
+
+### 验证
+- tests/test_telemetry.py 13/13 passed
 
 ## [4.9.0] - 2026-09-07 (step5 真·视觉双对齐终版 + 文献高亮复核闭环)
 
@@ -144,232 +224,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 仓库与 skill 侧工具链 diff 一致
 - TMA 交付基线: 106 Pn-x 高亮 1325/1325 像素验证, 90 合并目录, 142 URL 0 失效
 
-## [4.5.5] - 2026-06-30 (可重放性文档 + 3 个规则)
-
-### Added
-- **docs/PROCESS.md** (8.5KB): 商业市场报告生成流程 5 步, 80-150min/报告, 100% 可重放
-- **docs/SOLUTION.md** (10.8KB): v5.0 商业报告生成解决方案 5 层架构 + 8 核心组件 + 5 技术决策
-- **docs/REPRODUCIBILITY.md** (5.5KB): 8 条铁律 (文档先行 / 自包含 / 可重放 / Git 规范 / 设备记录 / 模板验证 / 不增付费 / 旧设备兼容)
-
-### 铁律 (8 条)
-- 文档先行 → 改代码前先改文档
-- 自包含测试 → 跨 OS / Python 验证
-- 可重放 → 任何设备 ≤ 2 小时
-- Git 提交含 `[reproducibility-test]` tag
-- 模板改动需 validate_report.py + 用户验收
-- 数据源不增付费 (锁决策 4)
-- 旧设备兼容 (Python 3.9+)
-
-### 测试设备
-- WTG Windows 11 (Python 3.11.4, Edge 126)
-- MacBook M2 / Ubuntu 24.04 (待测)
-## [4.5.4] - 2026-06-30 (v5.0 商业情报第 1 份样本报告)
-
-### Added
-- **market-reports/** 目录: v5.0 商业情报 (intel) 模式产出
-- **gout-2026-q2.html** (66KB): 痛风药物市场前瞻性分析 (TalkMED AgentPilot 风格)
-  - 7 章节 + 8 SVG 图表 + 4 数据洞察 + 3 投资判断 + 3 风险
-  - 2023-2026 数据 (2026 优先, 11 数据源)
-  - 通过用户测试 (OK, 16:18)
-- **docs/MARKET-REPORTS.md**: 报告索引 + 模板 + 数据源优先级
-- 验证 v5.0 商业模式 (`medit intel` + market-reports/) 端到端可用
-
-### v5.0 商业模式 (intel) 集成状态
-- 数据源集成: 6 P0 商业源 (openfda, pubtator3, dailymed, europe_pmc, medrxiv, clinicaltrials_v2)
-- 报告生成器: TalkMED AgentPilot 风格 (7 页 HTML)
-- 数据源: 11 (Coherent, FMI, Data Bridge, Grand View, Takeda, Amgen, CPA, CRA, Evaluate, CT.gov, FDA Orange Book)
-- 验证: 痛风报告 (2026-06-30) ✓
-## [4.5.3] - 2026-06-30 (final v5.0 spec lock - 用户确认全默认)
-
-### Decision Lock (用户 ~16:00 TG "全默认")
-10 个默认决策全部确认:
-- **1.1 (3.1)**: A - 新程序 medit-intel (跟学术分开)
-- **1.2 (3.2)**: B - 共用核心代码 (1 仓 2 binary)
-- **1.3 (3.3)**: A - 1 个 medit-mcp (双模式)
-- **1.4 (3.4)**: A - 1 个 config.yaml (双 mode)
-- **1.5 (3.5)**: B - v5.0 学术 + v5.5 商业 (稳)
-- **2.1 (6.1)**: B - MCP 协议调用 (via54Medit 作 client)
-- **2.2 (6.2)**: B - 每月自动 git sync
-- **2.3 (6.3)**: B - 60% biomcp + 40% 自写
-- **2.4 (6.4)**: A - MIT + AGPL 兼容
-- **2.5 (6.5)**: A - biomcp 独立 server
-
-### 状态
-- **5 决策点全锁** (1+2+3+4+5+6 = 6 个用户决策, 4+5 重复, 实际 5 决策点)
-- **v5.0 spec complete**: ARCHITECTURE-V5-DRAFT.md 升为 ARCHITECTURE-V5.md
-- **CATALOG.md 109+ 源** (115 - 16 付费 = 99, 加 subagent #2 找到的额外)
-- **DECISIONS-PENDING.md 关闭** (所有决策已答)
-
-### Todo for v5.0 → v5.5
-1. v5.0: 学术模式 (EBM) 完整发布
-   - 加 6 P0 EBM 源 (clinicaltrials_v2, europe_pmc, medrxiv, openfda, dailymed, pubtator3)
-   - biomcp MCP client 集成 (60% 覆盖)
-   - 保持 medit ask 兼容
-2. v5.5: 商业模式 (intel) 完整发布
-   - 加 6 P0 商业源 (药智/医药魔方/OpenFDA/PDB/CDE/PharnexCloud)
-   - TalkMED 7 页 PDF 生成器
-   - medit-intel 新 binary
-3. v6.0: 双模式融合 + biomcp 100% 覆盖
-## [4.5.2.1] - 2026-06-30 (重写通俗版)
-
-### Changed
-- DECISIONS-PENDING.md 重写为通俗版 (大白话 + 表格, 不用技术术语)
-- 之前版本太技术 (binary/MCP/layer 等), 用户看不懂, 现重写
-
-## [4.5.2] - 2026-06-30 (decision lock round 2)
-
-### Decision Lock (用户 ~15:50 TG 决策)
-- **2. 暂时不变** = 12 P0 源列表保留 (EBM 6 + 商业 6, TalkMED 7 页 PDF 需求)
-- **3. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
-- **6. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
-
-### Total
-- 已锁: 决策 1 (架构), 2 (P0 源), 4 (付费源 = 0)
-- 待补: 决策 3 (CLI 隔离), 5 (锁定 ✅), 6 (biomcp 集成)
-- 实际 5 个决策点 (§8) 中 2/3/5/6 待补, 5 已锁=4 一致
-## [4.5.1] - 2026-06-30 (decision lock)
-
-### Decision Lock (用户 15:42 TG 决策)
-- **1. 暂不调整** = 接受现状, 双模式 EBM 学术 + 商业情报架构保留
-- **4. 不适用付费源** = 排除所有付费源 (Frost/Grand View/Citeline/GlobalData/AdisInsight/BioCentury/Endpoints/STAT/PharmCube 交易库/Bloomberg/WiseGuy/Statista/Huaon/Menet/PharnexCloud 等)
-- **2/3/5/6. 决策需更多细节** = 暂搁, 等用户补决策
-
-### Changed
-- CATALOG.md P3 商业授权表 + 商业情报 P1/P2 表格标 ~~删除线~~ (排除付费)
-- CHANGELOG 锁决策: 不接付费源
-- ARCHITECTURE-V5-DRAFT.md §8 决策点 4 (商业付费源预算) 锁: 不接付费
-
-### Total
-- EBM 学术: 52+ 免费源 (保留)
-- 商业情报: 16+ P0 全部免费/开源 (保留)
-- 商业付费源: **0** (排除, 决策 4)
-## [4.5.0] - 2026-06-29
-
-### Added
-- integrations/ 目录: 6 个高星医学文献项目 (local-deep-research, paper-search-mcp, MetaScreener, asreview, pubmed_parser, pyalex)
-- integrations/paper-search-mcp.md: 集成计划 (3 个新 MCP tools)
-- REFERENCES.md: 6 个高星项目
-
-### Changed
-- 升级 v4.0 -> v4.5
-- 从 "4 MCP tools" -> "7 MCP tools planned"
-## [4.0 -> 4.5] - 2026-06-29
-
-- Upgrade to v4.5 - integrate local-deep-research 8.6K patterns
-- Plan: paper-search-mcp 2K integration (we have MCP, they have search)
-- Plan: MetaScreener 1.3K PDF full-text screening
-- Plan: asreview 937 active learning
-
-## [Unreleased]
-
-### Phase 5.0 升级 (2026-06-30) — 双模式医药决策平台
-> **触发**: 用户提交 TalkMED AgentPilot 7 页 PDF 报告 (123.pdf), 要求融合 EBM 学术 + 商业医药情报 + TalkMED 类报告生成 3 个方向
-> **状态**: 架构升级草稿完成, 等用户拍板
-
-#### Added
-- `integrations/CATALOG.md` — **115+ 数据源全景目录** (EBM 55+ + 商业 60+)
-- `integrations/clinicaltrials_v2.md` — ClinicalTrials.gov v2 P0 集成计划
-- `integrations/openfda.md` — OpenFDA P0 集成计划 (14 tools MCP)
-- `integrations/sec_edgar.md` — SEC EDGAR P0 集成计划 (TalkMED 财报核心)
-- `integrations/europe_pmc.md` — Europe PMC P0 集成计划
-- `integrations/medrxiv_biorxiv.md` — 预印本 P0 集成计划
-- `integrations/fda_orange_book.md` — Orange Book P0 集成计划 (专利+独占期)
-- `integrations/chembl_pubchem.md` — ChEMBL/PubChem P0 集成计划 (化学实体)
-- `integrations/dailymed.md` — DailyMed P0 集成计划 (药物标签)
-- `integrations/pubtator3.md` — PubTator 3.0 P0 集成计划 (NLP 实体)
-- `integrations/aha_acc_eas.md` — AHA/ACC/EAS 会议摘要 P1 集成计划 (TalkMED §4 直接相关)
-- `docs/ARCHITECTURE-V5-DRAFT.md` — v5.0 双模式架构升级草案 (6 层 + 双模式路由)
-
-#### Changed
-- 项目定位: 单模式 EBM 路由器 → **双模式医药决策平台** (EBM 学术 + 商业情报)
-- 架构: 5 层 → **6 层 + 双模式路由** (Layer 4A EBM / Layer 4B 商业)
-- CLI: 13 子命令 → **18 子命令** (+5 商业: intel/market/pipeline/patent/trial)
-- MCP: 4 tools → **7 tools** (+3 商业: medit_intel/medit_market/medit_pipeline)
-- 数据源: 4 现存 → **16 P0** (10 学术 + 12 商业 - 6 重复)
-
-#### Methodology
-- **Subagent #1 (EBM 方向)**: 扫描 GitHub biocontext-ai/registry (60+ MCP) + awesome-evidence-synthesis, 找到 55+ 学术源 + genomoncology/biomcp 超级 MCP (MIT, 12+ 实体类别, 应当借鉴)
-- **Subagent #2 (商业方向)**: 扫描 9 类商业源 (销售/管线/专利/财报/报告/会议/BD), 找到 60+ 商业源 + TalkMED PDF 反推 7 页报告需哪些源
-- **整合**: CATALOG.md + 10 个 P0 集成计划 .md (1-3 天工作量/源)
-
-#### Reference
-- TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
-
-### Phase 0 (2026-06-09)
-
-#### Added
-- 项目初始化
-  - `docs/ARCHITECTURE.md` — 5 层架构 + 20 节设计文档
-  - `AGENTS.md` — 跨 AI 工具协作规约
-  - `README.md` / `README.zh-CN.md` — 中英双语文档
-  - `LICENSE-AGPL-3.0` / `LICENSE-MIT` — 双许可
-  - 完整目录树 (22 个子目录)
-  - Go module: `github.com/veawho/via54Medit`
-  - Cargo workspace (rust/)
-  - 4 个空接口 (Source / Embedder / VectorStore / Enricher)
-  - `medit version` 可跑
-  - GitHub 私库: github.com/veawho/via54Medit
-
-### Phase 0 修订 (2026-06-24)
-
-#### Changed
-- **架构决策**: via54Design 强制依赖 → **可选借鉴** (走 ARCHITECTURE §17.3 路径 ② hand-roll)
-- **新增铁律**: `git clone && go build` 必须 100% 成功,0 外部业务依赖 (ARCHITECTURE §21)
-- **AGENTS.md 关键约束**: 新增第 7 条"不依赖任何私有仓库"
-- **README.md 致谢段**: via54Design 改为"借鉴接口设计,实现独立"
-- **configs/default.yaml**: 头部加修订说明
-- **gofmt**: 2 个未格式化文件落地
-- **单元测试**: 新增 8 cases (pkg/types 4 + internal/version 4)
-- **git tag**: `phase0-done` annotated tag 落地
-
-#### Closed (ARCHITECTURE §19 开放问题 6 条全部拍板)
-- §19.1 命名空间: 维持 via54Medit (module) / medit (CLI)
-- §19.2 MCP 工具数: 维持 4 个,本地查询走 CLI
-- §19.3 GRADE 评级: 走简化版,完整版 v0.5 评估
-- §19.4 Web UI: 不做,MCP 路径覆盖
-- §19.5 Windows 安装包: zip + scoop/winget,不做 MSI
-- §19.6 GitHub 公开: 维持 private,Phase 5 再开
-
-[Unreleased]: https://github.com/veawho/via54Medit/compare/v0.0.0...HEAD
-
-## [4.5.6] - 2026-08-12 (macOS EPIPE 根因修复 + ROADMAP 同步)
-
-### Fixed
-- **macOS "7890 死代理" EPIPE 根因修复** (`scripts/fix-proxy.sh`)
-  - 根因: macOS Ethernet 接口配置 HTTP/HTTPS 代理 = `127.0.0.1:7890`,
-    但 7890 没有进程在 LISTEN (死代理). 走系统代理的所有 HTTPS 流量
-    在 Node.js 拿 `Cannot connect to API: write EPIPE`.
-  - 修复: 代理指向 Clash 实际端口 `127.0.0.1:14122`
-  - `scripts/fix-proxy.sh` 检测+自动修复, 配 `launchd` plist 自动恢复.
-- **`medit version` 子命令缺失** (`cmd/medit/commands/root.go`)
-  - ROADMAP Phase 0 标的 "medit version 可跑" 但实际只有 `--version` flag.
-  - 加 `versionCmd` 子命令, 走 `version.Full()` 输出 5 字段
-    (commit / build date / go version / license / repo).
-  - `bin/medit` 重新编译, `bin/medit-mcp` 同步.
-
-### Changed
-- **ROADMAP 复选框同步** (`docs/ROADMAP.md`)
-  - 勾选 32 项已实际完成 (Phase 1-4 大部分子项):
-    - `internal/source/{antfu,pubmed,openalex,s2}.go`
-    - `internal/router/{pico,grade,router}.go`
-    - `internal/enrich/*.go`
-    - `internal/anno2ppt/*.go`
-    - `cmd/medit-mcp/*` (4 工具)
-    - `Makefile` + `.goreleaser.yaml`
-  - 实际 `go test ./...` 25 包全 ok, 命令实测 15+ 个.
-- **`internal/anno2ppt/dual_source.go` TODO 重整理**
-  - 旧 TODO 注释里 "scripts/nct_fetcher.py 已存在" 不符, 实际未建.
-  - 改成 "已沉淀" (5 项 ✓) + "后续 Phase 5+ TODO" (3 项, 带 P2 优先级).
-
-### Added
-- **`scripts/fix-proxy.sh`** (2646 bytes) — macOS 代理自动修复脚本
-  - 检查 `7890 NOT LISTEN` 状态
-  - 切代理到实际在跑的 `14122`
-  - 三种模式: 默认(检查+修) / `--check` / `--status`
-  - 配套 `~/Library/LaunchAgents/com.via54.fix-proxy.plist` 开机自动跑
-
-[Unreleased]: https://github.com/veawho/via54Medit/compare/v0.0.0...HEAD
-
 ## [4.5.7] - 2026-08-13 (GLM 集成 + TMA 108/108 + fix-proxy 测试模式)
 
 ### Added
@@ -411,3 +265,215 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 61 commits 待 push 到 github.com/veawho/via54Medit
 - 跑 `cd via54Medit && git push origin main` 在网络恢复后
 
+## [4.5.6] - 2026-08-12 (macOS EPIPE 根因修复 + ROADMAP 同步)
+
+### Fixed
+- **macOS "7890 死代理" EPIPE 根因修复** (`scripts/fix-proxy.sh`)
+  - 根因: macOS Ethernet 接口配置 HTTP/HTTPS 代理 = `127.0.0.1:7890`,
+    但 7890 没有进程在 LISTEN (死代理). 走系统代理的所有 HTTPS 流量
+    在 Node.js 拿 `Cannot connect to API: write EPIPE`.
+  - 修复: 代理指向 Clash 实际端口 `127.0.0.1:14122`
+  - `scripts/fix-proxy.sh` 检测+自动修复, 配 `launchd` plist 自动恢复.
+- **`medit version` 子命令缺失** (`cmd/medit/commands/root.go`)
+  - ROADMAP Phase 0 标的 "medit version 可跑" 但实际只有 `--version` flag.
+  - 加 `versionCmd` 子命令, 走 `version.Full()` 输出 5 字段
+    (commit / build date / go version / license / repo).
+  - `bin/medit` 重新编译, `bin/medit-mcp` 同步.
+
+### Changed
+- **ROADMAP 复选框同步** (`docs/ROADMAP.md`)
+  - 勾选 32 项已实际完成 (Phase 1-4 大部分子项):
+    - `internal/source/{antfu,pubmed,openalex,s2}.go`
+    - `internal/router/{pico,grade,router}.go`
+    - `internal/enrich/*.go`
+    - `internal/anno2ppt/*.go`
+    - `cmd/medit-mcp/*` (4 工具)
+    - `Makefile` + `.goreleaser.yaml`
+  - 实际 `go test ./...` 25 包全 ok, 命令实测 15+ 个.
+- **`internal/anno2ppt/dual_source.go` TODO 重整理**
+  - 旧 TODO 注释里 "scripts/nct_fetcher.py 已存在" 不符, 实际未建.
+  - 改成 "已沉淀" (5 项 ✓) + "后续 Phase 5+ TODO" (3 项, 带 P2 优先级).
+
+### Added
+- **`scripts/fix-proxy.sh`** (2646 bytes) — macOS 代理自动修复脚本
+  - 检查 `7890 NOT LISTEN` 状态
+  - 切代理到实际在跑的 `14122`
+  - 三种模式: 默认(检查+修) / `--check` / `--status`
+  - 配套 `~/Library/LaunchAgents/com.via54.fix-proxy.plist` 开机自动跑
+
+## [1.0.0] - 2026-07-03 (首次公开稳定版 Release: Medical RAG Agent & Multi-Agent MCP Server)
+
+> 公开 Release 号 `v1.0.0`, 指向提交 `1b0354a`; 同期内部版本号为 4.5.x (编号不同轨, 对照见文首「版本号说明」)。
+
+### Published
+- GitHub Release `v1.0.0` 于 2026-07-03 正式发布 (published, 非 draft/prerelease), 发布说明所列四项亮点:
+  - **多源医学检索 RAG 路由** — 自述贯通 PubMed / ChEMBL / ClinicalTrials.gov / Europe PMC / Reactome
+  - **标准化 MCP Server** — 向任何 Model Context Protocol 兼容宿主客户端暴露医学库检索工具
+  - **PICO & GRADE 评估框架** — 按系统综述结构做临床文献评价
+  - **smoke test 套件全绿** — 校验编译器健康度 / API 时延 / 数据格式一致性
+
+### 备注 (发布说明 ≠ 实际交付范围)
+- 上述五类数据源中, 截至该发布仅有 **PubMed** 落地 (`internal/source/pubmed.go`);
+  ChEMBL / ClinicalTrials.gov / Europe PMC / Reactome 在代码中**并不存在**, 当时仍属 P0 集成计划
+  (见 [Unreleased] Phase 5.0 与 [4.5.5])。本条目按 Release 原文如实记录, 不代表五源均已交付。
+
+## [4.5.5] - 2026-06-30 (可重放性文档 + 3 个规则)
+
+### Added
+- **docs/PROCESS.md** (8.5KB): 商业市场报告生成流程 5 步, 80-150min/报告, 100% 可重放
+- **docs/SOLUTION.md** (10.8KB): v5.0 商业报告生成解决方案 5 层架构 + 8 核心组件 + 5 技术决策
+- **docs/REPRODUCIBILITY.md** (5.5KB): 8 条铁律 (文档先行 / 自包含 / 可重放 / Git 规范 / 设备记录 / 模板验证 / 不增付费 / 旧设备兼容)
+
+### 铁律 (8 条)
+- 文档先行 → 改代码前先改文档
+- 自包含测试 → 跨 OS / Python 验证
+- 可重放 → 任何设备 ≤ 2 小时
+- Git 提交含 `[reproducibility-test]` tag
+- 模板改动需 validate_report.py + 用户验收
+- 数据源不增付费 (锁决策 4)
+- 旧设备兼容 (Python 3.9+)
+
+### 测试设备
+- WTG Windows 11 (Python 3.11.4, Edge 126)
+- MacBook M2 / Ubuntu 24.04 (待测)
+
+## [4.5.4] - 2026-06-30 (v5.0 商业情报第 1 份样本报告)
+
+### Added
+- **market-reports/** 目录: v5.0 商业情报 (intel) 模式产出
+- **gout-2026-q2.html** (66KB): 痛风药物市场前瞻性分析 (TalkMED AgentPilot 风格)
+  - 7 章节 + 8 SVG 图表 + 4 数据洞察 + 3 投资判断 + 3 风险
+  - 2023-2026 数据 (2026 优先, 11 数据源)
+  - 通过用户测试 (OK, 16:18)
+- **docs/MARKET-REPORTS.md**: 报告索引 + 模板 + 数据源优先级
+- 验证 v5.0 商业模式 (`medit intel` + market-reports/) 端到端可用
+
+### v5.0 商业模式 (intel) 集成状态
+- 数据源集成: 6 P0 商业源 (openfda, pubtator3, dailymed, europe_pmc, medrxiv, clinicaltrials_v2)
+- 报告生成器: TalkMED AgentPilot 风格 (7 页 HTML)
+- 数据源: 11 (Coherent, FMI, Data Bridge, Grand View, Takeda, Amgen, CPA, CRA, Evaluate, CT.gov, FDA Orange Book)
+- 验证: 痛风报告 (2026-06-30) ✓
+
+## [4.5.3] - 2026-06-30 (final v5.0 spec lock - 用户确认全默认)
+
+### Decision Lock (用户 ~16:00 TG "全默认")
+10 个默认决策全部确认:
+- **1.1 (3.1)**: A - 新程序 medit-intel (跟学术分开)
+- **1.2 (3.2)**: B - 共用核心代码 (1 仓 2 binary)
+- **1.3 (3.3)**: A - 1 个 medit-mcp (双模式)
+- **1.4 (3.4)**: A - 1 个 config.yaml (双 mode)
+- **1.5 (3.5)**: B - v5.0 学术 + v5.5 商业 (稳)
+- **2.1 (6.1)**: B - MCP 协议调用 (via54Medit 作 client)
+- **2.2 (6.2)**: B - 每月自动 git sync
+- **2.3 (6.3)**: B - 60% biomcp + 40% 自写
+- **2.4 (6.4)**: A - MIT + AGPL 兼容
+- **2.5 (6.5)**: A - biomcp 独立 server
+
+### 状态
+- **5 决策点全锁** (1+2+3+4+5+6 = 6 个用户决策, 4+5 重复, 实际 5 决策点)
+- **v5.0 spec complete**: ARCHITECTURE-V5-DRAFT.md 升为 ARCHITECTURE-V5.md
+- **CATALOG.md 109+ 源** (115 - 16 付费 = 99, 加 subagent #2 找到的额外)
+- **DECISIONS-PENDING.md 关闭** (所有决策已答)
+
+### Todo for v5.0 → v5.5
+1. v5.0: 学术模式 (EBM) 完整发布
+   - 加 6 P0 EBM 源 (clinicaltrials_v2, europe_pmc, medrxiv, openfda, dailymed, pubtator3)
+   - biomcp MCP client 集成 (60% 覆盖)
+   - 保持 medit ask 兼容
+2. v5.5: 商业模式 (intel) 完整发布
+   - 加 6 P0 商业源 (药智/医药魔方/OpenFDA/PDB/CDE/PharnexCloud)
+   - TalkMED 7 页 PDF 生成器
+   - medit-intel 新 binary
+3. v6.0: 双模式融合 + biomcp 100% 覆盖
+
+## [4.5.2.1] - 2026-06-30 (重写通俗版)
+
+### Changed
+- DECISIONS-PENDING.md 重写为通俗版 (大白话 + 表格, 不用技术术语)
+- 之前版本太技术 (binary/MCP/layer 等), 用户看不懂, 现重写
+
+## [4.5.2] - 2026-06-30 (decision lock round 2)
+
+### Decision Lock (用户 ~15:50 TG 决策)
+- **2. 暂时不变** = 12 P0 源列表保留 (EBM 6 + 商业 6, TalkMED 7 页 PDF 需求)
+- **3. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
+- **6. 信息太少无法决策** = 待用户补细节. 已展开成 5 明确问题 (见 DECISIONS-PENDING.md)
+
+### Total
+- 已锁: 决策 1 (架构), 2 (P0 源), 4 (付费源 = 0)
+- 待补: 决策 3 (CLI 隔离), 5 (锁定 ✅), 6 (biomcp 集成)
+- 实际 5 个决策点 (§8) 中 2/3/5/6 待补, 5 已锁=4 一致
+
+## [4.5.1] - 2026-06-30 (decision lock)
+
+### Decision Lock (用户 15:42 TG 决策)
+- **1. 暂不调整** = 接受现状, 双模式 EBM 学术 + 商业情报架构保留
+- **4. 不适用付费源** = 排除所有付费源 (Frost/Grand View/Citeline/GlobalData/AdisInsight/BioCentury/Endpoints/STAT/PharmCube 交易库/Bloomberg/WiseGuy/Statista/Huaon/Menet/PharnexCloud 等)
+- **2/3/5/6. 决策需更多细节** = 暂搁, 等用户补决策
+
+### Changed
+- CATALOG.md P3 商业授权表 + 商业情报 P1/P2 表格标 ~~删除线~~ (排除付费)
+- CHANGELOG 锁决策: 不接付费源
+- ARCHITECTURE-V5-DRAFT.md §8 决策点 4 (商业付费源预算) 锁: 不接付费
+
+### Total
+- EBM 学术: 52+ 免费源 (保留)
+- 商业情报: 16+ P0 全部免费/开源 (保留)
+- 商业付费源: **0** (排除, 决策 4)
+
+## [4.5.0] - 2026-06-29
+
+### Added
+- integrations/ 目录: 6 个高星医学文献项目 (local-deep-research, paper-search-mcp, MetaScreener, asreview, pubmed_parser, pyalex)
+- integrations/paper-search-mcp.md: 集成计划 (3 个新 MCP tools)
+- REFERENCES.md: 6 个高星项目
+
+### Changed
+- 升级 v4.0 -> v4.5
+- 从 "4 MCP tools" -> "7 MCP tools planned"
+
+## [4.0 -> 4.5] - 2026-06-29
+
+- Upgrade to v4.5 - integrate local-deep-research 8.6K patterns
+- Plan: paper-search-mcp 2K integration (we have MCP, they have search)
+- Plan: MetaScreener 1.3K PDF full-text screening
+- Plan: asreview 937 active learning
+
+## [Phase 0] - 2026-06-09 ~ 2026-06-24 (项目初始化与架构决策修订)
+
+### Phase 0 (2026-06-09)
+
+#### Added
+- 项目初始化
+  - `docs/ARCHITECTURE.md` — 5 层架构 + 20 节设计文档
+  - `AGENTS.md` — 跨 AI 工具协作规约
+  - `README.md` / `README.zh-CN.md` — 中英双语文档
+  - `LICENSE-AGPL-3.0` / `LICENSE-MIT` — 双许可
+  - 完整目录树 (22 个子目录)
+  - Go module: `github.com/veawho/via54Medit`
+  - Cargo workspace (rust/)
+  - 4 个空接口 (Source / Embedder / VectorStore / Enricher)
+  - `medit version` 可跑
+  - GitHub 私库: github.com/veawho/via54Medit
+
+### Phase 0 修订 (2026-06-24)
+
+#### Changed
+- **架构决策**: via54Design 强制依赖 → **可选借鉴** (走 ARCHITECTURE §17.3 路径 ② hand-roll)
+- **新增铁律**: `git clone && go build` 必须 100% 成功,0 外部业务依赖 (ARCHITECTURE §21)
+- **AGENTS.md 关键约束**: 新增第 7 条"不依赖任何私有仓库"
+- **README.md 致谢段**: via54Design 改为"借鉴接口设计,实现独立"
+- **configs/default.yaml**: 头部加修订说明
+- **gofmt**: 2 个未格式化文件落地
+- **单元测试**: 新增 8 cases (pkg/types 4 + internal/version 4)
+- **git tag**: 计划落地 `phase0-done` annotated tag —— **实际未创建** (截至 2026-09-10 本地与远端均无该标签; `docs/ARCHITECTURE.md` §19 验证表亦将其记为"缺失")
+
+#### Closed (ARCHITECTURE §19 开放问题 6 条全部拍板)
+- §19.1 命名空间: 维持 via54Medit (module) / medit (CLI)
+- §19.2 MCP 工具数: 维持 4 个,本地查询走 CLI
+- §19.3 GRADE 评级: 走简化版,完整版 v0.5 评估
+- §19.4 Web UI: 不做,MCP 路径覆盖
+- §19.5 Windows 安装包: zip + scoop/winget,不做 MSI
+- §19.6 GitHub 公开: 维持 private,Phase 5 再开
+
+[Unreleased]: https://github.com/veawho/via54Medit/compare/v5.0.0...HEAD
