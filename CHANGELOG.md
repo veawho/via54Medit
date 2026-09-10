@@ -48,6 +48,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.3] - 2026-09-10 (修复: 部署兼容外部管理的解释器 - PEP 668 / uv)
+
+### Fixed
+- **uv 托管 / 发行版 / Homebrew 解释器上部署不出命令**: uv 托管的 Python、各发行版自带 Python 与 Homebrew Python 都以 PEP 668 (`externally-managed-environment`) 拒绝常规 `pip install -e`; `uv pip install` 同样拒绝。过去遇到该情况只退回 `.pth` 注入 —— 而 `.pth` **仅解决「模块可导入」, 并不创建 console script**, 于是「命令已就绪」的提示与实际不符, 部署流程末尾打印的那些用法全是摆设。
+- **安装改为四级降级** (`telemetry/deploy.py`):
+  1. `pip install -e` (常规路径);
+  2. 识别到 `externally-managed` 特征后追加 `--break-system-packages` 重试 —— 这正是 pip 自己在报错中给出的逃生开关;
+  3. 解释器根本没有 pip (uv 托管环境常见) 时改用 `uv pip install -e ... --python <解释器> --no-deps --break-system-packages`;
+  4. 全部失败才退回 `.pth`, 且**命令改由启动器直接落到 PATH 目录**, 不再出现「装完却没有命令」。
+- **命令落点不再听天由命**: `_launcher_targets()` 在命令不存在时, 挑一个「在 PATH 上且可写」的用户级 bin 目录新建 (POSIX `~/.local/bin`), 而不是退到解释器目录里了事; 装完还会校验该目录是否真在 PATH, 不在就明确提示怎么加。
+- **失败原因简报**: 原来把 pip 输出整段截断 150 字符, 关键信息常被前导日志冲掉; 现在挑一条含 `error` / `externally managed` / `no module named` 的行来报。权限不足 (`PermissionError`) 单独识别并提示。
+- `telemetry/platform_paths.py`: 新增 `user_bin_dirs()` (跨平台用户级 bin 候选) 与 `is_on_path()`。
+- 模块版本 1.5.2 → 1.5.3。
+
+### 注意事项 (顺序)
+`pip install -e` 会重新生成 console script, 把环境自检启动器覆盖回 pip 版本。部署脚本因此在安装之后才执行启动器接管 (步骤 2b); 手工执行安装后请重跑一次部署。
+
+### 验证
+- test_telemetry **34/34 passed** (新增 4 项: PEP 668 触发重试且重试命令含 `--break-system-packages`、全部失败才回退 `.pth`、命令目标覆盖两个命令名且优先复用已存在命令、bin 目录候选与 PATH 判定)。
+- **真机端到端** (macOS / uv 托管的 Python 3.11.15, 即修复前必然失败的机器):
+  - 修复前: `pip install -e` 被 PEP 668 拒绝 → 退回 `.pth` → 无命令生成;
+  - 修复后: 自动「该解释器由外部管理 (PEP 668)，追加 --break-system-packages 重试...」→ `Successfully installed medit-telemetry-1.5.3`, 随后启动器接管, `medit-telemetry --env-check` 正常输出;
+  - 同时实测确认了「阶段 1 被拒 / 阶段 2 成功」的两级行为与 pip 报错原文, 以及安装会覆盖启动器这一顺序约束。
+
 ## [5.4.2] - 2026-09-10 (收尾: 启动器缺失时的提示语改为可操作指引)
 
 ### Fixed
