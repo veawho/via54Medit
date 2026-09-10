@@ -13,6 +13,7 @@ from .aggregator import TelemetryAggregator
 from .config import load_config, WEEKDAY_NAMES
 from .db import TelemetryDB
 from .feishu_sync import FeishuSyncClient
+from .platform_paths import desktop_dir, trae_work_exe, windows_startup_dir
 from .watcher import WorkspaceScanner
 
 PID_FILE = os.path.expanduser(r"~/.medit/daemon.pid")
@@ -290,14 +291,20 @@ def get_daemon_status() -> Dict[str, Any]:
     return status
 
 
-def get_startup_vbs_path() -> str:
-    startup_dir = os.path.expanduser(r"~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup")
+def get_startup_vbs_path() -> Optional[str]:
+    """Windows 开机启动脚本路径；非 Windows 平台返回 None。"""
+    startup_dir = windows_startup_dir()
+    if not startup_dir:
+        return None
     return os.path.join(startup_dir, "traework_telemetry_silent.vbs")
 
 
 def install_startup_vbs():
     """将守护服务注册到 Windows 开机启动文件夹 (Startup)，电脑重启/登录后后台静默自启。"""
     vbs_path = get_startup_vbs_path()
+    if not vbs_path:
+        print("[Autostart] 跳过: 开机自启脚本仅支持 Windows 系统。")
+        return
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     py_exe = sys.executable
 
@@ -319,6 +326,9 @@ WshShell.Run """{py_exe}"" -m telemetry.cli daemon --start", 0, False
 def uninstall_startup_vbs():
     """移除 Windows 开机自启静默脚本。"""
     vbs_path = get_startup_vbs_path()
+    if not vbs_path:
+        print("[Autostart] 跳过: 开机自启脚本仅支持 Windows 系统。")
+        return
     if os.path.exists(vbs_path):
         try:
             os.remove(vbs_path)
@@ -331,10 +341,13 @@ def uninstall_startup_vbs():
 
 def install_traework_companion_launcher():
     """生成桌面 TraeWork 伴生启动器：点击 TraeWork 时，自动连带启动 Telemetry 守护服务。"""
+    trae_exe = trae_work_exe()
+    if not trae_exe:
+        print("[Companion] 跳过: 桌面伴随启动器仅支持 Windows 系统。")
+        return
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     py_exe = sys.executable
-    trae_exe = os.path.expanduser(r"~\AppData\Local\Programs\TRAE SOLO CN\TRAE SOLO CN.exe")
-    launcher_path = os.path.expanduser(r"~\Desktop\启动 TraeWork (带自动监控).vbs")
+    launcher_path = os.path.join(desktop_dir(), "启动 TraeWork (带自动监控).vbs")
     vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "{project_root}"
 ' Step 1: Start Telemetry background daemon silently (skips if already active)

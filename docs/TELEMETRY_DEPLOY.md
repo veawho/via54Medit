@@ -167,8 +167,9 @@ medit-telemetry daemon --start     # 重新拉起后台服务
 - PDF 真实物理页数解析：内置 `pypdf` $\to$ `fitz` (PyMuPDF) $\to$ **原生二进制 `/Count` 正则解析引擎** 三重降级防护，在离线未安装任何 PDF 库的新设备上依然能 100% 正确统计文档页数。
 
 ### 2. 开机自启与伴随启动如何工作？
-- **开机自启**：在 `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup` 下写入 `traework_telemetry_silent.vbs`，通过 `WScript.Shell.Run ..., 0, False` 在系统登录时无黑框静默启动；
-- **伴随启动**：在桌面生成 `启动 TraeWork (带自动监控).vbs`，用户点击时自动检查守护进程是否存活（已存活则跳过，未启动则唤醒），随后直接拉起 TraeWork 主界面。
+- **开机自启**（仅 Windows）：在 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup` 下写入 `traework_telemetry_silent.vbs`，通过 `WScript.Shell.Run ..., 0, False` 在系统登录时无黑框静默启动；
+- **伴随启动**（仅 Windows）：在桌面生成 `启动 TraeWork (带自动监控).vbs`，用户点击时自动检查守护进程是否存活（已存活则跳过，未启动则唤醒），随后直接拉起 TraeWork 主界面。
+- **macOS / Linux**：上述两项为 Windows 专属能力，`deploy.py` 步骤 4 会自动跳过并提示，守护进程仍在步骤 5 正常后台启动。macOS 若需开机自启，可自行注册 LaunchAgent。
 
 ### 3. 大模型 Token 账单与控制台 100% 对齐
 - 默认采用 `exact` 模式，所有指标严格读取真实 API 网关回执的 `prompt_tokens` 与 `completion_tokens`；

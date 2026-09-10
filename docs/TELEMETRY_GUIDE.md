@@ -138,8 +138,18 @@ record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_n
 
 ## 4. 本地持久化与凭据文件分布
 
-- **统一主配置文件**：`C:\Users\via54\.medit\telemetry_config.json`
-- **本地 SQLite 数据库**：`C:\Users\via54\.medit\telemetry.db`
-- **守护进程日志与心跳**：`C:\Users\via54\.medit\daemon.log`、`daemon_heartbeat.json`
-- **公共表本地双备份**：`C:\Users\via54\.medit\company_public_stats.csv`
-- **TraeWork 预装飞书源**：`%APPDATA%\TRAE SOLO CN\User\globalStorage\cloudide.icube-im-bridge\feishu-bridge\3401238267317833\channel_config.json`
+本机状态统一落在 `~/.medit/` 下，跨平台一致：
+
+- **统一主配置文件**：`~/.medit/telemetry_config.json`
+- **本地 SQLite 数据库**：`~/.medit/telemetry.db`
+- **守护进程日志与心跳**：`~/.medit/daemon.log`、`~/.medit/daemon_heartbeat.json`
+- **公共表本地双备份**：`~/.medit/company_public_stats.csv`
+- **TraeWork 预装飞书源** (`channel_config.json`)：由 `telemetry/platform_paths.py` 统一解析，当前平台根目录优先，其余平台根目录兜底：
+
+| 平台 | 应用数据根 | 完整路径 |
+| --- | --- | --- |
+| Windows | `%APPDATA%` | `%APPDATA%\TRAE SOLO CN\User\globalStorage\cloudide.icube-im-bridge\feishu-bridge\<workspace>\channel_config.json` |
+| macOS | `~/Library/Application Support` | `~/Library/Application Support/TRAE SOLO CN/User/globalStorage/cloudide.icube-im-bridge/feishu-bridge/<workspace>/channel_config.json` |
+| Linux | `$XDG_CONFIG_HOME` 或 `~/.config` | `<XDG>/TRAE SOLO CN/User/globalStorage/cloudide.icube-im-bridge/feishu-bridge/<workspace>/channel_config.json` |
+
+`<workspace>` 为 workspace 槽位号；解析器会扫描 `feishu-bridge` 下的任意子目录，换机后槽位号变化仍可命中。

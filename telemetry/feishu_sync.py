@@ -8,11 +8,10 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 from .models import AggregateReport
+from .platform_paths import trae_work_config_path
 
 
-TRAE_CONFIG_PATH = os.path.expanduser(
-    r"~\AppData\Roaming\TRAE SOLO CN\User\globalStorage\cloudide.icube-im-bridge\feishu-bridge\3401238267317833\channel_config.json"
-)
+TRAE_CONFIG_PATH = trae_work_config_path()
 from .config import load_config
 
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"

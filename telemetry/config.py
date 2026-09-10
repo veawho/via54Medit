@@ -8,10 +8,15 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-CONFIG_FILE_PATH = os.path.expanduser(r"~/.medit/telemetry_config.json")
-TRAE_WORKSPACE_CONFIG = os.path.expanduser(
-    r"~\AppData\Roaming\TRAE SOLO CN\User\globalStorage\cloudide.icube-im-bridge\feishu-bridge\3401238267317833\channel_config.json"
+from .platform_paths import (
+    desktop_dir,
+    trae_work_config_candidates,
+    trae_work_config_path,
+    trae_work_dir,
 )
+
+CONFIG_FILE_PATH = os.path.expanduser(r"~/.medit/telemetry_config.json")
+TRAE_WORKSPACE_CONFIG = trae_work_config_path()
 
 # 星期映射字典
 WEEKDAY_MAP = {
@@ -58,8 +63,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "watcher": {
         "poll_interval_seconds": 30,
         "watch_dirs": [
-            os.path.expanduser(r"~\.trae-cn\work"),
-            os.path.expanduser(r"~\Desktop")
+            trae_work_dir(),
+            desktop_dir()
         ]
     }
 }
@@ -70,23 +75,29 @@ def load_config() -> Dict[str, Any]:
     config = json.loads(json.dumps(DEFAULT_CONFIG))
 
     # 1. 尝试嗅探本机 TraeWork 凭据作为基线
-    if os.path.exists(TRAE_WORKSPACE_CONFIG):
+    #    跨平台候选路径 (Windows %APPDATA% / macOS Application Support /
+    #    Linux XDG)，命中首个含 appId 的配置即停止。
+    for workspace_config in trae_work_config_candidates():
+        if not os.path.exists(workspace_config):
+            continue
         try:
-            with open(TRAE_WORKSPACE_CONFIG, "r", encoding="utf-8") as tf:
+            with open(workspace_config, "r", encoding="utf-8") as tf:
                 tdata = json.load(tf)
-                ws = tdata.get("channels", {}).get("feishu", {}).get("workspace", {})
-                if ws.get("appId"):
-                    config["feishu"]["app_id"] = ws.get("appId")
-                if ws.get("appSecret"):
-                    config["feishu"]["app_secret"] = ws.get("appSecret")
-                if ws.get("userOpenId"):
-                    config["user"]["open_id"] = ws.get("userOpenId")
-                if ws.get("botName"):
-                    config["feishu"]["bot_name"] = ws.get("botName")
-                    if "for " in ws.get("botName"):
-                        config["user"]["nickname"] = ws.get("botName").split("for ")[-1].strip()
+            ws = tdata.get("channels", {}).get("feishu", {}).get("workspace", {})
+            if ws.get("appId"):
+                config["feishu"]["app_id"] = ws.get("appId")
+            if ws.get("appSecret"):
+                config["feishu"]["app_secret"] = ws.get("appSecret")
+            if ws.get("userOpenId"):
+                config["user"]["open_id"] = ws.get("userOpenId")
+            if ws.get("botName"):
+                config["feishu"]["bot_name"] = ws.get("botName")
+                if "for " in ws.get("botName"):
+                    config["user"]["nickname"] = ws.get("botName").split("for ")[-1].strip()
         except Exception:
-            pass
+            continue
+        if config["feishu"]["app_id"]:
+            break
 
     # 2. 读取用户自定义的持久化配置文件
     if os.path.exists(CONFIG_FILE_PATH):

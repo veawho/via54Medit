@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -136,11 +137,52 @@ class TestTelemetry(unittest.TestCase):
 
     def test_daemon_helpers(self):
         from telemetry.daemon import get_daemon_status, get_startup_vbs_path
+        from telemetry.platform_paths import windows_startup_dir
         st = get_daemon_status()
         self.assertIn("running", st)
         self.assertIn("pid", st)
         vbs_path = get_startup_vbs_path()
-        self.assertTrue(vbs_path.endswith("traework_telemetry_silent.vbs"))
+        if sys.platform == "win32":
+            # Windows: 指向 Startup 目录下的静默自启脚本
+            self.assertIsNotNone(vbs_path)
+            self.assertTrue(vbs_path.endswith("traework_telemetry_silent.vbs"))
+            self.assertTrue(vbs_path.startswith(windows_startup_dir()))
+        else:
+            # 非 Windows: 该能力不存在，必须显式返回 None 而不是伪路径
+            self.assertIsNone(windows_startup_dir())
+            self.assertIsNone(vbs_path)
+
+    def test_platform_paths(self):
+        """路径解析必须跨平台正确，不得出现 Windows 反斜杠字面量。"""
+        from telemetry import platform_paths as pp
+        from telemetry.config import DEFAULT_CONFIG
+
+        home = os.path.expanduser("~")
+        expected_root = {
+            "win32": os.environ.get("APPDATA") or os.path.join(home, "AppData", "Roaming"),
+            "darwin": os.path.join(home, "Library", "Application Support"),
+        }.get(
+            sys.platform,
+            os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"),
+        )
+        roots = pp.app_data_roots()
+        self.assertTrue(roots, "应用数据根候选不得为空")
+        self.assertEqual(roots[0], expected_root, "当前平台应优先使用本平台路径")
+
+        # channel_config.json 候选必须落在本平台首个根之下
+        self.assertTrue(pp.trae_work_config_candidates())
+        self.assertTrue(pp.trae_work_config_path().startswith(roots[0]))
+
+        # 默认监控目录必须是跨平台绝对路径，且不含 Windows 反斜杠
+        watch_dirs = DEFAULT_CONFIG["watcher"]["watch_dirs"]
+        self.assertTrue(watch_dirs)
+        for d in watch_dirs:
+            self.assertNotIn("\\", d, f"默认监控目录含 Windows 反斜杠: {d}")
+            self.assertTrue(os.path.isabs(d), f"默认监控目录非绝对路径: {d}")
+
+        self.assertTrue(os.path.isabs(pp.desktop_dir()))
+        self.assertTrue(os.path.isabs(pp.trae_work_dir()))
+        self.assertNotIn("\\", pp.trae_work_dir())
 
     def test_highlight_pdf_distinct_pages_and_count(self):
         """测试：完成标注多少篇对应多少个PDF文献文件；阅读页数对应所有高亮PDF文献文件的页数总和。"""

@@ -38,6 +38,7 @@ from .daemon import (
 )
 from .db import TelemetryDB
 from .feishu_sync import FeishuSyncClient
+from .platform_paths import desktop_dir, trae_work_dir
 from .watcher import WorkspaceScanner
 
 
@@ -195,9 +196,9 @@ def cmd_backfill(args):
     db = TelemetryDB()
     scanner = WorkspaceScanner(db)
     targets = [
-        (os.path.expanduser(r"~\Desktop\RSV"), "RSV"),
-        (os.path.expanduser(r"~\Desktop\TMA_test"), "TMA_test"),
-        (os.path.expanduser(r"~\.trae-cn\work\6a9e448884fcf10fc666920a"), "Trae_RSV_Live"),
+        (os.path.join(desktop_dir(), "RSV"), "RSV"),
+        (os.path.join(desktop_dir(), "TMA_test"), "TMA_test"),
+        (os.path.join(trae_work_dir(), "6a9e448884fcf10fc666920a"), "Trae_RSV_Live"),
     ]
     print("[Backfill] 开始自动扫描历史成果并录入基准库...")
     total_stats = {"retrieval": 0, "download": 0, "highlight": 0}
