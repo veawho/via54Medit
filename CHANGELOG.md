@@ -48,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.1] - 2026-09-10 (修复: 启动器模板纳入打包范围)
+
+### Fixed
+- **启动器模板未随包分发**: 消除 [5.4.0] 记录的「已知边界」。`telemetry/scripts/` 没有 `__init__.py`, setuptools 不将其视为包, 因此其中的外壳启动器模板不会被打包 —— 从 wheel / sdist 安装时该模板缺失, 部署阶段会提示「未找到启动器模板, 跳过」, 环境自检启动器装不出来。
+- **修法**: 在 `telemetry/pyproject.toml` 新增 `[tool.setuptools.package-data]` (`telemetry = ["scripts/*"]`), 并在 `telemetry/setup.py` 同步声明 `package_data={"telemetry": ["scripts/*"]}`, 使两条分发路径都带上模板。未改动任何运行时代码。
+- 模块版本 1.5.0 → 1.5.1。
+
+### 验证
+- test_telemetry 29/29 passed (新增 `test_launcher_template_is_declared_as_package_data`, 同时断言 `scripts/` 下确无 `__init__.py` —— 该前提一旦变化, 打包方式需重新评估)。
+- **构建产物实测** (非仅检查配置):
+  - `medit_telemetry-1.5.1-py3-none-any.whl` 内含 `telemetry/scripts/medit-telemetry` (3222 字节), 内容以 `#!/bin/sh` 开头;
+  - `medit_telemetry-1.5.1.tar.gz` (sdist) 同样包含 `scripts/medit-telemetry`;
+  - 把 wheel 解包到独立目录后导入其中的 `telemetry.deploy`, 按 `deploy.py` 的推导方式定位模板 —— `exists() = True`, 证明 wheel 安装布局下模板可被发现, 不再需要任何兜底下载。
+
 ## [5.4.0] - 2026-09-10 (运行环境自检: 拦截 PYTHONHOME / PYTHONPATH 冲突)
 
 ### Added
@@ -78,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 启动器通过 `sh -n` 语法校验 (模板与替换解释器后的成品均通过)。
 
 ### 已知边界
-- 启动器模板位于 `telemetry/scripts/`, 未纳入 `packages = ["telemetry"]` 的打包范围。从源码仓库执行 `deploy.py` 时可用; 若从 wheel 安装, 该步骤会提示「未找到启动器模板, 跳过」, 命令仍可正常使用 (仅缺少外壳层拦截)。
+- 启动器模板位于 `telemetry/scripts/`, 未纳入 `packages = ["telemetry"]` 的打包范围。从源码仓库执行 `deploy.py` 时可用; 若从 wheel 安装, 该步骤会提示「未找到启动器模板, 跳过」, 命令仍可正常使用 (仅缺少外壳层拦截)。→ 已在 [5.4.1] 修复。
 
 ## [5.3.0] - 2026-09-10 (多维表格接入公司既有表: schema 自适应 + dry-run + 备份口径修正)
 
