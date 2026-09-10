@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.2] - 2026-09-10 (收尾: 启动器缺失时的提示语改为可操作指引)
+
+### Fixed
+- **模板缺失提示语已过时**: [5.4.1] 起启动器模板通过 `package-data` 随包分发, 因此「未找到启动器模板」不再是需要容忍的正常情况, 而是**安装不完整或包版本过旧**的信号。原提示语只说「跳过 (命令仍可正常使用)」, 会让人误判为无需处理。
+  - `telemetry/deploy.py`: 模板缺失分支现在打印实际查找路径与重装命令 `pip install -U medit-telemetry`;
+  - `telemetry/deploy.py`: 启动器写入失败分支补充常见原因 (命令所在目录不可写);
+  - `telemetry/README.md`: 明确模板随包分发, 源码安装与 wheel / sdist 安装都能装出启动器。
+- 无运行时代码变更, 纯提示语与文档措辞。
+- 模块版本 1.5.1 → 1.5.2。
+
+### 验证
+- test_telemetry 30/30 passed (新增 `test_guarded_launcher_missing_template_is_graceful`: 断言模板缺失时优雅返回 `False`、不写任何文件、且输出包含重装指引)。
+- 实测缺失分支输出 (把模板目录指向不存在路径): 打印查找路径 + 「该文件随包分发, 缺失通常表示安装不完整或版本过旧」+ 重装命令。
+- 已安装的真实启动器 (`~/.local/bin/medit-telemetry`) 未被本次验证触碰。
+
 ## [5.4.1] - 2026-09-10 (修复: 启动器模板纳入打包范围)
 
 ### Fixed
