@@ -900,6 +900,33 @@ class TestTelemetry(unittest.TestCase):
             finally:
                 os.unlink(tmp_path)
 
+    def test_launcher_template_is_declared_as_package_data(self):
+        """测试：启动器模板被声明为包数据。
+
+        scripts/ 目录没有 __init__.py，setuptools 不会把它当包、也就不会自动打包其中的
+        文件；若不显式声明 package-data，从 wheel / sdist 安装时模板会缺失，部署时就装不出
+        环境自检启动器（这正是 5.4.0 的「已知边界」）。这里锁住声明，防止回归。
+        """
+        from telemetry import deploy
+
+        pkg_dir = os.path.dirname(os.path.abspath(deploy.__file__))
+        self.assertTrue(
+            os.path.exists(os.path.join(pkg_dir, "scripts", "medit-telemetry")),
+            "启动器模板缺失")
+        # 前提条件：scripts/ 不是 Python 包，因此必须靠 package-data 显式声明
+        self.assertFalse(
+            os.path.exists(os.path.join(pkg_dir, "scripts", "__init__.py")),
+            "scripts/ 若变为 Python 包，打包假设需重新评估")
+
+        with open(os.path.join(pkg_dir, "pyproject.toml"), "r", encoding="utf-8") as f:
+            pyproject = f.read()
+        self.assertIn("[tool.setuptools.package-data]", pyproject)
+        self.assertRegex(pyproject, r'telemetry\s*=\s*\[\s*"scripts/\*"\s*\]')
+
+        with open(os.path.join(pkg_dir, "setup.py"), "r", encoding="utf-8") as f:
+            setup_py = f.read()
+        self.assertRegex(setup_py, r'package_data\s*=\s*\{\s*"telemetry"\s*:\s*\["scripts/\*"\]\s*\}')
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,13 +13,16 @@ if os.path.exists(readme_path):
 
 setup(
     name="medit-telemetry",
-    version="1.5.0",
+    version="1.5.1",
     description="TraeWork 文献整理与 Highlight 监控统计、人效分析及飞书自动同步工具 (via54Medit 独立模块)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="via54Medit Team",
     packages=["telemetry"],
     package_dir={"telemetry": "."},
+    # scripts/ 无 __init__.py 不是 Python 包, 但存放着部署时要安装的外壳启动器模板,
+    # 必须显式声明为包数据, 否则从 wheel 安装时该模板缺失。
+    package_data={"telemetry": ["scripts/*"]},
     python_requires=">=3.8",
     install_requires=[
         # Zero mandatory dependencies - pure Python standard library!
