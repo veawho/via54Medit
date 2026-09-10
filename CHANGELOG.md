@@ -48,6 +48,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.2.0] - 2026-09-10 (检索去重引入 DOI 精确层 + 引用身份保守归并)
+
+### Changed (指标口径细化)
+- **telemetry/watcher.py**: 检索去重细化两层 ——
+  1. **DOI 精确层**: 清单带 `doi` 时以归一化 DOI 为身份 (剔除 `https://doi.org/` / `doi:` 前缀并忽略大小写), 跨著录写法稳定;
+  2. **引用身份层**: 无 DOI 时按引用串归一化身份去重, 新增 `_same_reference()` 保守前缀归并 —— 仅当其一为另一者前缀、且多出的尾巴属纯数字/日期/文号一类良性噪声时才判为同一篇。
+- **防误并**: 尾巴含 `supplementary` / `suppl.` / `appendix` / `erratum` / `corrigendum` / `reply` / `comment` / `abstract` / `poster` / `protocol` 等有独立意义的限定词时**不合并**, 避免正文与其补充附录被误并为一篇; 另设 30 字符最短公共前缀阈值 (两篇同为 `Zar HJ, et al. N Engl J Med. 2025;393(13):…` 的不同文章公共前缀仅 27 字符, 不会被合并)。
+- **样板噪声剔除**: 归一化时剔除 `Available at: …` / `Accessed …` / URL / 文档编号 (如 `07-2028-CN-RSM-00086`) 等不承载文献身份的尾巴。
+- **telemetry/README.md** / **docs/TELEMETRY_GUIDE.md**: 更新为两层去重规则的完整说明。
+- 模块版本 1.2.0 → 1.3.0。
+
+### 验证
+- test_telemetry 20/20 passed (新增 `test_retrieval_dedup_by_doi` 与 `test_retrieval_merges_noise_suffix_but_keeps_appendix`)
+- RSV 实测: 检索 46 → **44 篇**。两处归并均已确认为同一文献 —— `WHO position paper …` (尾部差异为 `May 2025.` 与 `(Accessed date: 2025.06.02)`) 与 `Fleming-Dutra KE … MMWR 2023;72(41):1115-1122.` (其一尾部多出文档编号); 正文与其 `Supplementary Appendix` 保持独立, 未被合并。
+- 生效层说明: RSV 清单的 `doi` / `pmid` 字段全为空 (`pubmed_url` / `scholar_url` 只是用引用串拼的搜索链接, 不含 DOI), 故本次实际生效的是**引用身份层**; DOI 层为结构预留, 在带 DOI 的数据集上可精确去重。
+
 ## [5.1.0] - 2026-09-10 (检索指标口径: 按高亮引用清单折算唯一被引文献)
 
 ### Changed (指标口径)
