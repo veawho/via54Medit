@@ -1,8 +1,10 @@
 """Workspace watcher and output scanner for TraeWork literature projects."""
 
+import csv
 import glob
 import json
 import os
+import re
 import time
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -18,8 +20,70 @@ from .pdf_utils import get_pdf_page_count
 
 #: 中文项目常用的高亮产物目录名 (RSV 等): <项目>/高亮结果/*.pdf
 HL_DIRNAME = "高亮结果"
+#: 每 Pn-x 条目附带的高亮元信息 (含 reference_field / doi / pmid)
+HL_META_GLOB = os.path.join(HL_DIRNAME, "*_meta.json")
+#: 高亮引用清单 (pn_x / reference_field / highlights / status), meta 缺失时回退
+HL_LIST_TSV = f"{HL_DIRNAME}清单.tsv"
 #: 无法取得标注数时的均摊基准 (沿用既有行为)
 DEFAULT_ANNOTS = 5
+#: 检索环节的单篇均摊耗时 (基准, 与历史实现一致)
+RETRIEVAL_SECONDS_PER_PAPER = 12.0
+
+
+def _norm_ref(text: str) -> str:
+    """文献引用串归一化, 用于去重 (忽略大小写与各类空白)。"""
+    return re.sub(r"[\s\u3000]+", "", text or "").casefold()
+
+
+def _collect_reference_records(project_dir: str):
+    """从「高亮引用清单」读取被引文献, 按文献去重。
+
+    指标口径: 检索数 = 去重后的唯一被引文献数 (与"下载"指标同为唯一文献口径,
+    重复引用同一篇文献只计一次)。
+
+    数据源优先级:
+      1. ``高亮结果/*_meta.json`` —— 每 Pn-x 一条, reference_field 完整, 并可能带 doi/pmid;
+      2. ``高亮结果清单.tsv`` —— meta 缺失时回退。注意该 TSV 的 reference_field
+         可能被导出截断, 故仅在无 meta 时使用。
+
+    返回 ``(records, source)``; records 为 ``(paper_id, doi, url, citation_text)`` 列表。
+    """
+    records: Dict[str, tuple] = {}
+    source = ""
+
+    for meta_path in sorted(glob.glob(os.path.join(project_dir, HL_META_GLOB))):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as fp:
+                meta = json.load(fp)
+        except Exception:
+            continue
+        reference = (meta.get("reference_field") or "").strip()
+        doi = (meta.get("doi") or "").strip()
+        pmid = (meta.get("pmid") or "").strip()
+        key = _norm_ref(doi) or _norm_ref(reference)
+        if not key:
+            continue
+        url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else ""
+        records.setdefault(key, (key, doi, url, reference))
+
+    if records:
+        return list(records.values()), f"{HL_DIRNAME}/*_meta.json"
+
+    tsv_path = os.path.join(project_dir, HL_LIST_TSV)
+    if os.path.exists(tsv_path):
+        try:
+            with open(tsv_path, "r", encoding="utf-8") as fp:
+                for row in csv.DictReader(fp, delimiter="\t"):
+                    reference = (row.get("reference_field") or row.get("reference") or "").strip()
+                    key = _norm_ref(reference)
+                    if not key:
+                        continue
+                    records.setdefault(key, (key, "", "", reference))
+            source = os.path.basename(tsv_path)
+        except Exception:
+            pass
+
+    return list(records.values()), source
 
 
 def _sibling_verify_annots(hl_pdf: str) -> int:
@@ -93,6 +157,23 @@ class WorkspaceScanner:
                                 stats["retrieval"] += 1
             except Exception:
                 pass
+
+        # 1b. 扫描「高亮引用清单」折算检索数
+        #     口径: 检索数 = 去重后的唯一被引文献数 (与"下载"同为唯一文献口径)
+        ref_records, ref_source = _collect_reference_records(project_dir)
+        for paper_id, doi, url, reference in ref_records:
+            if self.db.has_retrieval_item(paper_id=paper_id, doi=doi, url=url):
+                continue
+            item = RetrievalItem(
+                paper_id=paper_id,
+                doi=doi,
+                url=url,
+                citation_text=reference,
+                duration_seconds=RETRIEVAL_SECONDS_PER_PAPER,  # 均摊基准
+                source=ref_source or "highlight_ref_list",
+            )
+            self.db.record_retrieval_item(f"scan_{pname}", item)
+            stats["retrieval"] += 1
 
         # 2. 扫描下载 PDF (如 _2_pdfs/*.pdf 或 根目录下未高亮的 .pdf)
         pdf_files = glob.glob(os.path.join(project_dir, "_2_pdfs", "*.pdf")) + \

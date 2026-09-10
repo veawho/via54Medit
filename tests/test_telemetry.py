@@ -1,5 +1,6 @@
 """Unit and integration tests for telemetry module."""
 
+import json
 import os
 import shutil
 import sys
@@ -170,6 +171,47 @@ class TestTelemetry(unittest.TestCase):
         else:
             self.assertIsNone(plist, "非 macOS 不应返回 LaunchAgent 路径")
             self.assertIsNone(status, "非 macOS 不应返回 LaunchAgent 状态")
+
+    def test_scanner_retrieval_from_highlight_reference_list(self):
+        """高亮引用清单应折算为检索数, 且重复引用同一文献只计 1 篇 (唯一文献口径)。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        project_dir = os.path.join(self.test_dir, "proj_rsv")
+        hl_dir = os.path.join(project_dir, "高亮结果")
+        os.makedirs(hl_dir)
+
+        entries = [
+            ("P1-1", "Zar HJ, et al. N Engl J Med. 2025;393(13):1292-1303.", "40000001"),
+            # 同一篇文献被另一条 Pn-x 再次引用 -> 应被去重
+            ("P1-2", "Zar HJ, et al. N Engl J Med. 2025;393(13):1292-1303.", ""),
+            ("P1-3", "Georgakopoulou VE, et al. Microorganisms. 2025;13(8):1876.", ""),
+        ]
+        for pn_x, reference, pmid in entries:
+            with open(os.path.join(hl_dir, f"{pn_x}_meta.json"), "w", encoding="utf-8") as fp:
+                json.dump(
+                    {"pn_x": pn_x, "reference_field": reference, "pmid": pmid or None},
+                    fp, ensure_ascii=False,
+                )
+
+        stats = WorkspaceScanner(self.db).scan_project(project_dir, "RSV")
+        self.assertEqual(stats["retrieval"], 2, "重复引用同一文献应只计 1 篇")
+        self.assertEqual(self.aggregator.get_all_time_report().retrieval_count, 2)
+
+    def test_scanner_retrieval_falls_back_to_tsv_list(self):
+        """无 *_meta.json 时, 回退读取 高亮结果清单.tsv。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        project_dir = os.path.join(self.test_dir, "proj_tsv")
+        os.makedirs(os.path.join(project_dir, "高亮结果"))
+        tsv = os.path.join(project_dir, "高亮结果清单.tsv")
+        with open(tsv, "w", encoding="utf-8") as fp:
+            fp.write("pn_x\treference_field\thighlights\tstatus\n")
+            fp.write("P2-1\tKapikian AZ, et al. Am J Epidemiol. 1969;89(4):405-421.\t48\tok\n")
+            fp.write("P2-2\tKapikian AZ, et al. Am J Epidemiol. 1969;89(4):405-421.\t12\tok\n")
+            fp.write("P2-3\tTharmalingam T, et al. Hum Vaccin Immunother. 2022;18(2):1886560.\t70\tok\n")
+
+        stats = WorkspaceScanner(self.db).scan_project(project_dir, "TSVProj")
+        self.assertEqual(stats["retrieval"], 2)
 
     def test_platform_paths(self):
         """路径解析必须跨平台正确，不得出现 Windows 反斜杠字面量。"""
