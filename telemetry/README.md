@@ -52,7 +52,13 @@ python telemetry/deploy.py --silent
 telemetry\deploy.bat
 ```
 
-> **关于「解释器由外部管理」(PEP 668)**：uv 托管的解释器、发行版自带 Python、Homebrew Python 都会拒绝常规 `pip install -e`。部署脚本会自动识别该情况并追加 `--break-system-packages` 重试；若解释器根本没有 pip，则改用 `uv pip install` 兜底。两者都不可用时退回 `.pth` 注入，并且**仍会把 `medit-telemetry` 命令落到 PATH 目录上**（见下方「运行环境自检」），而不是就此放弃。
+> **关于「解释器由外部管理」(PEP 668)**：uv 托管的解释器、发行版自带 Python、Homebrew Python 都会拒绝常规 `pip install -e`（`uv pip install` 同样拒绝）。部署脚本**默认不绕过**这道保护 —— 那是解释器管理方划下的边界，不该由部署脚本擅自突破。此时改为注入 `.pth` 保证模块可导入，而 `medit-telemetry` 命令由启动器直接落到 PATH，**功能照常可用**；差别只是没有向该解释器登记包元数据（pip 无法追踪它的升级 / 卸载）。
+>
+> 若确实要写入该解释器，显式开启开关重跑：
+> ```bash
+> python telemetry/deploy.py --allow-break-system-packages
+> ```
+> 该开关等价于 pip / uv 的 `--break-system-packages`，可以用别名 `--break-system-packages` 书写；Windows 单行脚本对应参数为 `-AllowBreakSystemPackages`。
 
 ---
 

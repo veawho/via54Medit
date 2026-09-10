@@ -22,7 +22,7 @@ import site
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 # Ensure UTF-8 output across Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -115,66 +115,83 @@ def _editable_install_cmds() -> List[List[str]]:
     """可依次尝试的「可编辑安装」命令序列。
 
     阶段 1: 常规 ``pip install -e``;
-    阶段 2: 命中 PEP 668 时加 ``--break-system-packages`` 重试 —— uv 托管的解释器、
-            发行版自带 Python、Homebrew Python 都会以该错误拒绝安装, 而这正是本工具的
-            常见运行环境;
-    阶段 3: 解释器根本没有 pip (uv 托管环境常见) 时改用 ``uv pip install`` 兜底。
+    阶段 2: 解释器根本没有 pip (uv 托管环境常见) 时改用 ``uv pip install`` 兜底。
+
+    这里**不带** ``--break-system-packages`` —— 那是绕过 PEP 668 保护的逃生开关，
+    需调用方显式授权，见 ``install_package_locally``。
     """
-    pip = [sys.executable, "-m", "pip", "install", "-e", TELEMETRY_DIR, "--no-deps"]
-    commands: List[List[str]] = [pip]
+    commands: List[List[str]] = [
+        [sys.executable, "-m", "pip", "install", "-e", TELEMETRY_DIR, "--no-deps"]
+    ]
     if shutil.which("uv"):
         commands.append([
             "uv", "pip", "install", "-e", TELEMETRY_DIR,
-            "--python", sys.executable, "--no-deps", "--break-system-packages",
+            "--python", sys.executable, "--no-deps",
         ])
     return commands
 
 
-def install_package_locally() -> bool:
+def _run_install(cmd: List[str]) -> Tuple[bool, str]:
+    """执行一条安装命令。返回 (是否成功, 失败输出)。"""
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except Exception as e:
+        return False, str(e)
+    if res.returncode == 0:
+        return True, ""
+    return False, (res.stderr or "") + (res.stdout or "")
+
+
+def _explain_pep668_skip() -> None:
+    """解释 PEP 668 拒绝的原因，并给出显式开启逃生开关的方式。"""
+    print("    [i] 该解释器由外部工具管理 (PEP 668)，安装被拒绝。")
+    print("        本工具默认不绕过这道保护 —— 那是解释器管理方 (uv / 系统 / Homebrew)")
+    print("        划下的边界，不该由部署脚本擅自突破。")
+    print("        • 命令仍会安装 (由下一步的启动器落到 PATH)，功能可用；差别只是没有向")
+    print("          该解释器登记包元数据，pip 无法追踪它的升级 / 卸载。")
+    print("        • 确实要写入该解释器时，显式开启开关重跑：")
+    print("            python telemetry/deploy.py --allow-break-system-packages")
+    print("          或自行安装：")
+    print("            python -m pip install -e telemetry --no-deps --break-system-packages")
+
+
+def install_package_locally(allow_break_system_packages: bool = False) -> bool:
     """注册本模块，使 ``medit-telemetry`` 命令可用。
 
-    先试 ``pip install -e``；被 PEP 668（外部管理的解释器）拒绝时自动追加
-    ``--break-system-packages`` 重试，解释器没有 pip 时改用 ``uv pip install``
-    兜底。全部失败才退回 ``.pth`` 注入 —— 注意 ``.pth`` 只解决「模块可导入」，
-    命令本身由 ``install_guarded_launcher()`` 落到 PATH 目录上。
+    先试 ``pip install -e``，解释器没有 pip 时改用 ``uv pip install`` 兜底。被
+    PEP 668（外部管理的解释器）拒绝时**默认不绕过**：改为注入 ``.pth`` 保证可导入，
+    命令则由 ``install_guarded_launcher()`` 落到 PATH 目录，功能照常可用。只有调用方
+    显式传入 ``allow_break_system_packages=True`` 才追加逃生开关原地重试。
     """
     print(f"\n[*] 步骤 2/6: 安装并注册 medit-telemetry 模块...")
     reasons: List[str] = []
+    denied_by_pep668 = False
 
     for cmd in _editable_install_cmds():
         tool = "uv pip" if cmd[0] == "uv" else "pip"
-        extra = ["--break-system-packages"] if "--break-system-packages" in cmd else []
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        except Exception as e:
-            reasons.append(f"{tool}: {e}")
-            continue
-        if res.returncode == 0:
-            suffix = " (已带 --break-system-packages)" if extra else ""
-            print(f"    ✓ {tool} install -e 注册成功{suffix}！全局命令 medit-telemetry 已就绪。")
+        ok, output = _run_install(cmd)
+        if ok:
+            print(f"    ✓ {tool} install -e 注册成功！全局命令 medit-telemetry 已就绪。")
             return True
-
-        output = (res.stderr or "") + (res.stdout or "")
         reasons.append(f"{tool}: {_first_meaningful_line(output)}")
 
-        # PEP 668: 外部管理的解释器 —— 用 pip 自己提示的逃生开关原地重试
-        if tool == "pip" and any(h in output.lower() for h in _EXTERNALLY_MANAGED_HINTS):
-            print("    [~] 该解释器由外部管理 (PEP 668)，追加 --break-system-packages 重试...")
-            retry = cmd + ["--break-system-packages"]
-            try:
-                res2 = subprocess.run(retry, capture_output=True, text=True, check=False)
-            except Exception as e:
-                reasons.append(f"pip(retry): {e}")
-                continue
-            if res2.returncode == 0:
-                print("    ✓ pip install -e 注册成功 (--break-system-packages)！"
-                      "全局命令 medit-telemetry 已就绪。")
-                return True
-            reasons.append("pip(retry): " + _first_meaningful_line(
-                (res2.stderr or "") + (res2.stdout or "")))
+        if not any(h in output.lower() for h in _EXTERNALLY_MANAGED_HINTS):
+            continue
+        denied_by_pep668 = True
+
+        if not allow_break_system_packages:
+            continue
+        print(f"    [~] 已获授权：追加 --break-system-packages 重试 ({tool})...")
+        ok2, out2 = _run_install(cmd + ["--break-system-packages"])
+        if ok2:
+            print("    ✓ 注册成功 (--break-system-packages)！全局命令 medit-telemetry 已就绪。")
+            return True
+        reasons.append(f"{tool}(retry): {_first_meaningful_line(out2)}")
 
     for r in reasons:
         print(f"    [~] 安装尝试未成功 —— {r}")
+    if denied_by_pep668 and not allow_break_system_packages:
+        _explain_pep668_skip()
     print("    [~] 改用 .pth 注入：只保证模块可导入，命令由下一步的启动器提供。")
     return _fallback_pth_install()
 
@@ -482,6 +499,11 @@ def main():
     parser.add_argument("--no-launcher", action="store_true", help="不创建桌面伴随启动器")
     parser.add_argument("--no-start", action="store_true", help="安装后不立即启动守护进程")
     parser.add_argument("--uninstall", action="store_true", help="停止守护服务并移除开机自启")
+    parser.add_argument(
+        "--allow-break-system-packages", "--break-system-packages",
+        dest="allow_break_system_packages", action="store_true",
+        help="显式允许在外部管理的解释器 (uv / 系统 / Homebrew) 上强制安装, "
+             "绕过 PEP 668 保护; 默认不绕过, 改用 .pth 注入 (命令仍可用)")
 
     args = parser.parse_args()
 
@@ -507,6 +529,9 @@ def main():
         if extracted.get("monthly") and not args.monthly:
             args.monthly = extracted["monthly"]
             print(f"    • 自动提取月报时间: {args.monthly}")
+        if extracted.get("allow_break_system_packages"):
+            args.allow_break_system_packages = True
+            print("    • 识别到「强制安装」意图: 允许绕过 PEP 668 保护")
         # 自然语言触发默认全自动静默
         args.silent = True
 
@@ -518,7 +543,8 @@ def main():
     if not check_python_environment():
         sys.exit(1)
 
-    install_package_locally()
+    install_package_locally(allow_break_system_packages=getattr(
+        args, "allow_break_system_packages", False))
     install_guarded_launcher()
     cfg = setup_configuration(args)
     setup_autostart_and_launcher(args)

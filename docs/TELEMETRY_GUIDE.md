@@ -212,14 +212,23 @@ hint: See PEP 668 for the detailed specification.
 
 **原因**：PEP 668 规定「由外部工具管理的解释器」拒绝直接写入。uv 托管的 Python、macOS 上的 Homebrew Python、各发行版自带的 Python 都属于这一类。uv 自己的 `uv pip install` 同样会拒绝。这不是权限问题，加 `sudo` 无用。
 
-**部署脚本已自动处理**，按以下顺序降级，无需手工干预：
+**部署脚本的处理**：默认**不绕过**这道保护 —— 那是解释器管理方（uv / 系统 / Homebrew）划下的边界，不该由部署脚本擅自突破。按下表降级，最终**功能仍然可用**：
 
 | 顺序 | 动作 | 说明 |
 | :--- | :--- | :--- |
 | 1 | `pip install -e` | 常规路径 |
-| 2 | 识别到 PEP 668 后追加 `--break-system-packages` 重试 | pip 自己在报错中给出的逃生开关 |
-| 3 | 解释器没有 pip 时改用 `uv pip install -e ... --break-system-packages` | uv 托管环境的常见情况 |
-| 4 | 全部失败则注入 `.pth` 保证「可导入」 | 此时**命令由下一步的启动器直接落到 PATH 目录**（POSIX 为 `~/.local/bin`），不会出现「装完却没有命令」 |
+| 2 | 解释器没有 pip 时改用 `uv pip install -e ... --python <解释器> --no-deps` | uv 托管环境的常见情况 |
+| 3 | 以上被 PEP 668 拒绝时 → 打印原因与开启方式，**不擅自绕过** | 边界由使用者决定是否突破 |
+| 4 | 注入 `.pth` 保证「可导入」，命令由启动器落到 PATH（POSIX 为 `~/.local/bin`） | 功能照常可用，差别只是未向解释器登记包元数据 |
+
+若确实要写入该解释器（例如希望 pip 能追踪它的升级 / 卸载），显式开启开关重跑：
+
+```bash
+python telemetry/deploy.py --allow-break-system-packages    # 等价于 pip/uv 的 --break-system-packages
+python telemetry/deploy.py --break-system-packages          # 别名写法
+```
+
+Windows 单行脚本对应参数为 `-AllowBreakSystemPackages`；`deploy.bat` 直接透传 `%*`，加同样的参数即可。
 
 **手工安装**（如需）：
 

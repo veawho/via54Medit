@@ -950,12 +950,45 @@ class TestTelemetry(unittest.TestCase):
         self.assertRegex(setup_py, r'package_data\s*=\s*\{\s*"telemetry"\s*:\s*\["scripts/\*"\]\s*\}')
 
 
-    def test_deploy_pip_pep668_retries_with_break_system_packages(self):
-        """测试：pip 被 PEP 668 拒绝时自动追加 --break-system-packages 重试。
+    def test_deploy_pep668_not_bypassed_by_default(self):
+        """测试：默认**不**绕过 PEP 668 —— 那是解释器管理方划下的边界。
 
-        uv 托管 / 发行版自带 / Homebrew 的解释器都会以该错误拒绝安装, 而这正是本工具的
-        常见运行环境 —— 过去直接退回 .pth, 导致命令根本没被创建。
+        被拒时改为 .pth 注入（只保证可导入），命令由启动器落到 PATH，功能照常可用；
+        同时必须明确告知显式开启逃生开关的方式。
         """
+        import contextlib
+        import io
+        from unittest import mock
+        from telemetry import deploy
+
+        # 逃生开关绝不能出现在默认命令序列里
+        for cmd in deploy._editable_install_cmds():
+            self.assertNotIn("--break-system-packages", cmd)
+
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            return mock.Mock(returncode=1, stdout="",
+                             stderr="error: externally-managed-environment")
+
+        buf = io.StringIO()
+        with mock.patch.object(deploy.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(deploy, "_fallback_pth_install",
+                                  return_value=True) as pth, \
+                contextlib.redirect_stdout(buf):
+            ok = deploy.install_package_locally()
+
+        self.assertTrue(ok)
+        pth.assert_called_once()
+        self.assertTrue(all("--break-system-packages" not in c for c in calls),
+                        "未经授权不得使用逃生开关")
+        out = buf.getvalue()
+        self.assertIn("PEP 668", out)
+        self.assertIn("--allow-break-system-packages", out)
+
+    def test_deploy_pep668_retries_only_when_allowed(self):
+        """测试：显式授权后才追加 --break-system-packages 原地重试。"""
         from unittest import mock
         from telemetry import deploy
 
@@ -965,18 +998,16 @@ class TestTelemetry(unittest.TestCase):
             calls.append(list(cmd))
             if "--break-system-packages" in cmd:
                 return mock.Mock(returncode=0, stdout="Successfully installed", stderr="")
-            return mock.Mock(
-                returncode=1, stdout="",
-                stderr="error: externally-managed-environment\nhint: See PEP 668")
+            return mock.Mock(returncode=1, stdout="",
+                             stderr="error: externally-managed-environment")
 
         with mock.patch.object(deploy.subprocess, "run", side_effect=fake_run):
-            ok = deploy.install_package_locally()
+            ok = deploy.install_package_locally(allow_break_system_packages=True)
 
         self.assertTrue(ok)
-        self.assertEqual(len(calls), 2, "应先常规尝试, 再带逃生开关重试一次")
+        self.assertEqual(calls[0][:4], [sys.executable, "-m", "pip", "install"])
         self.assertNotIn("--break-system-packages", calls[0])
         self.assertIn("--break-system-packages", calls[1])
-        self.assertEqual(calls[0][:4], [sys.executable, "-m", "pip", "install"])
 
     def test_deploy_falls_back_to_pth_when_all_installs_fail(self):
         """测试：pip / uv 全部失败时才退回 .pth 注入（只保证可导入）。"""
@@ -1015,6 +1046,21 @@ class TestTelemetry(unittest.TestCase):
                 fake_shutil.which.return_value = "/usr/local/bin/medit-telemetry"
                 reused = deploy._launcher_targets()
             self.assertEqual(reused, ["/usr/local/bin/medit-telemetry"] * 2)
+
+    def test_nlp_deploy_escape_hatch_intent(self):
+        """测试：只有「强制安装」类表述才开启逃生开关，默认保持关闭。"""
+        from telemetry.nlp_deploy import parse_natural_language_instruction as parse
+
+        self.assertFalse(
+            parse("在新设备上部署监控，花名叫星云")
+            .get("allow_break_system_packages"),
+            "普通部署不得默认开启逃生开关")
+        self.assertTrue(
+            parse("强制安装到系统解释器，花名叫星云")
+            .get("allow_break_system_packages"))
+        self.assertTrue(
+            parse("部署监控 --break-system-packages")
+            .get("allow_break_system_packages"))
 
     def test_platform_paths_user_bin_dirs_and_path_check(self):
         """测试：跨平台 bin 目录候选与 PATH 判定（命令装完能不能被找到）。"""

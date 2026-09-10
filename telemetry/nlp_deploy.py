@@ -27,6 +27,7 @@ def parse_natural_language_instruction(text: str) -> Dict[str, Any]:
         "weekly": "",
         "monthly": "",
         "bitable": "",
+        "allow_break_system_packages": False,
         "raw_text": text,
     }
 
@@ -101,6 +102,12 @@ def parse_natural_language_instruction(text: str) -> Dict[str, Any]:
     bitable_match = re.search(r"(https?://[^\s\"']*(?:feishu\.cn|larksuite\.com)/base/[a-zA-Z0-9]+)|(bascn[a-zA-Z0-9]{15,40})", raw)
     if bitable_match:
         result["bitable"] = bitable_match.group(1) or bitable_match.group(2)
+
+    # 8. 逃生开关: 是否允许绕过 PEP 668 保护写入外部管理的解释器
+    # 默认关闭 —— 只有用户明确表达「强制安装 / 允许写入系统解释器」时才开启
+    if any(k in raw for k in ["强制安装", "强制写入", "允许写入", "绕过保护"]) \
+            or "break-system-packages" in low or "break_system_packages" in low:
+        result["allow_break_system_packages"] = True
 
     return result
 

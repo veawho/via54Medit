@@ -53,7 +53,10 @@ param (
     [switch]$NoLauncher,
 
     [Parameter(Mandatory=$false)]
-    [switch]$Uninstall
+    [switch]$Uninstall,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$AllowBreakSystemPackages
 )
 
 $ErrorActionPreference = "Continue"
@@ -116,6 +119,7 @@ if ($Monthly) { $pyArgs += "--monthly"; $pyArgs += $Monthly }
 if ($NoStartup) { $pyArgs += "--no-startup" }
 if ($NoLauncher) { $pyArgs += "--no-launcher" }
 if ($Uninstall) { $pyArgs += "--uninstall" }
+if ($AllowBreakSystemPackages) { $pyArgs += "--allow-break-system-packages" }
 
 & $pyCmd $pyArgs
 exit $LASTEXITCODE
