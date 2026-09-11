@@ -503,6 +503,47 @@ def collect(install=True, include_heavy=True, env=None):
     return result, osname
 
 
+def verify_platform(result):
+    """自检"平台分类是否与宿主一致" —— 给 CI 在真 Windows/Linux/macOS 跑者上用。
+
+    返回 ``(ok, problems)``。**故意不依赖任何 shell 语义**: 这段逻辑最初写在 CI 的
+    workflow 里, 用了 ``2>/dev/null`` 与 ``|| true``, 结果在 Windows 跑者的 PowerShell 下
+    直接崩(``Could not find a part of the path 'D:\\dev\\null'``)—— 正是本模块要报的那类
+    POSIX 假设, 我自己先踩了一遍。放进脚本里既跨平台又能在本机单测。
+    """
+    problems = []
+    env = result["environment"]
+    osname = env["os"]
+    caps = {r["key"]: r for r in result["capabilities"]}
+
+    if osname not in (WINDOWS, MACOS, LINUX):
+        problems.append("宿主平台识别异常: %r" % osname)
+    expect = current_os()
+    if osname != expect:
+        problems.append("environment.os=%r 与 current_os()=%r 不一致" % (osname, expect))
+
+    def status(key):
+        return caps.get(key, {}).get("status")
+
+    # Windows 专属能力: 非 Windows 必须"不适用"; Windows 上不得"不适用"
+    if osname != WINDOWS and status("pywin32") != NA:
+        problems.append("非 Windows 上 pywin32 应为 na, 实际 %s" % status("pywin32"))
+    if osname == WINDOWS and status("pywin32") == NA:
+        problems.append("Windows 上 pywin32 不该是 na")
+
+    # 桌面 Office: 仅 Windows/macOS 适用
+    for key in ("powerpoint", "word"):
+        if osname == LINUX and status(key) != NA:
+            problems.append("Linux 上 %s 应为 na, 实际 %s" % (key, status(key)))
+        if osname in (WINDOWS, MACOS) and status(key) == NA:
+            problems.append("%s 上 %s 不该是 na" % (osname, key))
+
+    for key in ("ocr", "mmx_cli", "node"):
+        if key not in caps:
+            problems.append("能力矩阵缺少 %s" % key)
+    return (not problems), problems
+
+
 def run(install=True, include_heavy=True, strict=False, as_json=False, env=None):
     result, _osname = collect(install=install, include_heavy=include_heavy, env=env)
     result["strict"] = strict          # 供渲染层区分"阻塞"与"提示"
@@ -572,6 +613,20 @@ def main(argv):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:                                   # noqa: BLE001
         pass
+    if "--verify-platform" in argv:
+        # CI 用: 在真 Windows/Linux/macOS 跑者上验"平台分类是否与宿主一致"。
+        # 只读不装, 且不打印整份报告 —— 避免依赖任何 shell 重定向。
+        result, _ = collect(install=False, include_heavy=include_heavy)
+        ok, problems = verify_platform(result)
+        caps = {r["key"]: r["status"] for r in result["capabilities"]}
+        if ok:
+            print("平台分类自检 OK: os=%s pywin32=%s powerpoint=%s word=%s ocr=%s mmx_cli=%s"
+                  % (result["environment"]["os"], caps.get("pywin32"), caps.get("powerpoint"),
+                     caps.get("word"), caps.get("ocr"), caps.get("mmx_cli")))
+            return 0
+        for p in problems:
+            print("  ✗ %s" % p)
+        return 1
     return run(install=install, include_heavy=include_heavy,
                strict=strict, as_json=as_json)
 

@@ -285,6 +285,84 @@ class TestCompatScan(unittest.TestCase):
             self.assertEqual(ds.run(install=False, strict=False), 0)
 
 
+class TestPlatformSelfCheck(unittest.TestCase):
+    """``--verify-platform`` 是 CI 在真 Windows/Linux/macOS 跑者上用的自检。
+
+    它必须**不依赖 shell 语义**(最初写在 workflow 里用了 `2>/dev/null`, Windows 跑者
+    的 PowerShell 下直接崩), 而且要在分类错位时真的报出来。
+    """
+
+    def test_real_host_classification_is_consistent(self):
+        result, _ = ds.collect(install=False, include_heavy=True)
+        ok, problems = ds.verify_platform(result)
+        self.assertTrue(ok, "本机平台分类自检未通过: %s" % problems)
+
+    def test_detects_na_mismatch(self):
+        """伪造"macOS 上 pywin32 却是 missing" -> 必须报出来。"""
+        result = {
+            "environment": {"os": "macos"},
+            "capabilities": [
+                {"key": "pywin32", "status": "missing"},
+                {"key": "powerpoint", "status": "ok"},
+                {"key": "word", "status": "ok"},
+                {"key": "ocr", "status": "ok"},
+                {"key": "mmx_cli", "status": "ok"},
+                {"key": "node", "status": "ok"},
+            ],
+        }
+        with mock.patch.object(ds, "current_os", return_value="macos"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            ok, problems = ds.verify_platform(result)
+        self.assertFalse(ok)
+        self.assertTrue(any("pywin32" in p for p in problems), problems)
+
+    def test_detects_linux_office_not_na(self):
+        result = {
+            "environment": {"os": "linux"},
+            "capabilities": [
+                {"key": "pywin32", "status": "na"},
+                {"key": "powerpoint", "status": "ok"},      # 错: Linux 上应为 na
+                {"key": "word", "status": "na"},
+                {"key": "ocr", "status": "ok"},
+                {"key": "mmx_cli", "status": "ok"},
+                {"key": "node", "status": "ok"},
+            ],
+        }
+        with mock.patch.object(ds, "current_os", return_value="linux"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            ok, problems = ds.verify_platform(result)
+        self.assertFalse(ok)
+        self.assertTrue(any("powerpoint" in p for p in problems), problems)
+
+    def test_detects_windows_pywin32_wrongly_na(self):
+        result = {
+            "environment": {"os": "windows"},
+            "capabilities": [
+                {"key": "pywin32", "status": "na"},         # 错: Windows 上不该 na
+                {"key": "powerpoint", "status": "ok"},
+                {"key": "word", "status": "ok"},
+                {"key": "ocr", "status": "ok"},
+                {"key": "mmx_cli", "status": "ok"},
+                {"key": "node", "status": "ok"},
+            ],
+        }
+        with mock.patch.object(ds, "current_os", return_value="windows"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            ok, problems = ds.verify_platform(result)
+        self.assertFalse(ok)
+        self.assertTrue(any("pywin32" in p for p in problems), problems)
+
+    def test_verify_platform_is_shell_free(self):
+        """回归: 这段逻辑不能再回到"靠 shell 重定向"的写法。"""
+        with mock.patch.object(ds, "collect", wraps=ds.collect) as coll, \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = ds.main(["--verify-platform"])
+        self.assertEqual(code, 0)
+        # 只读: 必须是以 install=False 调用的
+        self.assertFalse(coll.call_args.kwargs.get("install", True),
+                         "--verify-platform 不该触发安装")
+
+
 class TestEntrypoints(unittest.TestCase):
     """两个入口脚本必须共用同一引擎, 且 mmx 安装不再走 pip。"""
 

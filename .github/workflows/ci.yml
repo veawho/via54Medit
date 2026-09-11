@@ -76,29 +76,14 @@ jobs:
         working-directory: scripts
         run: python -m unittest test_deploy_scan
 
-      - name: Deploy scan smoke (must run on all 3 platforms)
+      - name: Deploy scan — platform classification self-check
         working-directory: scripts
-        run: |
-          # 只做"能跑通 + 输出是合法 JSON"的冒烟, **不断言全绿** —— 跑者镜像里没有
-          # 桌面 Office、也没装 OCR, 必然有缺口; 这里要验的是扫描器在三个平台上
-          # 都能正确按平台分类(不适用项标 na、缺失项标 missing), 而不是环境本身完备。
-          python deploy_scan.py --check --json > ds.json 2>/dev/null || true
-          python -c "
-          import json
-          d=json.load(open('ds.json', encoding='utf-8'))
-          caps={r['key']:r for r in d['capabilities']}
-          osname=d['environment']['os']
-          assert d['environment']['os'] in ('windows','macos','linux'), osname
-          # 平台过滤的硬断言: 与平台无关的能力必须标 na
-          if osname!='windows':
-              assert caps['pywin32']['status']=='na', caps['pywin32']
-          if osname=='linux':
-              assert caps['powerpoint']['status']=='na', caps['powerpoint']
-              assert caps['word']['status']=='na', caps['word']
-          assert 'ocr' in caps and 'mmx_cli' in caps
-          print('platform filtering OK on', osname)
-          "
-          rm -f ds.json
+        # 断言"平台分类与宿主一致"的逻辑放在脚本里(而不是写在这份 YAML 里) ——
+        # 最初写在 YAML 里, 用了 `2>/dev/null` 与 `|| true`, 在 Windows 跑者的
+        # PowerShell 下直接崩("Could not find a part of the path 'D:\dev\null'")。
+        # 这里**不断言全绿**: 跑者镜像没有桌面 Office/OCR, 缺缺口是正常的;
+        # 要验的是非 Windows 上 pywin32 必须是 na、Linux 上 Office 必须是 na。
+        run: python deploy_scan.py --verify-platform
 
       # 注: 渲染通道的"真出图"探针 (scripts/render_doctor.py) **故意不放进 CI** ——
       # 跑者的镜像里没有(也不该有)桌面版 PowerPoint/Word, 它必然报不可用。
