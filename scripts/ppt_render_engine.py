@@ -9,9 +9,9 @@ ppt_render_engine.py — PPT → 图片 渲染 (部署新系统即用)
    否则 python-pptx 兜底", 与规范不符, 已改写。)
 
 关于引擎偏好 RENDER_ENGINE:
-  * 不设置时 = ``powerpoint``。这是正常路径: 单通道, 无自动降级。
-  * 其它取值(``wps`` / ``libreoffice`` / ``python_pptx`` / ``auto``)属**显式覆盖**,
-    不做默认、不做兜底; 它们的保真度低于 PowerPoint(python-pptx 只是近似渲染)。
+  * 只认 ``powerpoint``(默认); 其它取值一律报错。
+  * WPS / LibreOffice / python-pptx 等通道以及 "auto 自动降级" **已整体删除**,
+    代码里不再存在(2026-09-11)。缺少 PowerPoint 时直接失败, 不降级、不近似渲染。
 
 CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Noto CJK)。
 
@@ -19,29 +19,26 @@ CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Not
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
   n, engine = render_ppt_slides_auto("D:/x.pptx", "D:/out")
 """
-import os, io, sys, subprocess, time
+import os, sys, subprocess, time
 
-# 引擎探测优先级
+# 渲染引擎: **只使用 PowerPoint**
+#   (2026-09-04 用户规范; 2026-09-11 用户重申"只使用 PowerPoint 渲染, 禁用其它通道")
+# 据此把 WPS / LibreOffice / python-pptx 三条通道**整体删除** —— 它们既不做默认、也不做兜底,
+# 代码里已不存在。缺少 PowerPoint 时直接失败, 不降级。
 COM_ENGINES = [
     ("PowerPoint", "PowerPoint.Application"),
-    ("WPS 演示", "KWPP.Application"),
 ]
 
-# 渲染引擎偏好 (2026-09-04 用户规范): 默认 PowerPoint 并禁用其他引擎自动切换。
-# 覆盖: 环境变量 RENDER_ENGINE=powerpoint|wps|libreoffice|python_pptx|auto
-#   auto = 旧行为 (按可用性自动降级, 仅显式要求时启用)
+
 def _engine_pref():
+    """环境变量 RENDER_ENGINE 只认 ``powerpoint``(默认); 其它取值由 _build_engine_list 报错。"""
     return os.environ.get("RENDER_ENGINE", "powerpoint").strip().lower()
+
 
 # 偏好引擎 → 引擎标识
 _PREF_MAP = {
     "powerpoint": ("PowerPoint", "com", "PowerPoint.Application"),
     "ppt": ("PowerPoint", "com", "PowerPoint.Application"),
-    "wps": ("WPS 演示", "com", "KWPP.Application"),
-    "libreoffice": ("LibreOffice (soffice)", "soffice", None),
-    "soffice": ("LibreOffice (soffice)", "soffice", None),
-    "python_pptx": ("python-pptx 近似渲染", "python_pptx", ""),
-    "python-pptx": ("python-pptx 近似渲染", "python_pptx", ""),
 }
 
 
@@ -105,18 +102,13 @@ def _macos_powerpoint_available():
         return False
 
 
-def _find_soffice():
-    """探测 LibreOffice 可执行文件 (soffice/libreoffice), 全平台"""
-    import shutil
-    for name in ("soffice", "libreoffice"):
-        p = shutil.which(name)
-        if p:
-            return p
-    return None
-
-
 def detect_engines():
-    """返回可用引擎列表 [(name, kind, target), ...], kind: com | macos_ppt | soffice | python_pptx"""
+    """返回本机可用的 **PowerPoint** 引擎列表 [(name, kind, target), ...]。
+
+    kind: ``com`` (Windows COM) | ``macos_ppt`` (macOS 原生 PowerPoint / AppleScript)。
+    **只探测 PowerPoint** —— 其它渲染通道已按规范禁用并从本模块删除(2026-09-04 / 2026-09-11)。
+    保留本函数是为 ``deps_auto`` 与 ``bootstrap_device`` 的依赖与设备就绪检查。
+    """
     out = []
     if os.name == "nt":
         for name, progid in COM_ENGINES:
@@ -125,10 +117,6 @@ def detect_engines():
                     out.append((name, "com", progid))
     if sys.platform == "darwin" and _macos_powerpoint_available():
         out.append(("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint"))
-    soffice = _find_soffice()
-    if soffice:
-        out.append(("LibreOffice (soffice)", "soffice", soffice))
-    out.append(("python-pptx 近似渲染", "python_pptx", ""))
     return out
 
 
@@ -315,172 +303,44 @@ def render_via_com(progid, pptx_path, out_dir, width_px=1600):
     return n
 
 
-# ============ LibreOffice 真实渲染 (全平台, 检测到即优先于近似) ============
-def render_via_soffice(soffice, pptx_path, out_dir, dpi=120):
-    """soffice --headless 转 PDF → PyMuPDF 渲染 PNG (真实排版, 含矢量/图表)"""
-    os.makedirs(out_dir, exist_ok=True)
-    import tempfile
-    import pymupdf as fitz
-    tmp = tempfile.mkdtemp(prefix="ppt_soffice_")
-    pdf_path = os.path.join(tmp, "slides.pdf")
-    try:
-        r = subprocess.run([soffice, "--headless", "--convert-to", "pdf",
-                            "--outdir", tmp, pptx_path],
-                           capture_output=True, text=True, timeout=300)
-        if r.returncode != 0 or not os.path.exists(pdf_path):
-            raise RuntimeError("soffice convert failed: %s" % (r.stderr or r.stdout)[-200:])
-        doc = fitz.open(pdf_path)
-        n = 0
-        for i, page in enumerate(doc, start=1):
-            pix = page.get_pixmap(dpi=dpi)
-            pix.save(os.path.join(out_dir, "slide_%03d.png" % i))
-            n += 1
-        doc.close()
-        return n
-    finally:
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-# ============ python-pptx 近似渲染 (兜底) ============
-
-# CJK 字体候选 (按平台): Windows 微软雅黑 / macOS 苹方·黑体 / Linux Noto·文泉驿
-_FONT_CANDIDATES = [
-    # Windows
-    r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhl.ttc", r"C:\Windows\Fonts\simhei.ttf",
-    # macOS
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/Supplemental/Songti.ttc",
-    # Linux (Noto CJK / 文泉驿)
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
-    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-]
-
-
-def _find_cjk_font():
-    """按平台探测可用的 CJK 字体文件, 找不到返回 None (退化为内置位图字体)"""
-    for cand in _FONT_CANDIDATES:
-        if os.path.exists(cand):
-            return cand
-    # Linux 兜底: fc-match 查询
-    if os.name != "nt":
-        try:
-            out = subprocess.run(["fc-match", "-f", "%{file}", "sans-serif:lang=zh"],
-                                 capture_output=True, text=True, timeout=10)
-            p = (out.stdout or "").strip()
-            if p and os.path.exists(p):
-                return p
-        except Exception:
-            pass
-    return None
-
-
-def render_via_python_pptx(pptx_path, out_dir, dpi=120):
-    os.makedirs(out_dir, exist_ok=True)
-    try:
-        from pptx import Presentation
-        from pptx.enum.shapes import MSO_SHAPE_TYPE
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as e:
-        print("  [warn] render 依赖缺失: %s (跳过 slide 图导出)" % e)
-        return 0
-    font_path = _find_cjk_font()
-    prs = Presentation(pptx_path)
-    EMU_IN = 914400.0
-    n = 0
-    for idx, slide in enumerate(prs.slides, start=1):
-        w = int(prs.slide_width / EMU_IN * dpi)
-        h = int(prs.slide_height / EMU_IN * dpi)
-        img = Image.new("RGB", (max(w, 1), max(h, 1)), "white")
-        draw = ImageDraw.Draw(img)
-        for shape in slide.shapes:
-            try:
-                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                    bio = io.BytesIO(shape.image.blob)
-                    im = Image.open(bio).convert("RGB")
-                    x0 = int(shape.left / EMU_IN * dpi); y0 = int(shape.top / EMU_IN * dpi)
-                    x1 = int((shape.left + shape.width) / EMU_IN * dpi)
-                    y1 = int((shape.top + shape.height) / EMU_IN * dpi)
-                    if x1 > x0 and y1 > y0:
-                        img.paste(im.resize((x1 - x0, y1 - y0)), (x0, y0))
-                elif shape.has_table:
-                    tbl = shape.table
-                    x0 = int(shape.left / EMU_IN * dpi); y0 = int(shape.top / EMU_IN * dpi)
-                    x1 = int((shape.left + shape.width) / EMU_IN * dpi)
-                    y1 = int((shape.top + shape.height) / EMU_IN * dpi)
-                    draw.rectangle([x0, y0, x1, y1], outline="black")
-                    rows = len(tbl.rows); cols = len(tbl.columns)
-                    rh = (y1 - y0) / rows if rows else 0
-                    cw = (x1 - x0) / cols if cols else 0
-                    for ri in range(rows):
-                        for ci in range(cols):
-                            cell = tbl.cell(ri, ci)
-                            txt = (cell.text or "").strip()[:40]
-                            cx0 = x0 + ci * cw; cy0 = y0 + ri * rh
-                            draw.rectangle([cx0, cy0, cx0 + cw, cy0 + rh], outline="black")
-                            if txt:
-                                fnt = ImageFont.truetype(font_path, max(int(rh * 0.5), 8)) if font_path else ImageFont.load_default()
-                                draw.text((cx0 + 2, cy0 + 2), txt, fill="black", font=fnt)
-                elif shape.has_text_frame:
-                    txt = (shape.text_frame.text or "").strip()
-                    if not txt:
-                        continue
-                    x0 = int(shape.left / EMU_IN * dpi); y0 = int(shape.top / EMU_IN * dpi)
-                    fnt = ImageFont.truetype(font_path, 12) if font_path else ImageFont.load_default()
-                    draw.text((x0 + 2, y0 + 2), txt[:200], fill="black", font=fnt)
-            except Exception:
-                continue
-        img.save(os.path.join(out_dir, "slide_%03d.png" % idx))
-        n += 1
-    return n
-
-
 def _build_engine_list():
-    """按引擎偏好构造待尝试引擎列表 (默认 powerpoint 自动适配 Windows COM 与 macOS 原生 PowerPoint)."""
+    """构造待用引擎列表。**只会有 PowerPoint** —— Windows COM 或 macOS 原生。
+
+    其它渲染通道已按规范禁用并删除, 故这里没有降级链: 拿不到 PowerPoint 就抛错。
+    """
     pref = _engine_pref()
-    if pref == "auto":
-        return detect_engines()
     spec = _PREF_MAP.get(pref)
     if spec is None:
-        raise RuntimeError("未知 RENDER_ENGINE=%r (可选: powerpoint|wps|libreoffice|python_pptx|auto)" % pref)
+        raise RuntimeError(
+            "未知 RENDER_ENGINE=%r —— 按规范只支持 powerpoint(默认)。"
+            "其它渲染通道已禁用并删除。" % pref)
     name, kind, progid = spec
-    if kind == "com":
-        if os.name == "nt":
-            if not (_progid_available(progid) and _ensure_pywin32(progid) and _com_probe(progid)):
-                raise RuntimeError("[render] 偏好引擎 %s (COM %s) 在 Windows 不可用" % (name, progid))
-            return [(name, kind, progid)]
-        elif sys.platform == "darwin" and _macos_powerpoint_available():
-            return [("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")]
-        else:
-            # 规范是**只走 PowerPoint**: 不可用就失败, 不静默改用 LibreOffice / python-pptx。
-            # (2026-09-11 勘误: 此处原先会回落到 soffice 或 python_pptx —— 那等于自动切换
-            #  渲染通道, 违反 "只使用 PowerPoint 渲染, 禁用其它通道" 的规范。)
+    if os.name == "nt":
+        if not (_progid_available(progid) and _ensure_pywin32(progid) and _com_probe(progid)):
             raise RuntimeError(
-                "[render] 偏好引擎 %s 在本机不可用 —— 规范要求只使用 PowerPoint 渲染、"
-                "禁用其它通道, 故不自动降级。请确认 PowerPoint 已安装并激活; "
-                "macOS 还需在 系统设置 › 隐私与安全性 › 自动化 里允许其被控制。" % name)
-    if kind == "soffice":
-        p = _find_soffice()
-        if not p:
-            raise RuntimeError("[render] 偏好引擎 LibreOffice (soffice) 不可用")
-        return [(name, kind, p)]
-    return [(name, kind, "")]  # python_pptx 兜底恒可用
+                "[render] PowerPoint (COM %s) 在本机不可用 —— 规范要求只使用 PowerPoint 渲染、"
+                "禁用其它通道, 故不降级。请确认 PowerPoint 已安装并激活。" % progid)
+        return [(name, kind, progid)]
+    if sys.platform == "darwin" and _macos_powerpoint_available():
+        return [("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")]
+    raise RuntimeError(
+        "[render] PowerPoint 在本机不可用 —— 规范要求只使用 PowerPoint 渲染、"
+        "禁用其它通道, 故不降级。请确认 PowerPoint 已安装并激活; "
+        "macOS 还需在 系统设置 › 隐私与安全性 › 自动化 里允许其被控制。")
 
 
 def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
-    """按引擎偏好渲染全部 slide, 返回 (count, engine_name).
-    默认偏好 = PowerPoint (Windows COM / macOS 原生 PowerPoint).
+    """用 PowerPoint 渲染全部 slide, 返回 (count, engine_name)。
+
+    引擎恒为 PowerPoint (Windows COM / macOS 原生)。按规范**不切换其它通道**:
+    拿不到 PowerPoint 就返回 ``(0, "none")``, 不会退化成别的渲染方式。
     """
     os.makedirs(out_dir, exist_ok=True)
     try:
         engines = _build_engine_list()
     except Exception as e:
         print("  [render] %s" % str(e), flush=True)
-        print("  [render] 提示: 引擎偏好由 RENDER_ENGINE 控制 (默认 powerpoint)", flush=True)
+        print("  [render] 提示: 只使用 PowerPoint 渲染; 其它通道已禁用", flush=True)
         return 0, "none"
     for idx, (name, kind, progid) in enumerate(engines):
         is_last = idx == len(engines) - 1
@@ -495,16 +355,9 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
                 n = render_via_macos_powerpoint(pptx_path, out_dir)
                 if n > 0:
                     return n, name
-            elif kind == "soffice":
-                print("  [render] 引擎=%s (%s)" % (name, progid), flush=True)
-                n = render_via_soffice(progid, pptx_path, out_dir)
-                if n > 0:
-                    return n, name
             else:
-                print("  [render] 引擎=%s (兜底)" % name, flush=True)
-                n = render_via_python_pptx(pptx_path, out_dir)
-                if n > 0:
-                    return n, name
+                # 通道已被禁用, 正常不会到达
+                print("  [render] 未知引擎类型 %r —— 其它渲染通道已按规范禁用" % kind, flush=True)
         except Exception as e:
             # 消息截断到 160; **可操作建议单独成行**打印 —— 拼在消息里会被截断切掉。
             tail = "" if is_last else " (尝试下一引擎)"
@@ -512,7 +365,7 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
             hint = getattr(e, "hint", "")
             if hint:
                 print("  [render] 处理建议: %s" % hint, flush=True)
-    print("  [render] 所有引擎均失败, 返回 0 张幻灯片", flush=True)
+    print("  [render] PowerPoint 渲染失败, 返回 0 张幻灯片 (按规范不切换其它通道)", flush=True)
     return 0, "none"
 
 

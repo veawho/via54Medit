@@ -458,87 +458,25 @@ class TestRenderEngine(unittest.TestCase):
         # 不存在的 ProgID 必须返回 False (不误报)
         self.assertFalse(pre._progid_available("No.Such.ProgID.12345"))
 
-    def test_detect_engines_always_has_fallback(self):
+    def test_detect_engines_reports_only_powerpoint(self):
+        """detect_engines 只探测 PowerPoint —— 其它渲染通道已按规范禁用并删除。
+
+        本条替换了原先的 ``test_detect_engines_always_has_fallback``(它断言 python_pptx
+        一定出现在列表里)。**那正是被删掉的通道**, 故断言反转: 只允许 com / macos_ppt
+        两种 kind, 不得再出现 soffice / python_pptx / WPS。
+        """
         engines = pre.detect_engines()
-        self.assertTrue(any(k == "python_pptx" for _, k, _ in engines))
-
-    def test_render_python_pptx_fallback(self):
-        # 构造一个简单 pptx, 验证 python-pptx 兜底渲染输出 PNG
-        try:
-            from pptx import Presentation
-        except ImportError:
-            self.skipTest("python-pptx 缺失")
-        tmp = tempfile.mkdtemp()
-        pptx = os.path.join(tmp, "t.pptx")
-        prs = Presentation()
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
-        tb = slide.shapes.add_textbox(72, 72, 400, 60)
-        tb.text = "TMA 补体通路"
-        prs.save(pptx)
-        out = os.path.join(tmp, "out")
-        n = pre.render_via_python_pptx(pptx, out)
-        self.assertEqual(n, 1)
-        self.assertTrue(os.path.exists(os.path.join(out, "slide_001.png")))
-
-    def test_render_auto_falls_back_when_com_fails(self):
-        """auto 模式下 COM 全失败 → 必须降级 python-pptx 且不抛异常。
-
-        **必须显式设 RENDER_ENGINE=auto**: 默认偏好是 powerpoint, 而按 2026-09-04 规范
-        默认**禁用自动切换**; 只有 auto 才走 ``detect_engines()`` 的降级链。
-
-        这条以前是坏的 —— 它 mock 了 ``detect_engines`` 却没设 auto, 而默认偏好下
-        ``render_ppt_slides_auto`` 走的是 ``_build_engine_list()``, 于是**mock 完全不生效**,
-        测试实际去跑真引擎: 本机装了 PowerPoint 就落到 macOS AppleScript 路径, 因
-        AppleEvent -1712 超时耗 300s 后返回 0 页而失败; CI windows-latest 上则因
-        ``_build_engine_list`` 抛错被吞成 ``(0,"none")`` 同样失败。
-        """
-        try:
-            from pptx import Presentation
-        except ImportError:
-            self.skipTest("python-pptx 缺失")
-        tmp = tempfile.mkdtemp()
-        pptx = os.path.join(tmp, "t.pptx")
-        prs = Presentation()
-        prs.slides.add_slide(prs.slide_layouts[6])
-        prs.save(pptx)
-        out = os.path.join(tmp, "out2")
-        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "auto"}), \
-                mock.patch.object(pre, "detect_engines", return_value=[
-                    ("fake", "com", "No.Such.ProgID.999"),
-                    ("python-pptx", "python_pptx", ""),
-                ]):
-            n, engine = pre.render_ppt_slides_auto(pptx, out)
-        self.assertGreaterEqual(n, 1)
-        self.assertEqual(engine, "python-pptx")
-
-    def test_auto_mode_mock_seam_is_effective(self):
-        """钉住上一条的前提: auto 模式下 mock ``detect_engines`` 真的会被用到。
-
-        这是对"失效 mock"这类 bug 的直接防护 —— 只要 seam 写错(比如代码改回用别的函数),
-        引擎名就对不上, 测试立刻失败, 而不是悄悄去跑真引擎、耗时几分钟再报一个误导性的错。
-        """
-        try:
-            from pptx import Presentation
-        except ImportError:
-            self.skipTest("python-pptx 缺失")
-        tmp = tempfile.mkdtemp()
-        pptx = os.path.join(tmp, "t.pptx")
-        prs = Presentation()
-        prs.slides.add_slide(prs.slide_layouts[6])
-        prs.save(pptx)
-        out = os.path.join(tmp, "out_seam")
-        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "auto"}), \
-                mock.patch.object(pre, "detect_engines",
-                                  return_value=[("sentinel-engine", "python_pptx", "")]):
-            n, engine = pre.render_ppt_slides_auto(pptx, out)
-        self.assertEqual(engine, "sentinel-engine", "mock 没生效 —— seam 可能又被改错了")
-        self.assertGreaterEqual(n, 1)
+        kinds = {k for _, k, _ in engines}
+        self.assertTrue(kinds <= {"com", "macos_ppt"},
+                        "detect_engines 出现了非 PowerPoint 通道: %r" % kinds)
+        for name, _kind, _target in engines:
+            self.assertIn("PowerPoint", name)
 
     def test_default_pref_does_not_silently_switch_engine(self):
-        """默认偏好下引擎不可用 → 不静默降级到其它引擎 (2026-09-04 用户规范)。
+        """拿不到 PowerPoint 时直接失败, 不静默降级到其它引擎 (2026-09-04 用户规范)。
 
-        同时钉住"为什么上面那条必须显式设 auto": 默认走的是 ``_build_engine_list()``,
-        不是 ``detect_engines()`` 的降级链。返回 (0, "none") 而不是偷偷换低保真引擎。
+        渲染入口返回 ``(0, "none")`` 而不是偷偷换低保真引擎。
+        (其它通道现已物理删除, 故这里只剩"要么 PowerPoint, 要么 0 张"这一种选择。)
         """
         try:
             from pptx import Presentation
@@ -684,7 +622,7 @@ class TestRenderEngine(unittest.TestCase):
         logged = "\n".join(" ".join(str(a) for a in c.args) for c in mp.call_args_list)
         self.assertIn("模态对话框", logged, "可操作建议没出现在日志里(多半又被截断了)")
         self.assertIn("PPT_RENDER_TIMEOUT", logged)
-        self.assertIn("所有引擎均失败", logged)
+        self.assertIn("PowerPoint 渲染失败", logged)
 
     def test_powerpoint_pref_never_falls_back_to_other_channels(self):
         """规范: **只使用 PowerPoint 渲染**。偏好=powerpoint 时不可用 → 直接失败, 不换通道。
@@ -706,24 +644,34 @@ class TestRenderEngine(unittest.TestCase):
         # 没 PowerPoint → 抛错, 且明确说明不降级
         with mock.patch.dict(os.environ, clean, clear=True), \
                 mock.patch.object(pre.sys, "platform", "darwin"), \
-                mock.patch.object(pre, "_macos_powerpoint_available", return_value=False), \
-                mock.patch.object(pre, "_find_soffice", return_value="/usr/bin/soffice"):
+                mock.patch.object(pre, "_macos_powerpoint_available", return_value=False):
             with self.assertRaises(RuntimeError) as cm:
                 pre._build_engine_list()
         self.assertIn("只使用 PowerPoint", str(cm.exception))
 
-        # 渲染入口应返回 0, 并且**绝不能**跑起别的引擎
+        # 渲染入口返回 0; 别的通道**在代码里已不存在**, 不可能被调用
         with mock.patch.dict(os.environ, clean, clear=True), \
                 mock.patch.object(pre.sys, "platform", "darwin"), \
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=False), \
-                mock.patch.object(pre, "_find_soffice", return_value="/usr/bin/soffice"), \
-                mock.patch.object(pre, "render_via_soffice",
-                                  side_effect=AssertionError("不应改走 soffice")), \
-                mock.patch.object(pre, "render_via_python_pptx",
-                                  side_effect=AssertionError("不应改走 python-pptx")), \
                 mock.patch("builtins.print"):
             n, engine = pre.render_ppt_slides_auto(pptx, os.path.join(tmp, "o"))
         self.assertEqual((n, engine), (0, "none"))
+
+    def test_other_render_channels_are_gone(self):
+        """其它渲染通道不是"被禁用", 而是**物理上已删除** —— 连名字都不该存在。
+
+        这比"把函数 mock 掉不让调用"更强: 没有函数可调, 就不存在误走通道的可能。
+        """
+        for gone in ("render_via_soffice", "render_via_python_pptx",
+                     "_find_soffice", "_find_cjk_font", "_FONT_CANDIDATES"):
+            self.assertFalse(hasattr(pre, gone), "其它渲染通道的 %s 仍在模块里" % gone)
+        self.assertEqual(set(pre._PREF_MAP), {"powerpoint", "ppt"},
+                         "偏好表里还有非 PowerPoint 取值")
+        self.assertEqual([p for _, p in pre.COM_ENGINES], ["PowerPoint.Application"],
+                         "COM 引擎表里还有非 PowerPoint 项")
+        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "soffice"}):
+            with self.assertRaises(RuntimeError):
+                pre._build_engine_list()
 
     def test_windows_powerpoint_unavailable_raises_without_fallback(self):
         """Windows 上 PowerPoint COM 不可用同样直接失败, 不换通道。"""
