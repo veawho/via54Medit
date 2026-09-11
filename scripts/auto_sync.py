@@ -90,6 +90,37 @@ def log(message: str = ""):
         pass
 
 
+# 拉取状态 -> 人话, 供日志与告警卡片共用
+_PULL_STATE_TEXT = {
+    "ok": "成功",
+    "skipped_dirty": "跳过 (工作区有未提交改动)",
+    "failed": "失败 (暂时性网络/代理故障)",
+}
+
+
+def notify(title: str, lines, key: str, level: str = "warning") -> bool:
+    """把关键事件推到外部告警通道 (飞书)。
+
+    直接复用 ``telemetry.alerter`` —— 同一条链路、同一份限流账本 (~/.medit/alerts_state.json),
+    不重复实现一套。告警只在这几种失败场景触发, 成功时保持安静。
+
+    惰性导入 + 整段吞异常: 告警通道不可用时 (包未部署、网络不通、依赖缺失) 绝不能影响
+    同步任务本身 —— "发不出告警"不该升级成新的故障。
+    """
+    try:
+        repo = str(REPO_DIR)
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+        from telemetry.alerter import send_alert
+
+        ok, msg = send_alert(title, list(lines), key=key, level=level)
+        log(f"  {'✓' if ok else 'ⓘ'} 告警推送: {msg}")
+        return ok
+    except Exception as e:
+        log(f"  ⚠️ 告警通道不可用 (已忽略, 不影响同步任务): {e}")
+        return False
+
+
 def launchd_path() -> str:
     """为 LaunchAgent 构造 PATH。
 
@@ -179,6 +210,8 @@ def pull_and_rebuild():
 
     # 1. 代码同步
     pull_state = "ok"
+    pull_detail = ""
+    pull_attempts = 0
     if worktree_is_dirty():
         # 刻意不用 --autostash: 无人值守时一旦 autostash 回放冲突, 会在工作区留下冲突现场,
         # 下一个周期照样卡住。跳过更安全, 且构建仍然照做。
@@ -186,24 +219,26 @@ def pull_and_rebuild():
         log("  ⚠️ 工作区有未提交改动, 本次跳过代码拉取 (避免 autostash 回放冲突)。")
         log("     仍会从当前工作区重新构建; 提交或 stash 后下个周期自动恢复同步。")
     else:
-        ok, detail, attempts = pull_with_retry()
+        ok, pull_detail, pull_attempts = pull_with_retry()
         if ok:
-            suffix = f" (第 {attempts} 次尝试)" if attempts > 1 else ""
-            log(f"  ✓ 代码拉取成功: {detail}{suffix}")
+            suffix = f" (第 {pull_attempts} 次尝试)" if pull_attempts > 1 else ""
+            log(f"  ✓ 代码拉取成功: {pull_detail}{suffix}")
         else:
             pull_state = "failed"
-            log(f"  ✗ 代码拉取失败 (已重试 {attempts} 次): {detail}")
+            log(f"  ✗ 代码拉取失败 (已重试 {pull_attempts} 次): {pull_detail}")
             log("     → 判定为暂时性网络/代理故障; 本次仍继续构建, 下个周期会自动重试拉取。")
 
     # 2. 编译 Go 核心 (走 Makefile, 以便按 git describe 打上正确的版本戳)
     log("[auto_sync] 重新构建 Go 核心二进制 (bin/medit, bin/medit-mcp)...")
     ok, out, err = run_cmd(["make", "build"])
     build_ok = ok
+    build_detail = ""
     if ok:
         log("  ✓ bin/medit, bin/medit-mcp 构建成功")
     else:
-        detail = [ln.strip() for ln in (out + "\n" + err).splitlines() if ln.strip()]
-        log(f"  ✗ 构建失败: {detail[-1] if detail else '(无输出)'}")
+        lines = [ln.strip() for ln in (out + "\n" + err).splitlines() if ln.strip()]
+        build_detail = lines[-1] if lines else "(无输出)"
+        log(f"  ✗ 构建失败: {build_detail}")
 
     # 3. 运行 Python 单元测试验证
     log("[auto_sync] 验证 Python 核心算法健康状态...")
@@ -220,6 +255,18 @@ def pull_and_rebuild():
         log("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
         log("         排查: 确认 go / make 在 PATH 中 (launchd 默认 PATH 不含 Homebrew),")
         log("         或在仓库根目录手工执行 make build 复现。")
+        notify(
+            "auto_sync 构建失败",
+            [
+                f"**仓库**：`{REPO_DIR}`",
+                f"**失败摘要**：`{build_detail or '(无输出)'}`",
+                f"**代码同步**：{_PULL_STATE_TEXT.get(pull_state, pull_state)}",
+                "**影响**：本地部署的 Go 二进制仍停留在旧版本，定时同步实际未生效。",
+                "**排查**：确认 `go` / `make` 在 PATH 中；或在仓库根手工执行 `make build` 复现。",
+            ],
+            key="autosync-build-failed",
+            level="critical",
+        )
         return False, pull_state
 
     if pull_state == "ok":
@@ -228,6 +275,18 @@ def pull_and_rebuild():
         log("[auto_sync] ✅ 二进制已从当前工作区重建; 代码未同步 (工作区有未提交改动)。")
     else:
         log("[auto_sync] ⚠️ 二进制已重建, 但代码未同步 (本次拉取失败, 下个周期重试)。")
+        notify(
+            "auto_sync 代码未同步",
+            [
+                f"**仓库**：`{REPO_DIR}`",
+                f"**失败摘要**：`{pull_detail or '(无输出)'}`",
+                f"**已重试**：{pull_attempts} 次",
+                "**判读**：疑似网络 / 代理 (Clash) 抖动，属暂时性故障。",
+                "**影响**：二进制已按本地工作区重建；代码落后于远端。下个周期会自动重试拉取。",
+            ],
+            key="autosync-pull-failed",
+            level="warning",
+        )
     return True, pull_state
 
 

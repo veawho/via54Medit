@@ -1420,9 +1420,17 @@ class TestAutoSync(unittest.TestCase):
         self.calls = []
         self.state = {"dirty": False, "pull_ok": True, "build_ok": True}
         self.mod.run_cmd = self._fake_run_cmd
+        # 告警必须打桩 —— 否则跑单测会真的往飞书发卡片
+        self.notifications = []
+        self.mod.notify = self._fake_notify
 
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _fake_notify(self, title, lines, key, level="warning"):
+        self.notifications.append(
+            {"title": title, "lines": list(lines), "key": key, "level": level})
+        return True
 
     @staticmethod
     def _load_auto_sync():
@@ -1469,9 +1477,10 @@ class TestAutoSync(unittest.TestCase):
         self.assertEqual(self._pulled(), [],
                          "脏工作区不应尝试 pull (autostash 回放冲突风险)")
         self.assertTrue(self._built(), "跳过拉取不等于跳过构建")
+        self.assertEqual(self.notifications, [], "脏工作区属预期状态, 不该告警")
 
     def test_pull_failure_is_transient_and_build_still_runs(self):
-        """网络/代理抖动导致拉取失败: 重试若干次, 仍继续构建, 状态标为 failed。"""
+        """网络/代理抖动导致拉取失败: 重试若干次, 仍继续构建, 状态标为 failed 并告警。"""
         self.state.update(pull_ok=False)
         updated, state = self.mod.pull_and_rebuild()
         self.assertTrue(updated, "构建成功即视为部署已更新")
@@ -1479,11 +1488,47 @@ class TestAutoSync(unittest.TestCase):
         self.assertEqual(len(self._pulled()), self.mod.PULL_ATTEMPTS, "应重试到上限")
         self.assertTrue(self._built(), "拉取失败不应中止整轮")
 
+        self.assertEqual(len(self.notifications), 1, "代码未同步应告警一次")
+        note = self.notifications[0]
+        self.assertEqual(note["key"], "autosync-pull-failed")
+        self.assertEqual(note["level"], "warning")
+        self.assertIn("未同步", note["title"])
+
     def test_build_failure_means_not_updated(self):
-        """只有构建失败才算部署未更新。"""
+        """只有构建失败才算部署未更新, 并以 critical 级别告警。"""
         self.state.update(build_ok=False)
         updated, _ = self.mod.pull_and_rebuild()
         self.assertFalse(updated)
+
+        self.assertEqual(len(self.notifications), 1, "构建失败应告警一次")
+        note = self.notifications[0]
+        self.assertEqual(note["key"], "autosync-build-failed")
+        self.assertEqual(note["level"], "critical")
+        self.assertIn("构建失败", note["title"])
+        self.assertTrue(any("boom" in ln for ln in note["lines"]),
+                        "卡片正文应带上失败摘要, 便于直接判读")
+
+    def test_success_path_is_silent(self):
+        """成功时保持安静 —— 只有失败才打扰人。"""
+        updated, state = self.mod.pull_and_rebuild()
+        self.assertEqual((updated, state), (True, "ok"))
+        self.assertEqual(self.notifications, [])
+
+    def test_notify_never_breaks_the_job(self):
+        """告警通道出问题时, notify 必须返回 False 而不是抛异常。
+
+        告警失败不能把同步任务带崩 —— "发不出告警"不该升级成新的故障。
+        """
+        from unittest import mock
+
+        # 重新加载一份模块, 拿到未被 setUp 打桩的真实 notify
+        fresh = self._load_auto_sync()
+        fresh.LOG_FILE = self.mod.LOG_FILE  # 别写到真实的 ~/.medit/autosync.log
+
+        boom = mock.MagicMock(side_effect=RuntimeError("通道炸了"))
+        with mock.patch.dict(sys.modules,
+                             {"telemetry.alerter": mock.MagicMock(send_alert=boom)}):
+            self.assertFalse(fresh.notify("t", ["x"], key="k"))
 
     def test_log_lines_are_timestamped(self):
         """日志每行都必须带时间戳。
