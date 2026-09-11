@@ -48,6 +48,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.20] - 2026-09-11 (清理: hl_v3_final 全量消除裸 import fitz + 分发包独有文件白名单化)
+
+两项收尾。过程中**更正了我自己先前两处说法**: ① fitz 的规模我少报了一个数量级;
+② 我把分发包里的独有文件报成"反方向漂移", 读完工具发现那是**已有明文声明的**有意保留。
+
+### Changed
+- **`hl_v3_final/` 下全部裸 `import fitz` 改为 `import pymupdf as fitz` + 旧版回退**
+  —— 共 **195 处 / 117 个文件**(另同步技能分发包 115 个文件)。
+  PyMuPDF 1.24 起 `fitz` 只是别名: 用时会在 stderr 打弃用警告, 且官方已声明将来会**移除**
+  该别名 —— 到那天所有脚本一起坏。
+
+  **规模更正**: 我先前在自检报告里写"约 20 处", 那是只看了 `head -20` 的输出就下的结论;
+  实际是 195 处, 其中 **182 处在 105 个 `examples/hl_p*.py`** 里, 以**函数内局部导入**的
+  形式出现(每文件两处)。
+
+  分两类处理:
+  - 核心文件(`hl_lib` / `hl_ocr_band` / `render_fitz` / `step1_export_slides` /
+    `step3_download` / `strict_eval_ocr_locate` / `align_tables` / `copy_hl_images` /
+    `test_hl_lib` / `verify_sentence_set`)—— 各自写完整 try/except, 自包含, 不新增耦合。
+  - `examples/` 105 个脚本 —— 它们本来就 `from hl_lib import ...`, 把 `fitz` 并入那一行并
+    删掉函数内局部导入。导入名由此**单点决定**(`hl_lib`), 不再 105 处各写一遍。
+
+### Fixed
+- **`strict_eval_ocr_locate.py` 第 11 行指向另一台机器**:
+  `sys.path.insert(0, r'G:\agent\ai\projects\via54Medit\scripts\hl_v3_final')` ——
+  同目录 9 个兄弟文件都写 `os.path.dirname(os.path.abspath(__file__))`, 已统一。
+  同文件的 `WORK` 数据目录也改为环境变量可覆盖(`RSV_HL_WORK`), 默认值保持不变,
+  沿用 `scripts/tma_*.py` 的既有约定。
+- **`verify_sandbox_interceptor.py` 写死了用户名**(`/Users/david/.hermes/...`)→ 改为
+  `HERMES_VIA54_DIR` 可覆盖 + `~` 展开; 顺手删掉从未使用的 `from pathlib import Path`。
+
+### Added
+- **分发包独有文件的显式白名单**。`sync_skill_bundle.py` 新增 `BUNDLE_ONLY_OK`(当前 1 条:
+  `verify_sandbox_interceptor.py`), 并把报告区分为 `= 白名单` 与 `! 意外独有`。
+  `--check` 现在对**白名单外的**独有文件判失败(原先只查 missing/differing, 反向完全不看);
+  执行同步时若发现意外独有文件则中止报错, 不静默继续。
+- **`tests/test_repo_hygiene.py` 新增 3 条不变量**(让 `make test-py` 也能拦住):
+  - `test_no_unexpected_bundle_only_files` —— 白名单以 `sync_skill_bundle.BUNDLE_ONLY_OK`
+    为**唯一事实来源**(importlib 载入), 避免两处各维护一份而再次分叉。
+  - `test_bundle_only_allowlist_entries_still_exist` —— 防止白名单留"僵尸条目"。
+  - `TestFitzImportForm` —— 断言除「紧跟 `except ImportError` 的回退行」与
+    「`from hl_lib import fitz`」外不再出现裸 `import fitz`; 并断言 `hl_lib.fitz` 就是
+    `pymupdf` 本体。没有这条, 上面 195 处的重构随时会被下次顺手改回去。
+
+### 更正先前说法
+- 自检报告里"约 20 处 `import fitz`" → 实为 **195 处**。
+- 自检报告里把 `verify_sandbox_interceptor.py` 报成"反方向的镜像漂移" → **过度警报**:
+  `sync_skill_bundle.py` 与 `test_repo_hygiene.py` 的 docstring 早已写明"B 独有辅助脚本
+  不算漂移(技能自带的东西)"。它是有意保留的; 真正的缺口是**没有白名单**, 于是"有意保留"
+  与"手滑放进来"在报告里长得一模一样 —— 本轮补的就是这个缺口。
+
+### 已知残留 (本轮未处理)
+- **`hl_v3_final/` 已归零, 但仓库其它位置还有 73 处 / 55 个文件**仍在裸用 `import fitz`。
+  本轮授权范围只是 `hl_v3_final`, 故未动:
+  - `scripts/` **64 处 / 46 个文件** —— 这一批是**在用**的生产工具链
+    (`process_all_pn_x.py`、`vision_highlight_workflow.py`、`glm_integration.py`、
+    `via54_highlight_v3_final.py`、CI 会跑的 `test_tma_pipeline.py` 等),
+    风险等级与 `hl_v3_final` 的示例脚本不同, 值得单独一次带回归的改动。
+  - `skills/`(另 4 个技能包) **7 处 / 7 个文件**。
+  - 另有 2 处**不是缺陷**: `telemetry/watcher.py:16` 是嵌套 try/except 的回退行
+    (v5.4.11 就改好了); `tests/test_telemetry.py:607` 是**故意**导入 `fitz` 来验证
+    "telemetry 的导入路径不带弃用警告"这条断言的对照面。
+- `verify_sandbox_interceptor.py` 的目标模块 `via54_sandbox_forbidden.py` 仍不在本仓库
+  (属 hermes 侧运行时), 故该脚本只能在本机跑通 —— 这也是它被列为"分发包自带"的原因。
+
+### 验证
+- `from hl_lib import fitz` → `fitz.__name__ == 'pymupdf'`; 5 条导入路径
+  (`hl_lib` / `render_fitz` / `hl_ocr_band` / `verify_forbidden_zones` / `verify_sentence_set`)
+  的 stderr 均**无 deprecated**。
+- 抽查 5 个 `examples` 脚本, `fitz` 全部解析到 `pymupdf`。
+- `make test-py` **66 + 24** 项全过(仓库卫生 **2 → 6** 项, telemetry 60 项); `test_hl_lib.py` **36 passed**。
+- **负向对照**: 临时在 `render_fitz.py` 插回一行裸 `import fitz` → 测试精确报出
+  `scripts/hl_v3_final/render_fitz.py:4`; 分发包塞入 `stray_accidental.py` → 测试报出文件名、
+  `sync --check` 退出码 1。两处还原后均恢复通过。
+- `hl_v3_final/` 下 126 个 `.py` 语法零失败; 技能镜像 `--check` 退出码 0;
+  TMA 规则校验仍 **7/7**; `gofmt` / `go vet` 干净。
+- 版本号三处同步 `1.5.19` → `1.5.20`。
+
 ## [5.4.19] - 2026-09-11 (移植: 把 v13 的禁止区校验补进 v3 FINAL, 随后下线整个 v13 家族)
 
 v3 FINAL 规范第 153 行要求「禁止高亮: 标题、作者、文献信息、页眉页脚、引用编号、图表标题」,
