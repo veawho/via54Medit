@@ -71,9 +71,14 @@ def verify_powerpoint_engine():
         
         has_ppt = any(k in ("com", "macos_ppt") for _, k, _ in engines)
         if has_ppt:
-            print("  ✓ Microsoft PowerPoint 原生引擎就绪，高保真渲染已激活！")
+            print("  ✓ 探测到微软桌面版引擎, 高保真渲染通道就绪")
         else:
-            print("  ℹ️ 未检测到原生 Microsoft PowerPoint，将使用 LibreOffice / python-pptx 备选渲染")
+            print("  ✗ 未探测到可用的桌面版 Microsoft PowerPoint —— **没有备选渲染引擎**:")
+            print("     按规范版式必须由微软引擎产出, 不会退回 LibreOffice / python-pptx 之类的第三方引擎。")
+            print("     可选: 显式设 RENDER_ENGINE=graph 走 Microsoft Graph 的在线转换(需要凭据)。")
+            print("     要确认'到底能不能出图', 跑: python3 scripts/render_doctor.py")
+        print("  ℹ️ 提示: '探测到' 不等于 '能出图' —— 实测本机 open 会被模态对话框挡住。")
+        print("     正式跑管线前建议先跑 python3 scripts/render_doctor.py 做真出图探针。")
     except Exception as e:
         print(f"  ⚠️ PowerPoint 引擎探测提示: {e}")
 
@@ -127,7 +132,7 @@ def main():
     print(" ✅ via54Medit 初始化完成！")
     print(" 默认配置清单:")
     print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx)")
-    print("   • PPT Engine   : Microsoft PowerPoint (RENDER_ENGINE=powerpoint)")
+    print("   • PPT Engine   : Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
     print("   • Auto-Sync    : 已注册系统定时任务 (自动定期从 GitHub 拉取更新)")
     print("======================================================")
 

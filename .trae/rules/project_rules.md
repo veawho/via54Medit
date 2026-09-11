@@ -55,5 +55,7 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
    - **Word(DOC/DOCX) 适用同一条标准**: 版式只由 **Microsoft Word** 产出 (Windows COM / macOS 原生 AppleScript)。原先那两条会改版式的兜底已删除(LibreOffice headless 转 PDF、python-docx 抽段落拼"简易 PDF"); 拿不到 Word 就失败。
    - Graph 通道与桌面版有**已知差异**(Office 在线引擎的字体替换 / 符号占位 / 部分对象行为), 故它只是"没有桌面版时的显式替代"。
    - 实现位置: `scripts/hl_v3_final/graph_render.py` (Graph 客户端) 与 `ppt_to_pdf.py` (PPT→PDF, 技能包自包含)、`scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
-   - 自检: `python3 scripts/hl_v3_final/graph_render.py --check`。
+   - 自检: `python3 scripts/hl_v3_final/graph_render.py --check` (Graph 凭据/连通) 与
+     `python3 scripts/render_doctor.py` (渲染通道**真出图**就绪探针, 正式跑管线前先跑它)。
+   - **可用性要求**: "探测到" ≠ "能出图" —— 实测本机预检秒回、`open` 却会挂住。所以: 每个通道先快速预检、等待都有上界(`PPT_RENDER_TIMEOUT` / `WORD_RENDER_TIMEOUT`, 默认 60s)、渲染产物必须校验**存在且非空**。高可用 = 早发现 / 快失败 / 原因准 / 建议可执行 / **绝不产出错误结果**, 而**不是**"总能渲染"(那要换引擎 = 放弃保真)。
    - 不变量由 `tests/test_repo_hygiene.py::TestRenderFidelity` 看守; 判定标准与各方案结论表见 `docs/ppt-render-fidelity.md`, 规则出处见 `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.12.0-powerpoint-render-mandatory.md`。

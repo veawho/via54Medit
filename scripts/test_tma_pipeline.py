@@ -847,6 +847,10 @@ class TestRenderEngine(unittest.TestCase):
         self.assertFalse(any("未内嵌字体" in l for l in lines), "不该有警告: %s" % lines)
 
 
+import unified_render_engine
+import render_doctor as doctor
+
+
 def _graph_fake(handler):
     """把 ``graph_render._open`` 换成 ``handler(method, url, data, headers) -> (status, headers, body)``。
 
@@ -1273,6 +1277,134 @@ class TestRulesExtended(unittest.TestCase):
         self.assertTrue(vr.is_metadata_rect(None, None, "Risitano AM,\net al.\nComplement fraction 3b") in (None, "RULE_13_REFERENCE") or True)
         # 直接测规则对跨行文本
         self.assertTrue(vr.is_reference_entry("Risitano AM,\net al.\nComplement fraction 3b"))
+
+
+# ---------- 渲染通道: Word + 就绪探针 (v5.4.31) ----------
+class TestWordChannel(unittest.TestCase):
+    """Word 通道只走 Microsoft Word; 重点是**失败要早、准、可行动**。
+
+    背景: 本机实测 Word 的 ``open`` 会被模态对话框挡住一直挂着, 而 ``save as`` 在文档没打开时
+    会**返回成功却什么都不产出**。前者没有上界就会把管线吊死, 后者只看返回码就会误判成功 ——
+    这两点各有用例守着。
+    """
+
+    def _pair(self):
+        tmp = tempfile.mkdtemp()
+        src = os.path.join(tmp, "a.docx")
+        with open(src, "wb") as fh:
+            fh.write(b"PK\x03\x04 fake")
+        return src, os.path.join(tmp, "a.pdf")
+
+    @staticmethod
+    def _printed(mp):
+        return "\n".join(" ".join(str(a) for a in c.args) for c in mp.call_args_list)
+
+    def test_preflight_failure_fails_fast_with_hint(self):
+        """预检不通就**立刻**返回 —— 不再去 open 白等一整个超时。"""
+        src, dst = self._pair()
+        with mock.patch.object(
+                unified_render_engine.subprocess, "run",
+                side_effect=unified_render_engine.subprocess.TimeoutExpired("osascript", 8)) as runner, \
+                mock.patch("builtins.print") as mp:
+            self.assertFalse(unified_render_engine._docx_to_pdf_macos(src, dst))
+        self.assertEqual(runner.call_count, 1, "预检失败后不该再有一次调用(那才是会卡住的那步)")
+        text = self._printed(mp)
+        self.assertIn("WORD_RENDER_TIMEOUT", text)
+        self.assertIn("自动化", text)
+
+    def test_success_rc_but_no_pdf_is_treated_as_failure(self):
+        """Word 报成功但没产出文件 —— 必须判失败。实测它真的会这样。"""
+        src, dst = self._pair()
+        with mock.patch.object(unified_render_engine.subprocess, "run",
+                               return_value=mock.Mock(returncode=0, stdout="16.0\n", stderr="")), \
+                mock.patch("builtins.print") as mp:
+            self.assertFalse(unified_render_engine._docx_to_pdf_macos(src, dst))
+        self.assertIn("没有产出 PDF", self._printed(mp))
+
+    def test_script_shape_and_bounded_timeout(self):
+        """AppleScript 要用 active document + file format PDF, 且超时可配、子进程上界=配置+15。"""
+        src, dst = self._pair()
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen["script"] = cmd[-1]
+            seen["timeout"] = kw.get("timeout")
+            return mock.Mock(returncode=0, stdout="16.0\n", stderr="")
+
+        env = {"WORD_RENDER_TIMEOUT": "9", "WORD_RENDER_PREFLIGHT_TIMEOUT": "5"}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(unified_render_engine.subprocess, "run", side_effect=fake_run), \
+                mock.patch("builtins.print"):
+            unified_render_engine._docx_to_pdf_macos(src, dst)
+        self.assertIn("with timeout of 9 seconds", seen["script"])
+        self.assertIn("active document", seen["script"])
+        self.assertIn("file format format PDF", seen["script"])
+        self.assertEqual(seen["timeout"], 24, "子进程超时应当是 配置值 + 15 的上界")
+        self.assertFalse(os.path.exists(dst))
+
+    def test_invalid_timeout_env_falls_back_to_default(self):
+        for bad in ("abc", "-3", "0", ""):
+            with mock.patch.dict(os.environ, {"WORD_RENDER_TIMEOUT": bad}, clear=True):
+                self.assertEqual(unified_render_engine._word_timeout(),
+                                 unified_render_engine._DEFAULT_WORD_TIMEOUT,
+                                 "非法值 %r 应当回落到默认" % bad)
+
+    def test_word_path_has_no_third_party_renderer(self):
+        """Word 路径的**代码**里不该再用 python-docx / docx2pdf / LibreOffice 开关这类近似渲染。
+
+        注意这里**只查代码用法, 不查文档字符串**: 模块 docstring 必须能写"WPS / LibreOffice /
+        python-pptx 已按规范禁用"这类**规则说明** —— 那是在记录规则, 不是在启用它们。
+        (第一版把 "WPS" 直接当禁词扫全文, 结果被自己的规则说明绊倒。)
+        """
+        with open(unified_render_engine.__file__, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertNotIn("from docx import", src, "不该再 import python-docx 拼页")
+        self.assertNotIn("docx2pdf", src, "不该再用 docx2pdf")
+        self.assertNotIn("--convert-to", src, "不该再有 LibreOffice 的转换开关")
+        self.assertIn('"osascript"', src, "Word 通道唯一允许的外部命令是 osascript")
+
+
+class TestRenderDoctor(unittest.TestCase):
+    """就绪探针默认做**真出图**; 且绝不能在没出图的情况下声称"就绪"。"""
+
+    def test_canary_builders_produce_valid_documents(self):
+        tmp = tempfile.mkdtemp()
+        pptx = doctor._make_canary_pptx(os.path.join(tmp, "c.pptx"))
+        docx = doctor._make_canary_docx(os.path.join(tmp, "c.docx"))
+        self.assertGreater(os.path.getsize(pptx), 0)
+        self.assertGreater(os.path.getsize(docx), 0)
+        from pptx import Presentation
+        self.assertEqual(len(Presentation(pptx).slides), 1)
+        import zipfile
+        with zipfile.ZipFile(docx) as z:
+            self.assertIn("word/document.xml", z.namelist())
+
+    def test_blocked_ppt_channel_exits_nonzero(self):
+        with mock.patch.object(doctor, "check_ppt_channel", return_value=(False, "0 图", "修复建议")), \
+                mock.patch.object(doctor, "check_rasterizer", return_value=(True, "pymupdf", "")), \
+                mock.patch.object(doctor, "check_word_channel", return_value=(None, "未检查", "")), \
+                mock.patch("builtins.print"):
+            self.assertEqual(doctor.main([]), 1)
+
+    def test_quick_mode_never_claims_ready(self):
+        """``--quick`` 只查依赖。本机实测"探测得到"却"一张也出不来", 所以它绝不能说"就绪"。"""
+        lines = []
+        with mock.patch.object(doctor, "check_ppt_channel", return_value=(True, "探测到 X", "")), \
+                mock.patch.object(doctor, "check_rasterizer", return_value=(True, "pymupdf", "")), \
+                mock.patch.object(doctor, "check_word_channel", return_value=(None, "未检查", "")), \
+                mock.patch("builtins.print",
+                           side_effect=lambda *a, **k: lines.append(" ".join(str(x) for x in a))):
+            self.assertEqual(doctor.main(["--quick"]), 0)
+        text = "\n".join(lines)
+        self.assertNotIn("就绪。注意保真规则", text, "--quick 不得声称就绪")
+        self.assertIn("没做真出图探针", text)
+
+    def test_ready_everything_exits_zero(self):
+        with mock.patch.object(doctor, "check_ppt_channel", return_value=(True, "3 张图", "")), \
+                mock.patch.object(doctor, "check_rasterizer", return_value=(True, "pymupdf", "")), \
+                mock.patch.object(doctor, "check_word_channel", return_value=(True, "1 张图", "")), \
+                mock.patch("builtins.print"):
+            self.assertEqual(doctor.main([]), 0)
 
 
 if __name__ == '__main__':

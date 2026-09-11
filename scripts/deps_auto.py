@@ -30,7 +30,7 @@ DEPS = [
 ]
 
 WINDOWS_DEPS = [
-    ("pywin32", "win32com", "PowerPoint/WPS COM 渲染"),
+    ("pywin32", "win32com", "PowerPoint/Word COM 渲染"),
 ]
 
 

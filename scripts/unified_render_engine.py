@@ -56,29 +56,102 @@ def render_image_file_to_page(img_path: str, out_dir: str) -> List[str]:
     return [out_img]
 
 
-def _docx_to_pdf_macos(docx_path: str, pdf_path: str) -> bool:
-    """macOS: 用**原生 Microsoft Word** 把文档导出为 PDF。"""
-    scpt = f'''
-    tell application "Microsoft Word"
-        set myDoc to open file (POSIX file "{os.path.abspath(docx_path)}")
-        save as myDoc file name (POSIX file "{os.path.abspath(pdf_path)}") file format format PDF
-        close myDoc saving no
-    end tell
-    '''
+# ---------- Word 通道: 只走 Microsoft Word ----------
+#: Word 的 open/save 超时(秒); ``WORD_RENDER_TIMEOUT`` 可覆盖。
+#: 为什么要上界: 与 PowerPoint 同一病因 —— 实测本机 ``open`` 会被模态对话框挡住一直挂着,
+#: 没有上界就会把整条管线吊死(而不是报错)。
+_DEFAULT_WORD_TIMEOUT = 60.0
+#: 快速预检超时(秒); ``WORD_RENDER_PREFLIGHT_TIMEOUT`` 可覆盖。只做 launch + get version。
+_DEFAULT_WORD_PREFLIGHT_TIMEOUT = 20.0
+
+_WORD_BLOCKED_HINT = (
+    "请手动打开一次 Word, 关掉可能存在的模态对话框(登录 / 激活 / 文件访问权限), "
+    "并在 系统设置 › 隐私与安全性 › 自动化 里允许当前终端/Agent 控制 Microsoft Word。"
+    "若本机确实用不了 Word, 请先用 Word 另存为 PDF 再把 PDF 传进来 —— "
+    "按规范不会改用会重新排版的第三方引擎。超时可用 WORD_RENDER_TIMEOUT(秒) 调整。"
+)
+
+
+def _env_seconds(name: str, default: float) -> float:
     try:
-        r = subprocess.run(["osascript", "-e", scpt], capture_output=True, timeout=90)
-    except Exception as e:
-        print(f"  [render] Word AppleScript 执行失败: {e}")
+        val = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        val = default
+    return val if val > 0 else default
+
+
+def _word_timeout() -> float:
+    return _env_seconds("WORD_RENDER_TIMEOUT", _DEFAULT_WORD_TIMEOUT)
+
+
+def probe_macos_word(timeout: Optional[float] = None) -> Tuple[bool, str]:
+    """快速预检: 只做 ``launch`` + ``get version``。返回 ``(ok, detail)``, **不抛异常**。
+
+    **它能证明"通道通", 但不能证明"能出图"** —— 实测本机预检 0.004s 就通过, 真正卡住的是
+    随后的 ``open``。所以别把它当唯一判据: 需要"真能出图"的结论请跑
+    ``scripts/render_doctor.py``(它会真转一份最小文档)。这一点与 PowerPoint 完全相同。
+    """
+    tmo = timeout if timeout is not None else _env_seconds(
+        "WORD_RENDER_PREFLIGHT_TIMEOUT", _DEFAULT_WORD_PREFLIGHT_TIMEOUT)
+    script = 'tell application "Microsoft Word"\nlaunch\nget version\nend tell'
+    try:
+        r = subprocess.run(["osascript", "-e", script], capture_output=True,
+                           text=True, timeout=tmo)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, "预检失败: %.0fs 内无法执行 osascript(%s)" % (tmo, e)
+    if r.returncode != 0:
+        return False, "预检失败: %s" % (r.stderr or r.stdout).strip()[:200]
+    return True, "Microsoft Word %s" % (r.stdout or "").strip()
+
+
+def _docx_to_pdf_macos(docx_path: str, pdf_path: str) -> bool:
+    """macOS: 用**原生 Microsoft Word** 把文档导出为 PDF。
+
+    与 ``ppt_to_pdf`` 同一套动作: 先快速预检(通道不通立刻报错, 不白等) → 在**有界超时**里
+    ``open`` → ``active document`` → ``save as ... file format format PDF`` → **校验产物真的存在**。
+
+    最后那步校验不是多余的: 实测 Word 在文档没打开时, ``save as`` 会**返回成功但什么都不产出**
+    (rc=0、无 stderr、目标文件不存在)。只看返回码会误判成成功。
+    """
+    ok, detail = probe_macos_word()
+    if not ok:
+        print("  [render] %s" % detail)
+        print("  [render] 处理建议: %s" % _WORD_BLOCKED_HINT)
+        return False
+
+    tmo = _word_timeout()
+    script = f'''
+with timeout of {int(tmo)} seconds
+tell application "Microsoft Word"
+    launch
+    delay 2
+    open POSIX file "{os.path.abspath(docx_path)}"
+    set theDoc to active document
+    save as theDoc file name (POSIX file "{os.path.abspath(pdf_path)}") file format format PDF
+    close theDoc saving no
+end tell
+end timeout
+'''
+    try:
+        r = subprocess.run(["osascript", "-e", script], capture_output=True,
+                           text=True, timeout=tmo + 15)
+    except subprocess.TimeoutExpired:
+        print("  [render] Word 在 %.0fs 内没有完成 —— 多半是 open 被模态对话框挡住了。" % tmo)
+        print("  [render] 处理建议: %s" % _WORD_BLOCKED_HINT)
         return False
     if r.returncode != 0:
-        err = (r.stderr or b"").decode("utf-8", "replace")[:200]
-        print(f"  [render] Word AppleScript 失败: {err}")
+        print("  [render] Word AppleScript 失败: %s" % ((r.stderr or "").strip()[:200]))
+        print("  [render] 处理建议: %s" % _WORD_BLOCKED_HINT)
         return False
-    return os.path.exists(pdf_path)
+    if not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:
+        print("  [render] Word 报成功但**没有产出 PDF** —— 文档很可能根本没打开(open 被挡)。")
+        print("  [render] 处理建议: %s" % _WORD_BLOCKED_HINT)
+        return False
+    return True
 
 
 def _docx_to_pdf_com(docx_path: str, pdf_path: str) -> bool:
-    """Windows: 用 Word COM 导出 PDF (``wdFormatPDF`` = 17)。"""
+    """Windows: 用 Word COM 导出 PDF(``wdFormatPDF`` = 17)。"""
     try:
         import win32com.client
     except ImportError:
@@ -108,7 +181,10 @@ def _docx_to_pdf_com(docx_path: str, pdf_path: str) -> bool:
     except Exception as e:
         print(f"  [render] Word COM 导出失败: {e}")
         return False
-    return os.path.exists(pdf_path)
+    if not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:
+        print("  [render] Word COM 报成功但没有产出 PDF。")
+        return False
+    return True
 
 
 def render_docx_to_images(docx_path: str, out_dir: str, dpi: int = 150) -> List[str]:
@@ -118,13 +194,16 @@ def render_docx_to_images(docx_path: str, out_dir: str, dpi: int = 150) -> List[
     一律不用。Word 的"源应用本体"就是 Microsoft Word, 所以:
 
       * Windows -> Word COM 导出 PDF;
-      * macOS   -> 原生 Word AppleScript 导出 PDF;
+      * macOS   -> 原生 Word AppleScript 导出 PDF(快速预检 + 有界超时 + 产物校验);
       * 其它平台 -> **直接失败**, 不退回 LibreOffice。
 
     原先这里还有两条会**改版式**的路, 已按规范删除:
       1. LibreOffice headless 转 PDF —— 换了个排版引擎;
       2. 用 python-docx 抽段落拼一张"简易 PDF" —— 版式与原文档完全不同, 比前者更不准。
+         (补充: 本仓库根本没把 python-docx 列为依赖, 所以那条"兜底"实际从未可用。)
     两者都是"近似渲染", 与"不改变原文档的版式与文字"冲突; 宁可失败也不产出近似品。
+
+    想先知道"这台机器到底能不能出图", 跑 ``python3 scripts/render_doctor.py``。
     """
     os.makedirs(out_dir, exist_ok=True)
     tmp_pdf_dir = tempfile.mkdtemp(prefix="docx_render_")

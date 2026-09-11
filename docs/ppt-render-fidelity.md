@@ -115,7 +115,30 @@ PowerPoint 导出 PDF 时若**没有内嵌字体**，栅格化器（poppler / Mu
 
 ---
 
-## 4. 来源
+## 5. 可用性: "通道通" ≠ "能出图"
+
+本机实测过一个很容易踩的坑:
+
+| 探针 | 结果 |
+| --- | --- |
+| `launch` + `get version`（PowerPoint / Word） | ✓ 秒回（0.004s，能报出版本号） |
+| 真的 `open` 一份 PPTX 再导出 PDF | ✗ AppleEvent **-1712**（超时），一张图都没有 |
+| 真的 `open` 一份 DOCX 再导出 PDF | ✗ `save as` 报 **-1708**；更糟的是有时 **rc=0 却什么都不产出** |
+
+所以**依赖探测给出的"就绪"是假 OK** —— 一条跑半小时的管线会在渲染那一步才炸。为此:
+
+- `scripts/render_doctor.py` 默认做**真出图探针**: 现场造一份最小文档, 用**生产函数**真的渲染一遍,
+  数产出的图片; 它在只查依赖时**明确拒绝**说"就绪"（`--quick` 的结语是"不能据此认为能渲染"）。
+- 每个通道先**快速预检**（launch + get version）, 不通就**立刻**返回并给出可操作建议, 不去白等。
+- 等待都有上界: `PPT_RENDER_TIMEOUT` / `WORD_RENDER_TIMEOUT`（默认 60s）、
+  `PPT_RENDER_PREFLIGHT_TIMEOUT` / `WORD_RENDER_PREFLIGHT_TIMEOUT`（默认 20s）;
+  子进程上界 = 配置值 + 15。
+- 渲染产物**必须校验存在且非空** —— 桌面 Office 自动化确实存在"报成功但没产出"的行为。
+
+**高可用在这里的含义**是: 早发现、快失败、原因准、建议可执行、**绝不产出错误结果**。
+**不是**"总能渲染" —— 那需要换引擎, 而换引擎等于放弃保真, 正是本规则不允许的。
+
+## 6. 来源
 
 - LibreOffice 文字不一致实测（度量相同的替代字体仍不同）：<https://ask.libreoffice.org/t/powerpoint-compatibility-text-not-displayed-identically-even-when-substitute-fonts-have-same-metrics/55932>
 - LibreOffice 中日文字体映射丢失：<https://ask.libreoffice.org/t/in-impress-chinese-fonts-convert-to-confusing-fonts-viewing-in-ms/84689>
