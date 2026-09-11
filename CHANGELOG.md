@@ -48,6 +48,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.13] - 2026-09-11 (清理: 移除从未能运行的 cmd/list_citations_v2)
+
+收口 v5.4.12 末尾保留的那一项。核查结论是它**不仅被取代, 而且自提交之日起就从未能运行**。
+
+### Removed
+- **`cmd/list_citations_v2/`（511 行）移除**。它与 `cmd/list_citations`（v1, 57 行）同在 `ab1bdf8` 引入, 但 v2 是一份自包含重写, 而它自始即坏:
+
+  ```go
+  // Helper to read all bytes from io.Reader
+  func readAll(r interface{}) ([]byte, error) {
+      if b, ok := r.([]byte); ok { return b, nil }
+      return nil, fmt.Errorf("unsupported type")
+  }
+  ```
+
+  调用处传入的是 zip 条目读取器（`io.ReadCloser`）而非 `[]byte`, 于是每页都返回 `unsupported type` 被跳过 —— 一页也读不到。实测（构建后运行, 它只打印不写文件）: `Extracted 0 slides with text` / `Found 0 citation chunks` / `Total unique citations: 0`。核对最初提交 `ab1bdf8`, `readAll` 当时就是这个样子; 2026-07-19 的 `fix: ... fix extractAllSlideText return types` 只补了 `parseInt` 与返回类型, 未触及根因。
+- **`.gitignore` 的 `list_citations_v2` 规则一并移除**。它只为 v2 的根目录构建产物而留, 源码既已下线, 该规则成为死条目。
+
+### 取代关系（同一份 PPTX 上的实测）
+| 工具 | 结果 |
+| --- | --- |
+| `cmd/list_citations_v2` | 0 页 / 0 条（坏的） |
+| `medit cite extract`（现役） | 43 页 / 103 条 |
+| 归档 `references/test-data/0622_pptx_citations.md` | 总条目 103 |
+
+现役 `medit cite extract/verify/list`（`cmd/medit/commands/cite.go` + `internal/cite/`）是完整超集: 支持 PPTX/PDF/DOCX、带 PubMed/Crossref 富化、模型字段更多（`doi`/`pmid`/`title`/`trial`/`source_docs`）、且接受命令行参数; 而 v2 中 `os.Args`/`flag.` 出现 0 次, 硬编码了一个私人下载路径。仓库内外均无引用方（含 `~/.medit/scripts`、`~/.medit/tests`）; 2026-08-12 对它的那次改动经 `git show -w` 验证为纯空白格式化。
+
+### 一处自我纠正
+v5.4.12 的条目里我把 v2 描述为「511 行, 功能更全」并据此说 v1 该让位 —— **该描述是误导的**: v2 更长但从未跑通, 真正能干活的是 v1（实测 43 页 / 81 条）。删除 v1 的决定仍然成立, 因为 v1 只是薄封装, 它依赖的共享库 `internal/pptx` 至今仍在, 且仍被 `cmd/medit/commands/pptx.go` 与 `internal/cite/pptx.go` 使用, 四个函数均在其中; 但当时给出的理由有误, 特此更正。
+
+### 验证
+- `go build ./...` 通过; `cmd/` 现为 `medit` / `medit-mcp` / `promptctl`。
+- Go `test -race` **24 包全绿 0 失败**; `gofmt -l` 归零; `go vet` 干净。
+- 全仓库已无 `list_citations` 残留（仅 CHANGELOG 的历史记录）。
+
 ## [5.4.12] - 2026-09-11 (清理: 移除被误提交的 6.3 MB 二进制 + 源码 + 两处遗留产物)
 
 收口 v5.4.11 中列为「待确认」的遗留产物项, 过程中又发现并处理了一个更大的问题。
