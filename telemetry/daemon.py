@@ -174,6 +174,22 @@ class TelemetryDaemon:
             f"文件描述符吃紧: 已达软上限的约 {bucket}% (疑似句柄泄漏), "
             f"详情见心跳文件中的 fd 占用"
         )
+        # 同时推到外部告警通道。key 按 10% 分档, 于是 80/90/100 各告警一次,
+        # 既随占用升高逐步升级, 又不会每 5 秒刷一条。
+        from .alerter import send_alert
+
+        send_alert(
+            "守护进程文件描述符吃紧",
+            [
+                f"**占用**：`{used}/{soft}` (约 {bucket}%)",
+                "**判读**：疑似句柄泄漏。该故障不会让进程退出, KeepAlive 无从感知, "
+                "持续下去会导致目录扫描与配置读取全面失败。",
+                "**排查**：`medit-telemetry daemon --status` 可查实时占用; "
+                "日志见 `~/.medit/daemon.log`。",
+            ],
+            key=f"fd-{bucket}",
+            level="critical" if bucket >= 90 else "warning",
+        )
 
     def run_cycle(self):
         """执行单次循环：1. 产出物主动嗅探；2. 定时排程检查。"""

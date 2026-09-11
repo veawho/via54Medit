@@ -316,6 +316,172 @@ class TestTelemetry(unittest.TestCase):
         self.assertEqual(data["ProgramArguments"][0], sys.executable)
         self.assertTrue(data["KeepAlive"])
 
+    def test_alert_settings_defaults(self):
+        """告警配置默认开启、静默期 60 分钟; 缺段或非法值都要退回默认。"""
+        from telemetry.config import DEFAULT_CONFIG
+        from telemetry import alerter
+
+        self.assertTrue(DEFAULT_CONFIG["alerts"]["enabled"])
+        self.assertEqual(DEFAULT_CONFIG["alerts"]["min_interval_minutes"], 60)
+
+        # 已有配置只覆盖部分字段 -> 其余取默认
+        partial = alerter.alert_settings({"alerts": {"min_interval_minutes": 15}})
+        self.assertTrue(partial["enabled"])
+        self.assertEqual(partial["min_interval_minutes"], 15)
+
+        # 完全缺 alerts 段 / 非法值
+        self.assertTrue(alerter.alert_settings({})["enabled"])
+        self.assertEqual(
+            alerter.alert_settings({"alerts": {"min_interval_minutes": "abc"}})["min_interval_minutes"],
+            60,
+        )
+        self.assertEqual(
+            alerter.alert_settings({"alerts": {"min_interval_minutes": 0}})["min_interval_minutes"], 1
+        )
+
+    def test_alert_rate_limit_windows(self):
+        """限流窗口: 成功后有静默期; 失败只需等 10 分钟; 到期即可放行。"""
+        import json
+        from datetime import datetime, timedelta
+        from unittest import mock
+        from telemetry import alerter
+
+        state = os.path.join(self.test_dir, "alerts_state.json")
+        now = datetime(2026, 9, 11, 12, 0, 0)
+
+        def seed(last_attempt, last_ok):
+            with open(state, "w", encoding="utf-8") as fp:
+                json.dump({"fd-80": {"last_attempt": last_attempt.isoformat(), "last_ok": last_ok}}, fp)
+
+        with mock.patch.object(alerter, "STATE_FILE", state):
+            # 无记录 -> 不限流
+            self.assertIsNone(alerter.rate_limited_for("fd-80", 60, now))
+
+            # 成功 + 30 分钟 -> 仍在 60 分钟静默期内
+            seed(now - timedelta(minutes=30), True)
+            self.assertIsNotNone(alerter.rate_limited_for("fd-80", 60, now))
+
+            # 成功 + 61 分钟 -> 放行
+            seed(now - timedelta(minutes=61), True)
+            self.assertIsNone(alerter.rate_limited_for("fd-80", 60, now))
+
+            # 失败 + 5 分钟 -> 仍在 10 分钟重试窗口内
+            seed(now - timedelta(minutes=5), False)
+            self.assertIsNotNone(alerter.rate_limited_for("fd-80", 60, now))
+
+            # 失败 + 11 分钟 -> 放行 (不必等满 60 分钟)
+            seed(now - timedelta(minutes=11), False)
+            self.assertIsNone(alerter.rate_limited_for("fd-80", 60, now))
+
+            # 状态文件损坏 -> 不限流, 而不是抛异常
+            with open(state, "w", encoding="utf-8") as fp:
+                fp.write("{ 这不是 json")
+            self.assertIsNone(alerter.rate_limited_for("fd-80", 60, now))
+
+    def test_send_alert_respects_switch_and_limit(self):
+        """关闭时与限流中都不应真的发起推送。"""
+        from unittest import mock
+        from telemetry import alerter
+
+        state = os.path.join(self.test_dir, "alerts_state.json")
+        on = {"enabled": True, "min_interval_minutes": 60}
+
+        with mock.patch.object(alerter, "STATE_FILE", state), \
+                mock.patch.object(alerter, "_post_card", return_value=(True, "ok")) as post:
+            # 关闭 -> 不推送
+            ok, msg = alerter.send_alert("t", ["x"], key="k1",
+                                         settings={"enabled": False, "min_interval_minutes": 60})
+            self.assertFalse(ok)
+            self.assertIn("关闭", msg)
+            post.assert_not_called()
+
+            # 首次 -> 发出
+            ok, _ = alerter.send_alert("t", ["x"], key="k1", settings=on)
+            self.assertTrue(ok)
+            self.assertEqual(post.call_count, 1)
+
+            # 紧接着再来 -> 被限流, 不再推送
+            ok, msg = alerter.send_alert("t", ["x"], key="k1", settings=on)
+            self.assertFalse(ok)
+            self.assertIn("限流", msg)
+            self.assertEqual(post.call_count, 1)
+
+            # force=True 绕过开关与限流
+            ok, _ = alerter.send_alert("t", ["x"], key="k1",
+                                       settings={"enabled": False, "min_interval_minutes": 60},
+                                       force=True)
+            self.assertTrue(ok)
+            self.assertEqual(post.call_count, 2)
+
+    def test_alert_card_structure_and_fault_tolerance(self):
+        """卡片结构正确; 且推送链路出问题时返回 False 而不是把调用方带崩。"""
+        from unittest import mock
+        from telemetry import alerter
+
+        card = alerter.build_alert_card(
+            "守护进程文件描述符吃紧", ["**占用**：`200/256`"], level="critical",
+            nickname="Devin", host="mac-mini",
+        )
+        self.assertEqual(card["header"]["template"], "red")
+        self.assertIn("守护进程文件描述符吃紧", card["header"]["title"]["content"])
+        self.assertTrue(card["config"]["wide_screen_mode"])
+        body = json.dumps(card, ensure_ascii=False)
+        for expected in ("200/256", "Devin", "mac-mini"):
+            self.assertIn(expected, body)
+        # 未知 level 退回默认色, 而不是 KeyError
+        self.assertEqual(alerter.build_alert_card("t", [], level="nope")["header"]["template"], "orange")
+
+        # 传输层抛异常 -> 返回 False 并落一条"失败"记录 (否则限流形同虚设)
+        state = os.path.join(self.test_dir, "alerts_state.json")
+        with mock.patch.object(alerter, "STATE_FILE", state), \
+                mock.patch.object(alerter, "_post_card", side_effect=RuntimeError("boom")):
+            ok, msg = alerter.send_alert("t", ["x"], key="k9",
+                                         settings={"enabled": True, "min_interval_minutes": 60})
+        self.assertFalse(ok)
+        self.assertIn("boom", msg)
+        with open(state, encoding="utf-8") as fp:
+            self.assertFalse(json.load(fp)["k9"]["last_ok"], "失败也要记一次尝试")
+
+    def test_fd_health_triggers_alert(self):
+        """描述符逼近上限时既要落日志, 也要推外部告警 (并按占用分档升级)。"""
+        from unittest import mock
+        from telemetry import daemon as dm
+        from telemetry import alerter
+
+        log_path = os.path.join(self.test_dir, "daemon.log")
+        d = dm.TelemetryDaemon.__new__(dm.TelemetryDaemon)
+        d._last_msg = ""
+        d._repeat = 0
+        d.last_fd = None
+
+        # 95% -> critical, key 归到 90 档
+        with mock.patch.object(dm, "LOG_FILE", log_path), \
+                mock.patch.object(dm, "fd_usage", return_value=(95, 100)), \
+                mock.patch.object(alerter, "send_alert", return_value=(True, "ok")) as alert, \
+                mock.patch("builtins.print"):
+            d._check_fd_health()
+        self.assertEqual(d.last_fd, {"used": 95, "limit": 100})
+        alert.assert_called_once()
+        self.assertEqual(alert.call_args.kwargs["key"], "fd-90")
+        self.assertEqual(alert.call_args.kwargs["level"], "critical")
+
+        # 85% -> warning
+        with mock.patch.object(dm, "LOG_FILE", log_path), \
+                mock.patch.object(dm, "fd_usage", return_value=(85, 100)), \
+                mock.patch.object(alerter, "send_alert", return_value=(True, "ok")) as alert2, \
+                mock.patch("builtins.print"):
+            d._check_fd_health()
+        self.assertEqual(alert2.call_args.kwargs["level"], "warning")
+
+        # 远未达阈值 -> 不告警
+        with mock.patch.object(dm, "LOG_FILE", log_path), \
+                mock.patch.object(dm, "fd_usage", return_value=(10, 100)), \
+                mock.patch.object(alerter, "send_alert", return_value=(True, "ok")) as alert3, \
+                mock.patch("builtins.print"):
+            d._check_fd_health()
+        alert3.assert_not_called()
+        self.assertEqual(d.last_fd, {"used": 10, "limit": 100})
+
     def test_scanner_retrieval_from_highlight_reference_list(self):
         """高亮引用清单应折算为检索数, 且重复引用同一文献只计 1 篇 (唯一文献口径)。"""
         from telemetry.watcher import WorkspaceScanner

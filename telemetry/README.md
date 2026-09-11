@@ -103,7 +103,18 @@ medit-telemetry config --set-monthly "last 18:00"
 
 # 9. 运行环境自检 (排查 PYTHONHOME / PYTHONPATH 冲突)
 medit-telemetry --env-check
+
+# 10. 关键事件外部告警 (飞书)
+medit-telemetry alert                      # 查看通道状态与最近发送记录
+medit-telemetry alert --test               # 发一条测试告警, 验证通道是否打通
+medit-telemetry alert --disable            # 关闭告警 (--enable 重新开启)
+medit-telemetry alert --min-interval 30    # 调整同类告警静默期 (分钟, 默认 60)
 ```
+
+> **关于告警**: 守护进程的「资源耗尽但不崩溃」型故障 (如文件描述符耗尽) 不会让进程退出,
+> 因此 `KeepAlive` 之类的手段无从感知 —— 5.4.5 那次就静默了十余小时。现在这类信号会通过
+> 飞书 Bot 主动推给你。同一类告警默认静默 60 分钟 (发送失败则 10 分钟后重试), 限流状态
+> 落盘在 `~/.medit/alerts_state.json`, 因此守护进程被反复拉起也不会重复刷屏。
 
 ---
 

@@ -71,6 +71,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             trae_work_dir(),
             desktop_dir()
         ]
+    },
+    # 关键事件的外部告警 (飞书)。守护进程的"资源耗尽但不崩溃"型故障不会触发 KeepAlive,
+    # 只有主动推送才能被及时发现 —— 5.4.5 那次文件描述符耗尽就静默了十余小时。
+    "alerts": {
+        "enabled": True,
+        # 同一类告警的静默期 (分钟), 避免刷屏; 发送失败时会缩短为 10 分钟再试
+        "min_interval_minutes": 60
     }
 }
 

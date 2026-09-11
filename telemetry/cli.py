@@ -369,6 +369,50 @@ def cmd_daemon(args):
         print("=======================================================\n")
 
 
+def cmd_alert(args):
+    """关键事件外部告警通道 (飞书) 的自检与管理。"""
+    from . import alerter
+
+    if args.enable or args.disable:
+        cfg = load_config()
+        cfg.setdefault("alerts", {})
+        cfg["alerts"]["enabled"] = bool(args.enable)
+        if args.min_interval is not None:
+            cfg["alerts"]["min_interval_minutes"] = max(1, int(args.min_interval))
+        save_config(cfg)
+        print(f"[Alert] 已{'开启' if args.enable else '关闭'}关键事件外部告警。")
+        return
+
+    if args.test:
+        print("[Alert] 正在发送测试告警 (绕过开关与限流)...")
+        ok, msg = alerter.send_test_alert()
+        print(f"  {'✓' if ok else '✗'} {msg}")
+        return
+
+    st = alerter.alert_status()
+    print("\n=======================================================")
+    print("🔔 关键事件外部告警通道 (飞书)")
+    print("=======================================================")
+    print(f"• 开关:     {'🟢 已开启' if st['enabled'] else '🔴 已关闭'}")
+    print(f"• 静默期:   {st['min_interval_minutes']} 分钟 (同类告警; 发送失败则 10 分钟重试)")
+    print(f"• 凭据:     {'✓ app_id / app_secret / open_id 齐备' if st['has_credentials'] else '✗ 缺少凭据, 无法推送'}")
+    print(f"• 接收人:   {st['nickname'] or '(未设置)'}")
+    print(f"• 状态文件: {st['state_file']}")
+    limits = st["rate_limits"]
+    if limits:
+        print("• 最近发送记录:")
+        for key, entry in sorted(limits.items()):
+            print(f"    - {key}: {entry.get('last_attempt')} "
+                  f"({'成功' if entry.get('last_ok') else '失败'})")
+    else:
+        print("• 最近发送记录: (无)")
+    print("=======================================================")
+    print("  验证通道: medit-telemetry alert --test")
+    print("  开 / 关:  medit-telemetry alert --enable | --disable")
+    print("  静默期:   medit-telemetry alert --min-interval 30")
+    print("=======================================================\n")
+
+
 def cmd_token(args):
     """LLM Token 真实账单管理与服务商控制台 100% 对齐。"""
     cfg = load_config()
@@ -547,6 +591,16 @@ def main():
     p_deploy.add_argument("--no-start", action="store_true", help="安装后不立即启动守护进程")
     p_deploy.add_argument("--uninstall", action="store_true", help="停止守护服务并移除自启")
     p_deploy.set_defaults(func=cmd_deploy)
+
+    # alert (关键事件外部告警通道)
+    p_alert = subparsers.add_parser("alert", help="关键事件外部告警通道 (飞书): 状态 / 测试 / 开关")
+    p_alert.add_argument("--status", action="store_true", help="展示告警通道状态与最近发送记录 (默认)")
+    p_alert.add_argument("--test", action="store_true", help="发送一条测试告警, 验证通道是否打通")
+    p_alert.add_argument("--enable", action="store_true", help="开启关键事件外部告警")
+    p_alert.add_argument("--disable", action="store_true", help="关闭关键事件外部告警")
+    p_alert.add_argument("--min-interval", type=int, default=None, dest="min_interval",
+                         help="同类告警的静默期 (分钟), 默认 60")
+    p_alert.set_defaults(func=cmd_alert)
 
     args = parser.parse_args()
 
