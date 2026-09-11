@@ -19,21 +19,21 @@ def get_pdf_page_count(path: str) -> int:
     # 1. pypdf
     try:
         import pypdf
-        reader = pypdf.PdfReader(path, strict=False)
-        count = len(reader.pages)
-        if count > 0:
-            return count
+        with open(path, "rb") as fp:
+            reader = pypdf.PdfReader(fp, strict=False)
+            count = len(reader.pages)
+            if count > 0:
+                return count
     except Exception:
         pass
 
     # 2. PyMuPDF (fitz)
     try:
         import fitz
-        doc = fitz.open(path)
-        count = len(doc)
-        doc.close()
-        if count > 0:
-            return count
+        with fitz.open(path) as doc:
+            count = len(doc)
+            if count > 0:
+                return count
     except Exception:
         pass
 

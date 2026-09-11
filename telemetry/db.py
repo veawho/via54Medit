@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pathlib import Path
@@ -24,10 +25,17 @@ class TelemetryDB:
         if parent:
             os.makedirs(parent, exist_ok=True)
 
-    def get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def get_connection(self):
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def _init_db(self):
         with self.get_connection() as conn:

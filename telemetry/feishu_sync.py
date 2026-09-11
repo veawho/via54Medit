@@ -321,7 +321,8 @@ class FeishuSyncClient:
                 method="PUT"
             )
             try:
-                urllib.request.urlopen(init_req, timeout=10)
+                with urllib.request.urlopen(init_req, timeout=10) as _:
+                    pass
             except Exception:
                 pass
             print(f"[FeishuSync] 成功自动创建公共统计表: https://open.feishu.cn/sheets/{st}")

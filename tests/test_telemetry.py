@@ -172,6 +172,55 @@ class TestTelemetry(unittest.TestCase):
             self.assertIsNone(plist, "非 macOS 不应返回 LaunchAgent 路径")
             self.assertIsNone(status, "非 macOS 不应返回 LaunchAgent 状态")
 
+    def test_start_daemon_background_spawn(self):
+        """后台启动分支必须真正走通到 Popen。
+
+        回归防护: 该分支曾遗留一个未定义的 ``env=env``, 使函数在任何进程被拉起之前
+        就抛 NameError —— 手动 ``daemon --start`` 与一键部署「启动后台守护」同时失效。
+        当时两条运行路径 (LaunchAgent 以 ``--foreground`` 拉起) 恰好都绕过了这段代码,
+        单测也未覆盖, 故障因此长期静默。
+
+        本用例不产生真实进程: 打桩 subprocess.Popen, 并把 PID / 日志文件指向临时目录。
+        """
+        from unittest import mock
+        from telemetry import daemon as daemon_mod
+
+        spawned = {}
+
+        class _FakeProc:
+            pid = 424242
+
+        def _fake_popen(cmd, **kwargs):
+            spawned["cmd"] = cmd
+            spawned["kwargs"] = kwargs
+            return _FakeProc()
+
+        pid_file = os.path.join(self.test_dir, "daemon.pid")
+        log_file = os.path.join(self.test_dir, "daemon.log")
+
+        with mock.patch.object(daemon_mod, "PID_FILE", pid_file), \
+                mock.patch.object(daemon_mod, "LOG_FILE", log_file), \
+                mock.patch.object(daemon_mod.subprocess, "Popen", _fake_popen):
+            daemon_mod.start_daemon_process(foreground=False)
+
+        self.assertTrue(spawned, "后台启动分支没有调用 subprocess.Popen")
+        cmd = spawned["cmd"]
+        self.assertIsInstance(cmd, list)
+        self.assertIn("telemetry.cli", cmd)
+        self.assertIn("--foreground", cmd, "子进程应以前台模式运行主循环")
+
+        kwargs = spawned["kwargs"]
+        self.assertTrue(os.path.isdir(kwargs.get("cwd") or ""), "cwd 必须是真实存在的项目根")
+        env_kwarg = kwargs.get("env")
+        self.assertTrue(
+            env_kwarg is None or isinstance(env_kwarg, dict),
+            "若传 env 必须是真实环境映射 (回归点: 曾遗留未定义的 env=env)",
+        )
+
+        # PID 正确落盘, 后续 --status / --stop 才能找到它
+        with open(pid_file, encoding="utf-8") as fp:
+            self.assertEqual(fp.read().strip(), "424242")
+
     def test_scanner_retrieval_from_highlight_reference_list(self):
         """高亮引用清单应折算为检索数, 且重复引用同一文献只计 1 篇 (唯一文献口径)。"""
         from telemetry.watcher import WorkspaceScanner

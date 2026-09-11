@@ -216,20 +216,20 @@ def start_daemon_process(foreground: bool = False):
         creationflags = 0x00000008 | 0x08000000
 
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-    log_fp = open(LOG_FILE, "a", encoding="utf-8")
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=project_root,
-        env=env,
-        stdout=log_fp,
-        stderr=log_fp,
-        creationflags=creationflags,
-        close_fds=True
-    )
+    with open(LOG_FILE, "a", encoding="utf-8") as log_fp:
+        # 不传 env: 子进程继承当前环境。
+        # 此处曾遗留一个把未定义变量 env 直接传进 Popen 的写法, 会让本函数在
+        # 后台启动分支直接抛 NameError —— 手动 `daemon --start` 与一键部署
+        # 「启动后台守护」两步都因此失败。子进程以 cwd=project_root 配合
+        # `-m telemetry.cli` 运行, 标准做法即可定位模块, 无需注入 PYTHONPATH。
+        proc = subprocess.Popen(
+            cmd,
+            cwd=project_root,
+            stdout=log_fp,
+            stderr=log_fp,
+            creationflags=creationflags,
+            close_fds=True
+        )
     with open(PID_FILE, "w", encoding="utf-8") as f:
         f.write(str(proc.pid))
     print(f"[Daemon] 主动监控守护进程已在后台成功启动 (PID: {proc.pid})。")
