@@ -69,19 +69,21 @@ else
     MEDIT_MCP_PLAIN:= bin/medit-mcp
 endif
 
-# On Windows we still produce a no-suffix binary too (matching Unix
-# convention) by copying. This way ./bin/medit works on both shells.
-bin/medit: $(MEDIT_PLAIN)
-	@true
+# 目标都是真实文件, 用 FORCE 前置保证每次 make build 都真正重新编译。
+#
+# 原先写作 `bin/medit: $(MEDIT_PLAIN)`, 而 MEDIT_PLAIN 本身就是 bin/medit —— 这是一条
+# 自依赖, make 会警告「Circular bin/medit <- bin/medit dependency dropped」, 随后因该
+# 文件已存在而判定「Nothing to be done for `build'」, 即 make build 实际什么都没做。
+# 后果: 二进制会长期停在某次手工构建的版本上 (曾因此落后仓库两个 minor 系列), 而
+# 一键部署与 auto_sync 都以为自己"重建过了"。
+.PHONY: FORCE
+FORCE:
 
-bin/medit-mcp: $(MEDIT_MCP_PLAIN)
-	@true
-
-$(MEDIT_PLAIN):
+$(MEDIT_PLAIN): FORCE
 	@mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/medit
 
-$(MEDIT_MCP_PLAIN):
+$(MEDIT_MCP_PLAIN): FORCE
 	@mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/medit-mcp
 

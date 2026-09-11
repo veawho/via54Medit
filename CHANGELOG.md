@@ -61,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`feishu_sync` 自动建表请求泄漏响应对象**: `urlopen()` 的返回值未关闭, 现改为 `with ... as _: pass`。
 - **`daemon.py` 启动时日志句柄泄漏**: `open(LOG_FILE, "a")` 未关闭; 现改为 `with open(...)`。
 
+### Fixed (构建与部署链路)
+- **`make build` 实际上什么都不做**: Makefile 中 `bin/medit: $(MEDIT_PLAIN)` 在 `MEDIT_PLAIN` 就等于 `bin/medit` 时构成自依赖, make 会警告 `Circular bin/medit <- bin/medit dependency dropped`, 随后因该文件已存在而判定 `Nothing to be done for 'build'`。后果是二进制长期停在某次手工构建的版本上 —— 本次现场即停在 `v5.2.0 (314ea76)`, 落后仓库两个 minor 系列, 而一键部署与 auto_sync 都以为自己"重建过了"。现改为 FORCE 前置, 每次 `make build` 都真正重新编译并按 `git describe` 打上版本戳。
+- **`auto_sync` 的 LaunchAgent 找不到 `go`**: plist 由 `install_launchd()` 生成, 模板未设 `PATH`, 而 launchd 默认只给 `/usr/bin:/bin:/usr/sbin:/sbin` —— 不含 Homebrew。于是每 6 小时一次的自动同步在「重新构建 Go 核心二进制」一步稳定失败。现由 `launchd_path()` 显式写入 `PATH` (go 所在目录 + 常见包管理器目录 + 系统目录) 与 `HOME`, 且刻意不整段照抄交互式 PATH, 以免把 IDE / 沙箱的内部路径固化进 LaunchAgent。
+- **构建失败被伪装成同步成功**: `pull_and_rebuild()` 把 `go build` 失败降级为「⚠️ 编译警告」后, 仍打印 `✅ 本地部署已更新至最新版本！` 并返回成功; 配合上一条, 故障可静默数周 (launchctl 显示"上次退出码 0")。现在构建改走 `make build`, 失败时明确报「同步未完成」并返回失败, `main()` 以退出码 1 结束, 让 launchd / cron 的退出码与日志都能反映问题。
+- **plist 模板未做 XML 转义**: `python_path` / `script_path` 直接插值, 用户名或路径含 `&` / `<` 时会生成非法 plist; 现统一经 `xml.sax.saxutils.escape` 处理。
+
 ### 验证
 - test_telemetry **37/37 passed** (新增 1 项 `test_start_daemon_background_spawn`: 打桩 `subprocess.Popen` 并把 PID / 日志路径指向临时目录, 断言后台分支真正走到 `Popen`、`cwd` 真实存在, 且不产生任何真实进程)。
 - **负向对照**: 把缺陷注入回 `daemon.py` 后, 该项单测立即以 `NameError: name 'env' is not defined` 失败 ⇒ 用例确能捕获此回归 (此前该分支无任何覆盖)。
@@ -68,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 补充说明
 - 文件描述符泄漏期间, 进程只"假死"而不退出, LaunchAgent 的 `KeepAlive` 无从感知, 因此故障可持续十余小时无人察觉 —— 这类"资源耗尽但不崩溃"的故障建议后续纳入监控告警。
+- 本版同时包含构建与部署链路修复 (Makefile / auto_sync / LaunchAgent), 不涉及 `medit-telemetry` 模块代码, 模块版本仍为 1.5.5。
 
 ## [5.4.4] - 2026-09-10 (变更默认: PEP 668 改为需显式授权的保守策略)
 

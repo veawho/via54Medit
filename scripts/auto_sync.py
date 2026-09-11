@@ -9,13 +9,42 @@ auto_sync.py — via54Medit 自动从 GitHub 拉取最新代码并同步更新�
   4. 支持作为守护进程运行 (--daemon)、单次执行 (--pull) 或一键注册为系统定时任务 (--install-cron / --install-launchd)。
 """
 import os
+import shutil
 import sys
 import time
 import argparse
 import subprocess
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 REPO_DIR = Path(__file__).resolve().parent.parent
+
+
+def launchd_path() -> str:
+    """为 LaunchAgent 构造 PATH。
+
+    launchd 默认只给 /usr/bin:/bin:/usr/sbin:/sbin —— 不含 Homebrew (/opt/homebrew/bin),
+    于是 go 在定时任务里"找不到", 而这类失败又很容易被当成无害警告咽下去。这里显式列出
+    同步所需的目录: go 所在目录 + 常见包管理器目录 + 系统目录。
+
+    刻意不整段照抄安装时的交互式 PATH —— 那会把 IDE / 沙箱的内部路径固化进 LaunchAgent,
+    一旦该应用升级换目录就整体失效, 很脆。
+    """
+    candidates = []
+    go_bin = shutil.which("go")
+    if go_bin:
+        candidates.append(os.path.dirname(go_bin))
+    candidates += [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        str(Path.home() / ".local" / "bin"),
+        "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+    ]
+    parts = []
+    for c in candidates:
+        if c and c not in parts and os.path.isdir(c):
+            parts.append(c)
+    return os.pathsep.join(parts)
 
 
 def run_cmd(cmd, cwd=REPO_DIR, timeout=300):
@@ -53,19 +82,15 @@ def pull_and_rebuild():
         return False
     print(f"  ✓ 代码拉取成功: {out}")
     
-    # 2. 编译 Go 核心
+    # 2. 编译 Go 核心 (走 Makefile, 以便按 git describe 打上正确的版本戳)
     print("[auto_sync] 重新构建 Go 核心二进制 (bin/medit, bin/medit-mcp)...")
-    ok, _, err = run_cmd(["go", "build", "-o", "bin/medit", "./cmd/medit"])
-    if not ok:
-        print(f"  ⚠️ bin/medit 编译警告: {err}")
+    ok, out, err = run_cmd(["make", "build"])
+    build_ok = ok
+    if ok:
+        print("  ✓ bin/medit, bin/medit-mcp 构建成功")
     else:
-        print("  ✓ bin/medit 构建成功")
-        
-    ok, _, err = run_cmd(["go", "build", "-o", "bin/medit-mcp", "./cmd/medit-mcp"])
-    if not ok:
-        print(f"  ⚠️ bin/medit-mcp 编译警告: {err}")
-    else:
-        print("  ✓ bin/medit-mcp 构建成功")
+        detail = [ln.strip() for ln in (out + "\n" + err).splitlines() if ln.strip()]
+        print(f"  ✗ 构建失败: {detail[-1] if detail else '(无输出)'}")
 
     # 3. 运行 Python 单元测试验证
     print("[auto_sync] 验证 Python 核心算法健康状态...")
@@ -77,6 +102,12 @@ def pull_and_rebuild():
         else:
             print(f"  ⚠️ 测试提示: {err}")
             
+    if not build_ok:
+        print("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
+        print("         排查: 确认 go / make 在 PATH 中 (launchd 默认 PATH 不含 Homebrew),")
+        print("         或在仓库根目录手工执行 make build 复现。")
+        return False
+
     print("[auto_sync] ✅ 本地部署已更新至最新版本！")
     return True
 
@@ -127,10 +158,17 @@ def install_launchd(interval_hours=6):
     <string>com.via54medit.autosync</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{python_path}</string>
-        <string>{script_path}</string>
+        <string>{escape(python_path)}</string>
+        <string>{escape(script_path)}</string>
         <string>--pull</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{escape(launchd_path())}</string>
+        <key>HOME</key>
+        <string>{escape(str(Path.home()))}</string>
+    </dict>
     <key>StartInterval</key>
     <integer>{interval_seconds}</integer>
     <key>StandardOutPath</key>
@@ -192,7 +230,10 @@ def main():
     # 默认行为: 检查更新，若有则拉取并重新编译
     has_updates, _ = check_updates()
     if has_updates or args.pull:
-        pull_and_rebuild()
+        if not pull_and_rebuild():
+            # 非零退出: 让 launchd / cron 的日志与退出码都能反映失败, 而不是把
+            # 「构建失败」伪装成一次成功同步 (此前正是如此, 故障因此静默数周)。
+            sys.exit(1)
 
 
 if __name__ == "__main__":
