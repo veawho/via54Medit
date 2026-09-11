@@ -686,6 +686,92 @@ class TestRenderEngine(unittest.TestCase):
         self.assertIn("PPT_RENDER_TIMEOUT", logged)
         self.assertIn("所有引擎均失败", logged)
 
+    def test_powerpoint_pref_never_falls_back_to_other_channels(self):
+        """规范: **只使用 PowerPoint 渲染**。偏好=powerpoint 时不可用 → 直接失败, 不换通道。
+
+        这条钉住一个**真实存在过的违规**: 原先 darwin 上没装 PowerPoint 时会回落到
+        soffice 或 python-pptx —— 那等于自动切换渲染通道。现改为抛错。
+        """
+        clean = {k: v for k, v in os.environ.items() if k != "RENDER_ENGINE"}
+        tmp = tempfile.mkdtemp()
+        pptx = os.path.join(tmp, "x.pptx")
+
+        # 有 PowerPoint → 单通道
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(pre.sys, "platform", "darwin"), \
+                mock.patch.object(pre, "_macos_powerpoint_available", return_value=True):
+            engines = pre._build_engine_list()
+        self.assertEqual([k for _, k, _ in engines], ["macos_ppt"])
+
+        # 没 PowerPoint → 抛错, 且明确说明不降级
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(pre.sys, "platform", "darwin"), \
+                mock.patch.object(pre, "_macos_powerpoint_available", return_value=False), \
+                mock.patch.object(pre, "_find_soffice", return_value="/usr/bin/soffice"):
+            with self.assertRaises(RuntimeError) as cm:
+                pre._build_engine_list()
+        self.assertIn("只使用 PowerPoint", str(cm.exception))
+
+        # 渲染入口应返回 0, 并且**绝不能**跑起别的引擎
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(pre.sys, "platform", "darwin"), \
+                mock.patch.object(pre, "_macos_powerpoint_available", return_value=False), \
+                mock.patch.object(pre, "_find_soffice", return_value="/usr/bin/soffice"), \
+                mock.patch.object(pre, "render_via_soffice",
+                                  side_effect=AssertionError("不应改走 soffice")), \
+                mock.patch.object(pre, "render_via_python_pptx",
+                                  side_effect=AssertionError("不应改走 python-pptx")), \
+                mock.patch("builtins.print"):
+            n, engine = pre.render_ppt_slides_auto(pptx, os.path.join(tmp, "o"))
+        self.assertEqual((n, engine), (0, "none"))
+
+    def test_windows_powerpoint_unavailable_raises_without_fallback(self):
+        """Windows 上 PowerPoint COM 不可用同样直接失败, 不换通道。"""
+        clean = {k: v for k, v in os.environ.items() if k != "RENDER_ENGINE"}
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(pre.os, "name", "nt"), \
+                mock.patch.object(pre, "_progid_available", return_value=False):
+            with self.assertRaises(RuntimeError):
+                pre._build_engine_list()
+
+    def test_no_advice_to_switch_render_channels(self):
+        """仓库内不得出现"改用其它渲染通道"的引导表述。
+
+        这条是**给我自己上的锁**: v5.4.23 我把"改用其它渲染通道"写进了失败提示文案
+        和 CHANGELOG, 直接违反 2026-09-04 的"只使用 PowerPoint、禁用其它通道"规范。
+        光把它从代码里删掉不够 —— 要有一条测试防止再写回去。
+
+        允许的形态: 参数校验/文档里**客观列出** RENDER_ENGINE 的可选值(那是参数说明,
+        不是建议改用), 以及测试里为验证 auto 分支而显式设置的 ``{"RENDER_ENGINE": "auto"}``。
+        """
+        # 注意: 模式用**拼接**构造, 否则定义它的这两行自己就会命中(自我引用)。
+        _v = "RENDER_ENGINE="
+        banned = ("改用 " + _v, _v + "libreoffice", _v + "python_pptx", _v + "wps")
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        hits = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames
+                           if d not in {".git", "node_modules", "__pycache__",
+                                        ".pytest_cache", ".venv"}]
+            for fn in filenames:
+                if not fn.endswith((".py", ".md")):
+                    continue
+                path = os.path.join(dirpath, fn)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        text = f.read()
+                except (UnicodeDecodeError, OSError):
+                    continue
+                for i, line in enumerate(text.split("\n")):
+                    for b in banned:
+                        if b in line:
+                            hits.append("%s:%d  %s" % (os.path.relpath(path, root),
+                                                       i + 1, line.strip()[:110]))
+        self.assertEqual(
+            hits, [],
+            "出现了引导改用其它渲染通道的表述 —— 违反'只使用 PowerPoint 渲染, 禁用其它通道':\n  "
+            + "\n  ".join(hits))
+
     def test_hint_line_is_separate_from_truncated_message(self):
         """建议必须**单独成行且完整**, 不能被消息的截断波及。"""
         long_err = "x" * 500

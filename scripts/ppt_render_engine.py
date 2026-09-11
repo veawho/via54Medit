@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-ppt_render_engine.py — PPT → 图片 多引擎自动渲染 (部署新系统即用)
+ppt_render_engine.py — PPT → 图片 渲染 (部署新系统即用)
 
-按优先级自动接入系统可用引擎:
-  1. Microsoft PowerPoint COM   (ProgID: PowerPoint.Application)
-  2. WPS 演示 COM                (ProgID: KWPP.Application, 接口兼容 PowerPoint)
-  3. python-pptx + Pillow 近似渲染 (兜底, 任何平台可用)
+渲染策略 (2026-09-04 用户规范):
+  **只使用 PowerPoint 渲染** —— Windows 走 PowerPoint COM, macOS 走原生 PowerPoint (AppleScript)。
+  **禁用其它通道**: 默认偏好下偏好引擎不可用就**直接失败**, 不静默降级到别的引擎。
+  (2026-09-11 勘误: 本文档原先写"按优先级自动接入系统可用引擎 / macOS-Linux 优先 soffice
+   否则 python-pptx 兜底", 与规范不符, 已改写。)
 
-Windows: COM 真实渲染 (保真度最高); 若系统有 PowerPoint/WPS 但缺 pywin32, 自动尝试 pip 安装。
-macOS/Linux: 优先 soffice/libreoffice 真实渲染 (检测到即用, 全平台), 否则 python-pptx 近似渲染。
-CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Noto CJK), 保证中文近似渲染可读。
+关于引擎偏好 RENDER_ENGINE:
+  * 不设置时 = ``powerpoint``。这是正常路径: 单通道, 无自动降级。
+  * 其它取值(``wps`` / ``libreoffice`` / ``python_pptx`` / ``auto``)属**显式覆盖**,
+    不做默认、不做兜底; 它们的保真度低于 PowerPoint(python-pptx 只是近似渲染)。
+
+CJK 字体: 按平台探测 (Windows 微软雅黑 / macOS 苹方-简 / Linux Noto CJK)。
 
 用法:
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
@@ -136,11 +140,15 @@ _DEFAULT_MACOS_TIMEOUT = 60.0
 #: 只做 launch + get version —— 实测暖机 0.4s 返回, 20s 足够覆盖冷启动。
 _DEFAULT_MACOS_PREFLIGHT_TIMEOUT = 20.0
 
-#: PowerPoint 自动化被模态对话框挡住时给出的可操作提示
+#: PowerPoint 自动化被模态对话框挡住时给出的可操作提示。
+#: **只讲怎么把 PowerPoint 修好, 不提任何其它渲染通道** —— 规范是只走 PowerPoint 一条路。
+#: (2026-09-11 勘误: 此处原先写着"可改用 libreoffice / python-pptx", 那是**引导改用其它通道**,
+#:  违反 2026-09-04 的用户规范, 已删除。)
 _MACOS_BLOCKED_HINT = (
     "PowerPoint 多半是弹了模态对话框(登录 / 激活 / 文件访问权限)挡住了 Apple 事件。"
-    "可手动打开一次 PowerPoint 关掉该对话框后重试; "
-    "或改用 RENDER_ENGINE=libreoffice / RENDER_ENGINE=python_pptx; "
+    "请手动打开一次 PowerPoint, 关掉该对话框后再重试。"
+    "若仍然卡住, 需排查 PowerPoint 自身状态(是否已激活、是否允许被自动化控制), "
+    "而不是绕过它 —— 按规范渲染只走 PowerPoint 这一条通道, 不会自动改用其它引擎。"
     "自动化超时可用 PPT_RENDER_TIMEOUT(秒) 调整。"
 )
 
@@ -448,11 +456,13 @@ def _build_engine_list():
         elif sys.platform == "darwin" and _macos_powerpoint_available():
             return [("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")]
         else:
-            # 尝试检测是否有 LibreOffice 替代，否则提示
-            soffice = _find_soffice()
-            if soffice:
-                return [("LibreOffice (soffice 备选)", "soffice", soffice)]
-            return [("python-pptx 近似渲染 (兜底)", "python_pptx", "")]
+            # 规范是**只走 PowerPoint**: 不可用就失败, 不静默改用 LibreOffice / python-pptx。
+            # (2026-09-11 勘误: 此处原先会回落到 soffice 或 python_pptx —— 那等于自动切换
+            #  渲染通道, 违反 "只使用 PowerPoint 渲染, 禁用其它通道" 的规范。)
+            raise RuntimeError(
+                "[render] 偏好引擎 %s 在本机不可用 —— 规范要求只使用 PowerPoint 渲染、"
+                "禁用其它通道, 故不自动降级。请确认 PowerPoint 已安装并激活; "
+                "macOS 还需在 系统设置 › 隐私与安全性 › 自动化 里允许其被控制。" % name)
     if kind == "soffice":
         p = _find_soffice()
         if not p:
