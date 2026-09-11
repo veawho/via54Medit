@@ -32,6 +32,48 @@ DEFAULT_ANNOTS = 5
 #: 检索环节的单篇均摊耗时 (基准, 与历史实现一致)
 RETRIEVAL_SECONDS_PER_PAPER = 12.0
 
+# --------------------------------------------------------------------------- #
+# 路径卫生 —— 只统计"真实产出物", 不统计备份/临时副本
+#
+# 这条规则是**统计准确性的前提**。实测发现: RSV 项目下的 `_bak_20260906_201108/高亮结果/`
+# 与 `_bak2_20260906_205621/高亮结果/` 被当作成果一起扫了进来, 于是同一篇文献(同一个
+# paper_id)在库里出现 3 行 —— 高亮篇数与阅读页数因此虚高到 3 倍(150 篇 / 2917 页,
+# 实际 50 篇)。而且**时对时错**: 备份目录被删掉, 数字又"自己变回去"。
+#
+# 判据用**路径片段的前缀**而不是整串子串: 子串匹配会误伤名字里恰好含 bak 的文献
+# (例如 `Wang_bak_2020.pdf`), 也会牵连 `_highlight.pdf` 这类正常产物。
+# 只看片段前缀时, `_2_pdfs/`、`_highlight_nested/` 这类合法的下划线开头目录不受影响
+# (它们的前缀是 `_2` / `_h`), 所以不需要额外的例外清单。
+# --------------------------------------------------------------------------- #
+IGNORED_SEGMENT_PREFIXES = (
+    "_bak",             # _bak / _bak2 / _bakup 等
+    "_backup",
+    "_old",
+    "_archive",
+    "_trash",
+    "_copy",
+    "_moved",
+    ".git",             # .git / .github
+    ".svn",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+)
+
+
+def is_ignored_path(path: str) -> bool:
+    """该路径是否位于备份/临时目录下(不应计入统计)。"""
+    if not path:
+        return False
+    norm = os.path.normcase(os.path.abspath(path)).replace("\\", "/")
+    return any(seg.startswith(pref) for seg in norm.split("/") if seg
+               for pref in IGNORED_SEGMENT_PREFIXES)
+
+
+def filter_paths(paths: List[str]) -> List[str]:
+    """滤掉备份/临时目录下的路径, 保持原顺序。"""
+    return [p for p in paths if not is_ignored_path(p)]
+
 #: 引用串中的样板噪声 (归一化时剔除), 这些片段不承载文献身份
 _REF_BOILERPLATE = (
     r"available\s*at\s*:.*$",
@@ -216,16 +258,26 @@ class WorkspaceScanner:
         self.db = db or TelemetryDB()
 
     def scan_project(self, project_dir: str, project_name: Optional[str] = None) -> Dict[str, int]:
-        """扫描并解析一个文献项目的产出物，自动录入 Telemetry 数据库。"""
+        """扫描并解析一个文献项目的产出物，自动录入 Telemetry 数据库。
+
+        两条与"统计要准、要实时"直接相关的规则:
+
+        1. **只看真实产出物**: 备份/临时目录(``_bak_*`` 等)里的副本一律跳过。实测过 RSV 的
+           ``_bak_*/高亮结果/`` 被当成成果扫进来, 同一篇文献重复计 3 次(150 篇 vs 实际 50 篇)。
+        2. **已收录的条目也刷新**: 原先命中 ``has_*_item`` 就 ``continue``, 于是标注数
+           (``num_annots``)与文件大小从此**冻结在首次登记时的值**。现在改为刷新可变字段 ——
+           篇数口径不变(刷新≠新增), 但数字会跟着实际产出走。
+        """
         if not os.path.exists(project_dir):
-            return {"retrieval": 0, "download": 0, "highlight": 0}
+            return {"retrieval": 0, "download": 0, "highlight": 0, "refreshed": 0}
 
         pname = project_name or os.path.basename(os.path.abspath(project_dir))
-        stats = {"retrieval": 0, "download": 0, "highlight": 0}
+        stats = {"retrieval": 0, "download": 0, "highlight": 0, "refreshed": 0}
 
         # 1. 扫描检索产物 (如 _doi_map_full.json, rsv_pdf_inventory.json, rsv_tasks.json)
-        doi_map_files = glob.glob(os.path.join(project_dir, "*doi_map*.json")) + \
-                        glob.glob(os.path.join(project_dir, "*inventory*.json"))
+        doi_map_files = filter_paths(
+            glob.glob(os.path.join(project_dir, "*doi_map*.json")) +
+            glob.glob(os.path.join(project_dir, "*inventory*.json")))
         seen_retrievals = set()
         for f in doi_map_files:
             try:
@@ -272,19 +324,24 @@ class WorkspaceScanner:
             stats["retrieval"] += 1
 
         # 2. 扫描下载 PDF (如 _2_pdfs/*.pdf 或 根目录下未高亮的 .pdf)
-        pdf_files = glob.glob(os.path.join(project_dir, "_2_pdfs", "*.pdf")) + \
-                    [p for p in glob.glob(os.path.join(project_dir, "*.pdf")) if not p.endswith("_highlight.pdf")]
+        pdf_files = filter_paths(
+            glob.glob(os.path.join(project_dir, "_2_pdfs", "*.pdf")) +
+            [p for p in glob.glob(os.path.join(project_dir, "*.pdf"))
+             if not p.endswith("_highlight.pdf")])
         seen_pdfs = set()
         for p in pdf_files:
             bname = os.path.basename(p)
             if bname not in seen_pdfs:
                 seen_pdfs.add(bname)
-                # 检查是否已存在
-                if self.db.has_download_item(pdf_path=p, paper_id=bname.split(".")[0].split("_")[0]):
+                paper_id = bname.split(".")[0].split("_")[0]
+                fsize = os.path.getsize(p)
+
+                # 已收录: 刷新文件大小(重新下载后可能变大), 不新增计数
+                if self.db.has_download_item(pdf_path=p, paper_id=paper_id):
+                    if self.db.refresh_download_item(p, file_size_bytes=fsize):
+                        stats["refreshed"] += 1
                     continue
 
-                fsize = os.path.getsize(p)
-                paper_id = bname.split(".")[0].split("_")[0]
                 item = DownloadItem(
                     paper_id=paper_id,
                     pdf_path=p,
@@ -298,11 +355,12 @@ class WorkspaceScanner:
 
         # 3. 扫描 Highlight 成果
         #    命名约定: *_highlight.pdf (TMA) / 高亮结果/*.pdf (RSV 等中文项目)
-        hl_pdfs = glob.glob(os.path.join(project_dir, "*_highlight.pdf")) + \
-                  glob.glob(os.path.join(project_dir, "_highlight_nested", "*", "*_highlight.pdf")) + \
-                  glob.glob(os.path.join(project_dir, "rsv_hl", "P*", "*_highlight.pdf")) + \
-                  glob.glob(os.path.join(project_dir, HL_DIRNAME, "*.pdf")) + \
-                  glob.glob(os.path.join(project_dir, "*", HL_DIRNAME, "*.pdf"))
+        hl_pdfs = filter_paths(
+            glob.glob(os.path.join(project_dir, "*_highlight.pdf")) +
+            glob.glob(os.path.join(project_dir, "_highlight_nested", "*", "*_highlight.pdf")) +
+            glob.glob(os.path.join(project_dir, "rsv_hl", "P*", "*_highlight.pdf")) +
+            glob.glob(os.path.join(project_dir, HL_DIRNAME, "*.pdf")) +
+            glob.glob(os.path.join(project_dir, "*", HL_DIRNAME, "*.pdf")))
 
         seen_hl = set()
         for hp in hl_pdfs:
@@ -315,9 +373,16 @@ class WorkspaceScanner:
                 pages = get_pdf_page_count(hp)
 
                 # 检查数据库是否已收录该 PDF 文件
-                if self.db.has_highlight_item(pdf_path=hp):
-                    # 若已收录，更新其真实页数确保一致性
-                    self.db.update_highlight_page_count(hp, pages)
+                # 同时用 paper_id 兜一层: 文件被移动/改名后, 只按路径匹配会认不出来,
+                # 结果是**同一篇文献再加一行**, 篇数虚高。
+                if self.db.has_highlight_item(pdf_path=hp, paper_id=paper_id):
+                    # 已收录: 刷新页数与标注数(用户在已有 PDF 上继续加标注, 数字要跟上)
+                    annots_now = _sibling_verify_annots(hp) or _count_pdf_annots(hp)
+                    if self.db.refresh_highlight_item(
+                            hp,
+                            page_count=pages if pages > 0 else None,
+                            num_annots=annots_now if annots_now > 0 else None):
+                        stats["refreshed"] += 1
                     continue
 
                 # 标注数: 优先同级 verify.json, 否则数 PDF 内真实标注

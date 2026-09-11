@@ -38,6 +38,60 @@ from .platform_paths import desktop_dir, trae_work_dir
 # 改用它们的函数各自在函数体内导入 (见 _install_autostart / cmd_daemon / cmd_scan 等)。
 
 
+def cmd_refresh(args):
+    """立即刷新全部统计: 扫描监控目录 + 刷新已收录条目 + 清理备份副本行。
+
+    与 ``scan`` / ``backfill`` 的区别: 目录来自**配置**(``watcher.watch_dirs``), 不是写死的
+    几个路径; 而且会把"已收录条目"的字段也刷新一遍, 并清理历史遗留的备份副本行。
+
+    典型场景: 刚导出一批新成果, 不想等下一个巡检周期(默认 30 秒), 或想立刻修掉虚高的数字。
+    """
+    from .watcher import WorkspaceScanner, is_ignored_path
+
+    cfg = load_config()
+    db = TelemetryDB()
+    scanner = WorkspaceScanner(db)
+    watch_dirs = [os.path.abspath(d) for d in (args.dir or [])] \
+        if getattr(args, "dir", None) else (cfg.get("watcher", {}).get("watch_dirs") or [])
+
+    print("[Refresh] 立即刷新统计 (扫描产出物 + 刷新已收录条目 + 清理备份副本)...")
+    totals = {"retrieval": 0, "download": 0, "highlight": 0, "refreshed": 0}
+    projects = 0
+    for wdir in watch_dirs:
+        if not os.path.exists(wdir):
+            continue
+        try:
+            entries = sorted(os.listdir(wdir))
+        except OSError as e:
+            print(f"  • 跳过不可读目录 {wdir}: {e}")
+            continue
+        for entry in entries:
+            full = os.path.join(wdir, entry)
+            # 备份/临时目录不是产出物 —— 与守护进程用同一条规则(见 watcher.is_ignored_path)
+            if not os.path.isdir(full) or is_ignored_path(full):
+                continue
+            res = scanner.scan_project(full, entry)
+            projects += 1
+            for k in totals:
+                totals[k] += res.get(k, 0)
+
+    print("  • 扫描项目: %d 个 | 新增: 检索 %d / 下载 %d / 高亮 %d 篇 | 刷新字段: %d 项"
+          % (projects, totals["retrieval"], totals["download"], totals["highlight"],
+             totals["refreshed"]))
+    if getattr(args, "no_purge", False):
+        print("  • 清理备份副本行: 已按参数跳过")
+    else:
+        removed = db.purge_ignored_path_items()
+        total_removed = sum(removed.values())
+        if total_removed:
+            print("  • 清理备份副本行: 高亮 %d 行 / 下载 %d 行 (这些是备份目录里的副本, "
+                  "不是产出物)" % (removed["highlight_items"], removed["download_items"]))
+        else:
+            print("  • 清理备份副本行: 无需清理")
+    print()
+    cmd_status(args)
+
+
 def cmd_status(args):
     db = TelemetryDB()
     agg = TelemetryAggregator(db)
@@ -54,6 +108,25 @@ def cmd_status(args):
     mode_tag = "🟢 100% 控制台对齐" if d["tokens"].get("token_mode") == "exact" else "🟡 估算模式"
     call_cnt = d["tokens"].get("llm_call_count", 0)
     print(f"• 累计 Token 消耗: {d['tokens']['total_tokens']:,} tokens [{mode_tag}] | 真实调用: {call_cnt} 次")
+    # 数据新鲜度: 报表是**当场从 SQLite 算出来的**, 这里把"最近一次入库时间"一并给出,
+    # 让"是不是实时"有凭据可查 —— 否则数字看着对, 却不知道它停留在哪一刻。
+    try:
+        from datetime import datetime as _dt
+
+        stamp = db.latest_ingest_at()
+        if stamp:
+            ago = ""
+            try:
+                mins = (_dt.now() - _dt.fromisoformat(stamp)).total_seconds() / 60.0
+                ago = "(%.1f 分钟前)" % mins if mins >= 0 else ""
+            except ValueError:
+                pass
+            print(f"• 数据新鲜度: 最近入库 {stamp.replace('T', ' ')[:19]} {ago} · 由守护进程每 "
+                  f"{load_config().get('watcher', {}).get('poll_interval_seconds', 30)} 秒巡检更新")
+        else:
+            print("• 数据新鲜度: 暂无入库记录")
+    except Exception:                                       # noqa: BLE001
+        pass
     print("=======================================================\n")
 
 
@@ -697,6 +770,14 @@ def main():
     # backfill
     p_backfill = subparsers.add_parser("backfill", help="一键扫描并补录历史已有项目 (RSV, TMA)")
     p_backfill.set_defaults(func=cmd_backfill)
+
+    # refresh (立即刷新全部统计)
+    p_refresh = subparsers.add_parser(
+        "refresh", help="立即刷新全部统计 (扫描监控目录 + 刷新已收录条目 + 清理备份副本)")
+    p_refresh.add_argument("--dir", action="append", default=[],
+                           help="只刷新指定目录 (可重复; 默认用配置里的 watcher.watch_dirs)")
+    p_refresh.add_argument("--no-purge", action="store_true", help="不清理备份副本行")
+    p_refresh.set_defaults(func=cmd_refresh)
 
     # token (真实账单与控制台 100% 对齐)
     p_token = subparsers.add_parser("token", help="大模型 Token 真实账单管理与服务商控制台 100%% 对齐")

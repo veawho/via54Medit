@@ -71,6 +71,13 @@
    - **判定用"到点之后"而非"正好那一分钟"**：18:00 该提醒、机器 22:00 才开机，当晚仍会补上。
    - **不重复打扰**：幂等 key 按提醒日分桶并落盘（`~/.medit/alerts_state.json`），守护进程被反复拉起也只发一次；发送失败则 10 分钟后重试。
    - **提醒有独立开关**：`schedule.reminder.enabled`，不受 `alerts.enabled`（资源告警开关）影响。
+9. **数据准确与实时**：
+
+   - **只统计真实产出物**：备份/临时目录（`_bak*`、`.git`、`node_modules` 等）里的副本一律不计入；`_2_pdfs/`、`_highlight_nested/` 这类合法目录不受影响。实测过代价：RSV 的 `_bak_*/高亮结果/` 曾被当成成果扫进来，同一篇文献 3 行 —— 报表虚高到 3 倍（150 篇 / 2917 页 → 实际 50 篇 / 977 页）。
+   - **已收录条目不冻结**：命中唯一性去重后仍会刷新可变字段（高亮页数与标注数、下载文件大小）。**刷新 ≠ 新增**：篇数口径不变；没观测到（`None`）时不覆盖原值。
+   - **实时是默认状态**：守护进程每 30 秒（`watcher.poll_interval_seconds`）巡检，报表当场从 SQLite 计算、不做缓存。想立刻生效用 `medit-telemetry refresh`（目录取自配置 `watcher.watch_dirs`，并清理历史遗留的备份副本行）。
+   - **新鲜度可查**：`status` 末尾显示"最近入库时间 + 距今多久"；心跳文件带 `freshness.latest_ingest_at` 与各表行数。
+   - **⚠️ 改了采集逻辑要重启守护进程**：配置每 5 秒重载，代码不会。旧进程会继续用内存里的旧扫描器（例如把刚清理掉的备份副本行再插回去）。
 
 ---
 
@@ -112,9 +119,12 @@ python -m telemetry.cli holiday --refresh
 
 ### B. 主动监控守护服务 (Daemon)
 ```bash
+# 0. 立即刷新统计 (不等下一个 30 秒巡检周期; 并清理备份副本行)
+python -m telemetry.cli refresh
+python -m telemetry.cli refresh --dir ~/Desktop/RSV   # 只刷新指定目录 (可重复)
+
 # 1. 在后台启动主动监控守护进程 (实时嗅探 + 到点自动推送)
 python -m telemetry.cli daemon --start
-
 # 2. 查看守护进程运行状态与心跳
 python -m telemetry.cli daemon --status
 

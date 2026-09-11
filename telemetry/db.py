@@ -256,6 +256,101 @@ class TelemetryDB:
             conn.execute("UPDATE highlight_items SET page_count = ? WHERE pdf_path = ?", (page_count, pdf_path))
             conn.commit()
 
+    # ------------------------------------------------------------------ #
+    # 字段刷新 —— 让"已登记条目"跟着最新观测值走
+    #
+    # 背景: watcher 遇到已收录的条目原先直接 `continue`, 于是**标注数(num_annots)与文件
+    # 大小从此冻结在首次登记时的值**。用户在已高亮的 PDF 上继续加标注、或重新下载了更大的
+    # PDF, 报表却纹丝不动 —— 这是"统计数据不实时"最具体的形态。
+    #
+    # 约定: ``None`` 表示"这次没观测到", 保持原值; 不用默认值去覆盖已有数据
+    # (否则一次扫描失败就会把好数据抹成 0, 比不刷新更糟)。
+    # ------------------------------------------------------------------ #
+    def refresh_highlight_item(self, pdf_path: str, *, page_count: Optional[int] = None,
+                               num_annots: Optional[int] = None) -> int:
+        """把已登记高亮条目的页数/标注数刷新为最新观测值。返回改动行数。"""
+        return self._refresh_rows(
+            "highlight_items", "pdf_path", pdf_path,
+            {"page_count": page_count, "num_annots": num_annots})
+
+    def refresh_download_item(self, pdf_path: str, *, file_size_bytes: Optional[int] = None,
+                              success: Optional[int] = None) -> int:
+        """把已登记下载条目的文件大小/成功标记刷新为最新观测值。返回改动行数。"""
+        return self._refresh_rows(
+            "download_items", "pdf_path", pdf_path,
+            {"file_size_bytes": file_size_bytes, "success": success})
+
+    def _refresh_rows(self, table: str, where_col: str, where_val: str,
+                      fields: Dict[str, Any]) -> int:
+        updates = {k: v for k, v in (fields or {}).items() if v is not None}
+        if not updates or not where_val:
+            return 0
+        sets = ", ".join("%s = ?" % k for k in updates)
+        params = list(updates.values()) + [where_val]
+        with self.get_connection() as conn:
+            cur = conn.execute(
+                "UPDATE %s SET %s WHERE %s = ?" % (table, sets, where_col), params)
+            conn.commit()
+            return cur.rowcount or 0
+
+    def latest_ingest_at(self) -> Optional[str]:
+        """最近一次明细入库时间 —— 用来回答"数据到底是不是最新的"。
+
+        取各明细表 ``created_at`` 的最大值(而不是扫描任务的时间): 扫描可能什么都没发现,
+        而"入库时间"才是数据新鲜度的真实证据。
+        """
+        with self.get_connection() as conn:
+            stamps = []
+            for table in ("retrieval_items", "download_items", "highlight_items"):
+                row = conn.execute("SELECT MAX(created_at) AS m FROM %s" % table).fetchone()
+                if row and row["m"]:
+                    stamps.append(row["m"])
+            return max(stamps) if stamps else None
+
+    def table_counts(self) -> Dict[str, int]:
+        """各明细表当前行数 —— 心跳与状态页的"实时数字"。"""
+        out = {}
+        with self.get_connection() as conn:
+            for table in ("retrieval_items", "download_items", "highlight_items", "tasks"):
+                out[table] = conn.execute("SELECT COUNT(*) AS n FROM %s" % table).fetchone()["n"]
+        return out
+
+    def purge_ignored_path_items(self, is_ignored=None) -> Dict[str, int]:
+        """删除指向备份/临时目录的明细行, 返回各表删除的行数。
+
+        为什么需要: 路径卫生规则挡住的是**将来**的扫描, 但库里已经被记过的重复行不会自己
+        消失 —— 不清理的话报表仍然虚高, 直到人工去删。实测 RSV 的高亮因此虚高到 3 倍。
+
+        **只在同一篇文献于非备份路径下也有行时才删。** 这样即便判定规则有偏差, 也绝不会把
+        某一个文献整个删掉 —— 最坏情况只是少删几行, 统计口径不会被削。
+
+        ``is_ignored`` 由调用方注入(默认用 watcher 的规则), 免得 db 反向依赖 watcher。
+        """
+        if is_ignored is None:
+            from .watcher import is_ignored_path as is_ignored
+        removed = {"highlight_items": 0, "download_items": 0}
+        with self.get_connection() as conn:
+            for table in removed:
+                rows = conn.execute(
+                    "SELECT id, paper_id, pdf_path FROM %s" % table).fetchall()
+                kept_papers = set()
+                drop = []
+                for r in rows:
+                    path = (r["pdf_path"] or "").strip()
+                    pid = (r["paper_id"] or "").strip().lower()
+                    if path and is_ignored(path):
+                        drop.append((r["id"], pid))
+                    else:
+                        kept_papers.add(pid)
+                # 只在"同一篇文献在非备份路径下也有行"时才删 —— 绝不会把某个文献整删掉
+                safe = [rid for rid, pid in drop if pid and pid in kept_papers]
+                if safe:
+                    conn.executemany("DELETE FROM %s WHERE id = ?" % table,
+                                     [(rid,) for rid in safe])
+                    removed[table] = len(safe)
+            conn.commit()
+        return removed
+
     def has_download_item(self, pdf_path: str = "", paper_id: str = "") -> bool:
         with self.get_connection() as conn:
             if pdf_path:

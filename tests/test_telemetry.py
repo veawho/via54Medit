@@ -2387,6 +2387,226 @@ class TestDeferral(unittest.TestCase):
             self.assertEqual(fake_client.push_to_user_chat.call_count, 1, "当天只该推一次")
 
 
+class TestDataFreshness(unittest.TestCase):
+    """统计要准、要跟得上: 备份目录不计数 + 已收录条目不冻结 + 能证明"数据是最新的"。
+
+    背景(实测): RSV 项目下存在 `_bak_20260906_201108/高亮结果/` 与
+    `_bak2_20260906_205621/高亮结果/`, 被当作成果一起扫了进来 —— 同一篇文献在库里 3 行,
+    报表因此虚高到 3 倍(150 篇 / 2917 页, 实际 50 篇 / 977 页; 节约工时 20.19h → 14.49h)。
+    """
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.test_dir, ignore_errors=True)
+        self.db = TelemetryDB(os.path.join(self.test_dir, "t.db"))
+        self.aggregator = TelemetryAggregator(self.db)
+
+    # ---- 路径卫生 ----
+
+    def test_ignored_path_rules(self):
+        from telemetry.watcher import is_ignored_path
+
+        base = "/Users/x/Desktop/RSV"
+        for bad in ("_bak_20260906_201108/高亮结果/P1.pdf",
+                    "_bak2_20260906_205621/高亮结果/P1.pdf",
+                    "高亮结果/_bak/P1.pdf",
+                    "_backup/P1.pdf", "_trash/P1.pdf", ".git/x/P1.pdf",
+                    "node_modules/a/P1.pdf", "__pycache__/P1.pdf",
+                    "_bak_x/_2_pdfs/a.pdf"):
+            self.assertTrue(is_ignored_path(os.path.join(base, bad)),
+                            "应视为备份/临时: %s" % bad)
+        for good in ("高亮结果/P1.pdf", "_2_pdfs/a.pdf", "_highlight_nested/x/P1.pdf",
+                     "rsv_hl/P1/P1_highlight.pdf"):
+            self.assertFalse(is_ignored_path(os.path.join(base, good)),
+                             "是真实产出物, 不该被忽略: %s" % good)
+
+    def test_paper_name_containing_bak_is_not_ignored(self):
+        """规则只比**片段前缀**: 文献名里恰好含 bak 不能被误伤。"""
+        from telemetry.watcher import is_ignored_path
+
+        self.assertFalse(is_ignored_path("/Users/x/RSV/高亮结果/Wang_bak_2020.pdf"))
+        self.assertFalse(is_ignored_path("/Users/x/RSV/高亮结果/paper_old_version.pdf"))
+
+    def _make_pdf(self, path, pages=1, annots=0):
+        try:
+            import fitz
+        except ImportError:
+            self.skipTest("PyMuPDF 不可用")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        doc = fitz.open()
+        page = doc.new_page()
+        for i in range(max(0, annots)):
+            page.add_rect_annot(fitz.Rect(50, 50 + i * 20, 200, 90 + i * 20))
+        for _ in range(max(0, pages - 1)):
+            doc.new_page()
+        doc.save(path)
+        doc.close()
+
+    def test_backup_copies_are_not_counted(self):
+        from telemetry.watcher import WorkspaceScanner
+
+        proj = os.path.join(self.test_dir, "RSV")
+        self._make_pdf(os.path.join(proj, "高亮结果", "P1-1.pdf"), pages=3, annots=2)
+        # 两个备份副本 —— 修复前会被当成成果, 于是这一篇被计 3 次
+        self._make_pdf(os.path.join(proj, "_bak_2026", "高亮结果", "P1-1.pdf"), pages=3, annots=2)
+        self._make_pdf(os.path.join(proj, "_bak2_2026", "高亮结果", "P1-1.pdf"), pages=3, annots=2)
+
+        stats = WorkspaceScanner(self.db).scan_project(proj, "RSV")
+        self.assertEqual(stats["highlight"], 1, "备份副本不该计入")
+
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.highlight_count, 1)
+        self.assertEqual(rep.highlight_pages, 3, "页数也不该被备份副本放大")
+
+    def test_download_dir_still_counted(self):
+        """`_2_pdfs` 是真实下载产物目录, 不能被路径卫生规则误伤。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        proj = os.path.join(self.test_dir, "DL")
+        os.makedirs(os.path.join(proj, "_2_pdfs"))
+        with open(os.path.join(proj, "_2_pdfs", "P9.pdf"), "wb") as fh:
+            fh.write(b"%PDF-1.4 fake")
+
+        stats = WorkspaceScanner(self.db).scan_project(proj, "DL")
+        self.assertEqual(stats["download"], 1, "_2_pdfs 下的 PDF 应计入下载")
+
+    # ---- 字段刷新(不冻结) ----
+
+    def test_existing_highlight_is_refreshed_not_frozen(self):
+        from telemetry.watcher import WorkspaceScanner
+
+        proj = os.path.join(self.test_dir, "RSV2")
+        pdf = os.path.join(proj, "高亮结果", "P2-1.pdf")
+        self._make_pdf(pdf, pages=2, annots=1)
+        scanner = WorkspaceScanner(self.db)
+
+        first = scanner.scan_project(proj, "RSV2")
+        self.assertEqual(first["highlight"], 1)
+        with self.db.get_connection() as conn:
+            got = conn.execute("SELECT page_count, num_annots FROM highlight_items"
+                               ).fetchone()
+        self.assertEqual((got["page_count"], got["num_annots"]), (2, 1))
+
+        # 用户在同一个 PDF 上继续加标注、并增加了页 -> 再扫一次
+        os.remove(pdf)
+        self._make_pdf(pdf, pages=4, annots=3)
+        second = scanner.scan_project(proj, "RSV2")
+
+        self.assertEqual(second["highlight"], 0, "刷新 ≠ 新增: 篇数不该变")
+        self.assertEqual(second["refreshed"], 1, "应记录一次字段刷新")
+        with self.db.get_connection() as conn:
+            got = conn.execute("SELECT page_count, num_annots FROM highlight_items").fetchone()
+        self.assertEqual((got["page_count"], got["num_annots"]), (4, 3),
+                         "页数与标注数应跟到最新观测值")
+        self.assertEqual(self.aggregator.get_all_time_report().highlight_count, 1)
+
+    def test_refresh_never_overwrites_with_nothing(self):
+        """这次没观测到(None)时不许拿默认值覆盖 —— 那比不刷新更糟。"""
+        from telemetry.models import HighlightItem
+
+        self.db.record_highlight_item("t", HighlightItem(
+            paper_id="P1", pdf_path="/x/P1.pdf", page_count=7, num_annots=4))
+        self.assertEqual(self.db.refresh_highlight_item("/x/P1.pdf"), 0)
+        with self.db.get_connection() as conn:
+            got = conn.execute("SELECT page_count, num_annots FROM highlight_items").fetchone()
+        self.assertEqual((got["page_count"], got["num_annots"]), (7, 4))
+
+    def test_download_file_size_is_refreshed(self):
+        from telemetry.watcher import WorkspaceScanner
+
+        proj = os.path.join(self.test_dir, "DL2")
+        os.makedirs(os.path.join(proj, "_2_pdfs"))
+        f = os.path.join(proj, "_2_pdfs", "P1.pdf")
+        with open(f, "wb") as fh:
+            fh.write(b"x" * 10)
+        scanner = WorkspaceScanner(self.db)
+        self.assertEqual(scanner.scan_project(proj, "DL2")["download"], 1)
+
+        with open(f, "wb") as fh:          # 重新下载了一个更大的 PDF
+            fh.write(b"x" * 500)
+        again = scanner.scan_project(proj, "DL2")
+        self.assertEqual(again["download"], 0, "刷新 ≠ 新增")
+        self.assertEqual(again["refreshed"], 1)
+        with self.db.get_connection() as conn:
+            size = conn.execute("SELECT file_size_bytes FROM download_items").fetchone()[0]
+        self.assertEqual(size, 500)
+
+    def test_moved_file_does_not_create_a_duplicate(self):
+        """文件被移动/改名到别的子目录: 只按路径匹配会认不出来 -> 同一篇文献再加一行。"""
+        from telemetry.watcher import WorkspaceScanner
+
+        proj = os.path.join(self.test_dir, "MV")
+        old = os.path.join(proj, "高亮结果", "P3-1.pdf")
+        self._make_pdf(old, pages=2, annots=1)
+        scanner = WorkspaceScanner(self.db)
+        self.assertEqual(scanner.scan_project(proj, "MV")["highlight"], 1)
+
+        new = os.path.join(proj, "高亮结果", "sub", "P3-1.pdf")
+        os.makedirs(os.path.dirname(new), exist_ok=True)
+        shutil.move(old, new)
+        scanner.scan_project(proj, "MV")
+
+        self.assertEqual(self.aggregator.get_all_time_report().highlight_count, 1,
+                         "移动后仍是同一篇文献, 不该重复计数")
+
+    # ---- 历史虚高数据的修复 ----
+
+    def test_purge_removes_backup_rows_only_when_a_real_copy_exists(self):
+        from telemetry.models import HighlightItem
+
+        for pid, path in (("P1", "/real/高亮结果/P1.pdf"),
+                          ("P1", "/real/_bak_x/高亮结果/P1.pdf"),      # 有真实副本 -> 删
+                          ("P2", "/real/_bak_x/高亮结果/P2.pdf")):     # 只有备份 -> 保留
+            self.db.record_highlight_item("t", HighlightItem(
+                paper_id=pid, pdf_path=path, page_count=1, num_annots=1))
+
+        removed = self.db.purge_ignored_path_items()
+        self.assertEqual(removed["highlight_items"], 1, "只该删有真实副本的那一行")
+        with self.db.get_connection() as conn:
+            rows = conn.execute("SELECT paper_id, pdf_path FROM highlight_items ORDER BY id").fetchall()
+        self.assertEqual([(r["paper_id"], r["pdf_path"]) for r in rows],
+                         [("P1", "/real/高亮结果/P1.pdf"), ("P2", "/real/_bak_x/高亮结果/P2.pdf")],
+                         "每一篇文献都必须仍有行 —— 绝不能把某篇整删掉")
+        self.assertEqual(self.aggregator.get_all_time_report().highlight_count, 2)
+
+    # ---- 新鲜度可观测 ----
+
+    def test_freshness_helpers(self):
+        self.assertIsNone(self.db.latest_ingest_at())
+        from telemetry.models import HighlightItem
+
+        self.db.record_highlight_item("t", HighlightItem(
+            paper_id="P1", pdf_path="/x/P1.pdf", page_count=1))
+        self.assertIsNotNone(self.db.latest_ingest_at())
+        counts = self.db.table_counts()
+        self.assertEqual(counts["highlight_items"], 1)
+        self.assertIn("tasks", counts)
+
+    def test_daemon_heartbeat_carries_freshness(self):
+        """心跳要带"最近入库时间 + 各表行数" —— 否则"是不是实时"没有凭据。"""
+        from telemetry.daemon import TelemetryDaemon
+        from telemetry.models import HighlightItem
+
+        self.db.record_highlight_item("t", HighlightItem(
+            paper_id="P1", pdf_path="/x/P1.pdf", page_count=1))
+
+        daemon = TelemetryDaemon.__new__(TelemetryDaemon)
+        daemon.db = self.db
+        daemon.last_fd = None
+        hb_path = os.path.join(self.test_dir, "hb.json")
+        cfg = {"schedule": {}, "user": {"nickname": "wtg", "open_id": "ou_x"}}
+
+        with mock.patch("telemetry.daemon.HEARTBEAT_FILE", hb_path):
+            daemon._update_heartbeat(cfg, datetime(2026, 9, 12, 10, 30))
+
+        with open(hb_path, encoding="utf-8") as fh:
+            hb = json.load(fh)
+        self.assertIn("freshness", hb, "心跳必须带新鲜度凭据")
+        self.assertEqual(hb["freshness"]["latest_ingest_at"], self.db.latest_ingest_at())
+        self.assertEqual(hb["freshness"]["counts"]["highlight_items"], 1)
+        self.assertIn("next_weekly", hb, "顺延后的下次推送时刻也应在心跳里")
+
+
 class TestAutoSync(unittest.TestCase):
     """scripts/auto_sync.py 的同步 / 构建语义。
 

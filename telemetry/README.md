@@ -112,9 +112,13 @@ medit-telemetry holiday                          # 数据来源/依据公告/排
 medit-telemetry holiday --check 2026-10-01       # 判断某天是否工作日 + 前一个工作日
 medit-telemetry holiday --refresh                # 清缓存重新取数
 
+# 8.2 立即刷新统计 (不等下一个 30 秒巡检周期)
+medit-telemetry refresh                  # 扫描全部监控目录 + 刷新已收录条目 + 清理备份副本行
+medit-telemetry refresh --dir ~/Desktop/RSV   # 只刷新指定目录 (可重复)
+medit-telemetry status                   # 末尾显示"最近入库时间 + 距今多久"
+
 # 9. 运行环境自检 (排查 PYTHONHOME / PYTHONPATH 冲突)
 medit-telemetry --env-check
-
 # 10. 关键事件外部告警 (飞书)
 medit-telemetry alert                      # 查看通道状态与最近发送记录
 medit-telemetry alert --test               # 发一条测试告警, 验证通道是否打通
@@ -298,6 +302,41 @@ unset PYTHONHOME PYTHONPATH                    # 或在当前终端先清掉
 | **文献下载** | 去重后的**唯一 PDF 文献文件**数 | 项目内 `*.pdf` |
 | **文献高亮** | 去重后的**唯一高亮产物 PDF** 数 | `*_highlight.pdf`（TMA）或 `高亮结果/*.pdf`（RSV 等中文项目）；页数取真实物理页数之和 |
 | **其他** | `tasks` 表中类目为 other 的任务数 | `tracker.track_other()`；以及任何未在归类表中登记的 `task_type` |
+
+### 数据准确与实时
+
+统计要做到"准"和"新"，靠三件事：
+
+**1. 只统计真实产出物。** 备份/临时目录里的副本一律不计入（`watcher.is_ignored_path`）。判据是**路径片段的前缀**：`_bak*` / `.git` / `node_modules` / `__pycache__` 等视为备份，而 `_2_pdfs/`、`_highlight_nested/` 这类合法的下划线开头目录不受影响；文献名里恰好含 `bak` 也不会被误伤。
+
+> 实测过这件事的代价：RSV 项目下的 `_bak_20260906_201108/高亮结果/` 与 `_bak2_20260906_205621/高亮结果/` 被当成成果扫了进来，同一篇文献在库里出现 3 行 —— 报表因此虚高到 3 倍（**150 篇 / 2917 页**，实际 **50 篇 / 977 页**；节约工时 20.19h → 14.49h）。而且**时对时错**：备份目录一删，数字又"自己变回去"。
+
+**2. 已收录的条目也会刷新，不会冻结。** 命中去重后不再简单跳过，而是把**可变字段**跟到最新观测值：高亮的页数与标注数（用户在已有 PDF 上继续加标注）、下载的文件大小（重新下载后可能变大）。
+
+- **刷新 ≠ 新增**：篇数口径完全不变，只有字段更新。
+- **没观测到就不覆盖**：这次读不出值（`None`）时保持原值 —— 拿默认值去覆盖比不刷新更糟。
+- 同时按 `paper_id` 兜一层去重，文件被移动/改名也不会让同一篇文献再加一行。
+
+**3. 实时性是默认状态，不是额外功能。** 守护进程每 30 秒（`watcher.poll_interval_seconds`）巡检一次监控目录；报表是**当场从 SQLite 算出来的**，不做缓存。想立刻看到结果而不等下一个周期：
+
+```bash
+medit-telemetry refresh      # 立即扫描全部监控目录 + 刷新已收录条目 + 清理备份副本行
+medit-telemetry status       # 末尾会显示"最近入库时间 + 距今多久"
+```
+
+`refresh` 的目录来自配置（`watcher.watch_dirs`），不是写死的路径；它也会**清理历史遗留的备份副本行**（清理很保守：只在同一篇文献于非备份路径下也有行时才删，绝不会把某篇文献整删掉）。
+
+**怎么确认"数据是最新的"**：`daemon --status` 与心跳文件都带新鲜度凭据。
+
+```jsonc
+// ~/.medit/daemon_heartbeat.json
+"freshness": {
+  "latest_ingest_at": "2026-09-10T18:19:52",      // 最近一次明细入库时间
+  "counts": {"retrieval_items": 44, "download_items": 215, "highlight_items": 50, "tasks": 10}
+}
+```
+
+> ⚠️ **改了采集逻辑要重启守护进程**：配置每 5 秒重载，但**代码不会**。旧进程会继续用内存里的旧扫描器 —— 例如路径卫生修好之前启动的进程，会把你刚清理掉的备份副本行再插回去。改完代码用 `launchctl kickstart -k gui/$UID/com.via54medit.telemetry`（或 `daemon --stop && daemon --start`）重启一次。
 
 > **检索数去重规则**：早期版本仅从 `*doi_map*.json` / `*inventory*.json` 读取检索记录，因此在没有这类清单的项目（如 RSV）中恒为 0。现改为按「高亮引用清单」折算 —— 每条 Pn-x 记录对应其被引文献，按文献去重后计数。去重分两层：
 >

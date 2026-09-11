@@ -213,9 +213,13 @@ class TelemetryDaemon:
                 if os.path.exists(wdir):
                     try:
                         # 扫描顶层各项目目录
+                        from .watcher import is_ignored_path
+
                         for entry in os.listdir(wdir):
                             full_p = os.path.join(wdir, entry)
-                            if os.path.isdir(full_p):
+                            # 备份/临时目录(`_bak*` 等)不是产出物 —— 扫进去会让同一篇文献
+                            # 被重复计数(实测过 3 倍虚高)。
+                            if os.path.isdir(full_p) and not is_ignored_path(full_p):
                                 self.scanner.scan_project(full_p, entry)
                     except Exception as e:
                         self.log(f"扫描目录 {wdir} 异常: {e}")
@@ -352,6 +356,14 @@ class TelemetryDaemon:
             rconf = reminder_settings(cfg)
         except Exception:                                   # noqa: BLE001
             rconf = {"enabled": False, "time": ""}
+        # 实时性证据也写进心跳: "数据是不是最新的"要有可查的凭据, 而不是靠感觉。
+        # 取明细表的最近入库时间 + 各表行数 —— 这两项能直接回答"统计有没有跟上"。
+        freshness: Dict[str, Any] = {}
+        try:
+            freshness["latest_ingest_at"] = self.db.latest_ingest_at() or ""
+            freshness["counts"] = self.db.table_counts()
+        except Exception:                                   # noqa: BLE001
+            pass
         hb = {
             "pid": os.getpid(),
             "last_tick": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -364,6 +376,7 @@ class TelemetryDaemon:
             "next_weekly": next_at.get("weekly", ""),
             "next_monthly": next_at.get("monthly", ""),
             "reminder": {"enabled": rconf.get("enabled", False), "time": rconf.get("time", "")},
+            "freshness": freshness,
             "user": cfg["user"]["nickname"],
             "open_id": cfg["user"]["open_id"],
             "fd": self.last_fd,
