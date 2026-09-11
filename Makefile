@@ -150,9 +150,16 @@ telemetry-test:
 # 漂移的修法是 `python3 scripts/sync_skill_bundle.py`。
 # 另跑 v3 FINAL 的禁止区校验单测 (highlight 不得盖标题/作者/参考文献/页眉页脚)。
 .PHONY: test-py
-test-py:	## 跑 Python 测试 (遥测 + 仓库卫生 + 禁止区校验)
+test-py:	## 跑 Python 测试 (遥测 + 仓库卫生 + 禁止区校验 + 部署扫描)
 	python3 -m unittest tests.test_telemetry tests.test_repo_hygiene
-	cd scripts/hl_v3_final && python3 test_forbidden_zones.py
+	python3 scripts/hl_v3_final/test_forbidden_zones.py
+	python3 scripts/test_deploy_scan.py
+
+deploy-check:	## 深度扫描本机环境/依赖/工具 (只报不改)
+	python3 scripts/deploy_scan.py --check
+
+deploy-fix:	## 深度扫描 + 按平台补齐缺口
+	python3 scripts/deploy_scan.py
 
 render-doctor:	## 渲染通道真出图就绪自检 (正式跑管线前建议先跑它)
 	python3 scripts/render_doctor.py

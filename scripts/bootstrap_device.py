@@ -1,14 +1,28 @@
 #!/usr/bin/env python3
-"""
-bootstrap_device.py — via54Medit 全自动化设备部署与就绪初始化脚本
+"""bootstrap_device.py — via54Medit 设备部署 / 版本更新后的一键就绪初始化
 
-在任何新设备上通过 traework / hermes-agent / codex / openclaw / DeepSeek-harness 部署后，一键运行本脚本:
-  1. 验证并安装依赖 (PyMuPDF, python-pptx, Pillow, mmx-cli)。
-  2. 部署并验证 mmx-cli 为默认 Vision 引擎。
-  3. 部署并验证 PowerPoint 为 PPT 默认渲染引擎 (Windows COM / macOS 原生 PowerPoint)。
-  4. 编译 Go 核心程序 (bin/medit, bin/medit-mcp)。
-  5. 注册自动定期从 GitHub 拉取更新的守护任务 (Cron / LaunchAgent)。
-  6. 检查 API Key 配置项并输出就绪报告。
+在**任何**新设备上部署完、或**更新到任何版本之后**, 都跑这一条:
+
+    python3 scripts/bootstrap_device.py
+
+它做四件事:
+  1. **深度扫描本机环境 + 按平台补齐缺口** —— 交给 scripts/deploy_scan.py:
+     只装"与本平台相关且确实缺失"的能力, 并按正确通道装
+     (Python 包走 pip、mmx-cli 走 npm、系统工具走 brew/apt/winget/choco/scoop)。
+     与平台无关的能力会被明确标成"不适用", **不安装也不校验**。
+  2. **渲染通道真出图自检** —— 交给 scripts/render_doctor.py: "探测到"不等于"能出图"。
+  3. **构建 Go 二进制**(有 go 工具链时)。
+  4. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
+
+本脚本**幂等**: 重复运行、或在版本更新后运行, 都只会补上当时缺的东西。
+
+为什么不再自己装依赖 (v5.4.34 更正)
+-----------------------------------
+旧版本这里直接跑 ``pip install --upgrade pymupdf python-pptx pillow requests mmx-cli``:
+  * ``mmx-cli`` **不是 PyPI 包**(是 npm 包), 这条必然失败, 却被退出码吞掉;
+  * 无条件安装, 不分平台 —— 例如在 macOS 上也把 Windows 专属的 pywin32 列进清单;
+  * 完全不检测 OCR, 缺了也没人知道。
+现在这些逻辑统一收在 ``deploy_scan.py`` 的**能力矩阵**里(唯一事实来源), 并由 CI 在三平台验证。
 """
 import os
 import sys
@@ -17,125 +31,122 @@ import subprocess
 from pathlib import Path
 
 REPO_DIR = Path(__file__).resolve().parent.parent
+SCRIPTS = REPO_DIR / "scripts"
 
 
 def step_print(title):
-    print(f"\n==> {title}")
+    print("\n==> %s" % title, flush=True)
 
 
-def run_cmd(cmd, cwd=REPO_DIR):
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    return res.returncode == 0, res.stdout.strip(), res.stderr.strip()
+def run_cmd(cmd, cwd=REPO_DIR, timeout=1800):
+    res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
+    return res.returncode == 0, (res.stdout or "").strip(), (res.stderr or "").strip()
 
 
-def check_and_install_deps():
-    step_print("1. 检查并安装 Python 核心依赖与 mmx-cli")
-    deps = ["pymupdf", "python-pptx", "pillow", "requests", "mmx-cli"]
+def _supported_flags(script):
+    """探测脚本支持哪些开关(避免在 Windows 上误调 --install-launchd)。"""
     try:
-        cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + deps
-        print(f"  正在执行 pip 安装: {' '.join(deps)}...")
-        ok, out, err = run_cmd(cmd)
-        if ok:
-            print("  ✓ 核心 Python 库与 mmx-cli 安装完成")
-        else:
-            print(f"  ⚠️ pip 安装返回: {err or out}")
-    except Exception as e:
-        print(f"  ✗ pip 执行异常: {e}")
+        r = subprocess.run([sys.executable, str(script), "--help"],
+                           capture_output=True, text=True, timeout=120, cwd=str(REPO_DIR))
+        return (r.stdout or "") + (r.stderr or "")
+    except Exception:                                       # noqa: BLE001
+        return ""
 
 
-def verify_vision_engine():
-    step_print("2. 验证 mmx-cli 默认 Vision 引擎配置")
-    mmx_path = shutil.which("mmx") or shutil.which("mmx-cli")
-    if mmx_path:
-        print(f"  ✓ mmx-cli 已就绪: {mmx_path}")
-    else:
-        print("  ⚠️ mmx 命令未在系统 PATH，但在当前 Python venv 中已安装模块")
-    
-    api_key = os.environ.get("MINIMAX_API_KEY", "")
-    if api_key:
-        print(f"  ✓ MINIMAX_API_KEY 已配置 (长度: {len(api_key)})")
-    else:
-        print("  ℹ️ MINIMAX_API_KEY 需单独配置 (建议配置在环境变量或 ~/.bashrc / ~/.zshrc)")
+def step_deep_scan():
+    step_print("1. 深度扫描系统环境 + 按平台补齐缺口 (deploy_scan.py)")
+    script = SCRIPTS / "deploy_scan.py"
+    if not script.exists():
+        print("  ✗ 未找到 scripts/deploy_scan.py")
+        return False
+    res = subprocess.run([sys.executable, str(script)], cwd=str(REPO_DIR))
+    if res.returncode == 0:
+        print("  ✓ 必需能力已齐备")
+        return True
+    print("  ⚠️ 仍有必需缺口 —— 见上面报告的 '→ 处理:' 行; 修好后重跑本脚本即可")
+    return False
 
 
-def verify_powerpoint_engine():
-    step_print("3. 验证 PowerPoint 默认 PPT 渲染引擎")
-    try:
-        from ppt_render_engine import detect_engines, _engine_pref
-        engines = detect_engines()
-        pref = _engine_pref()
-        print(f"  当前设定渲染引擎: {pref}")
-        print("  系统已探测到的可用渲染引擎:")
-        for name, kind, target in engines:
-            print(f"    - {name} ({kind}: {target})")
-        
-        has_ppt = any(k in ("com", "macos_ppt") for _, k, _ in engines)
-        if has_ppt:
-            print("  ✓ 探测到微软桌面版引擎, 高保真渲染通道就绪")
-        else:
-            print("  ✗ 未探测到可用的桌面版 Microsoft PowerPoint —— **没有备选渲染引擎**:")
-            print("     按规范版式必须由微软引擎产出, 不会退回 LibreOffice / python-pptx 之类的第三方引擎。")
-            print("     可选: 显式设 RENDER_ENGINE=graph 走 Microsoft Graph 的在线转换(需要凭据)。")
-            print("     要确认'到底能不能出图', 跑: python3 scripts/render_doctor.py")
-        print("  ℹ️ 提示: '探测到' 不等于 '能出图' —— 实测本机 open 会被模态对话框挡住。")
-        print("     正式跑管线前建议先跑 python3 scripts/render_doctor.py 做真出图探针。")
-    except Exception as e:
-        print(f"  ⚠️ PowerPoint 引擎探测提示: {e}")
-
-
-def build_go_binaries():
-    step_print("4. 构建 Go 核心二进制程序")
-    if not shutil.which("go"):
-        print("  ⚠️ 系统未找到 go 编译器，跳过 Go 构建 (若已通过预编译 binary 运行则正常)")
+def step_render_doctor():
+    step_print("2. 渲染通道真出图自检 (render_doctor.py)")
+    script = SCRIPTS / "render_doctor.py"
+    if not script.exists():
+        print("  ~ 未找到 scripts/render_doctor.py, 跳过")
         return
-        
-    bin_dir = REPO_DIR / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    
+    res = subprocess.run([sys.executable, str(script)], cwd=str(REPO_DIR))
+    if res.returncode == 0:
+        print("  ✓ 渲染通道就绪")
+    else:
+        print("  ⚠️ 渲染通道未就绪 —— 后果: PPT/Word 管线会在渲染这步失败。")
+        print("     这不是缺陷而是环境限制: 按规范版式只由微软引擎产出, 不会自动换引擎。")
+        print("     可选: 修好自动化权限(见上面的提示), 或显式设 RENDER_ENGINE=graph(需凭据)。")
+
+
+def step_build_go():
+    step_print("3. 构建 Go 核心二进制程序")
+    if not shutil.which("go"):
+        print("  ~ 未找到 go 工具链, 跳过 (使用预编译的 bin/medit 也正常)")
+        return
+    (REPO_DIR / "bin").mkdir(exist_ok=True)
     ok1, _, err1 = run_cmd(["go", "build", "-o", "bin/medit", "./cmd/medit"])
     ok2, _, err2 = run_cmd(["go", "build", "-o", "bin/medit-mcp", "./cmd/medit-mcp"])
-    
     if ok1 and ok2:
         print("  ✓ bin/medit 与 bin/medit-mcp 编译成功")
     else:
-        print(f"  ⚠️ 编译输出: {err1} {err2}")
+        print("  ⚠️ 编译未成功: %s %s" % (err1 or "", err2 or ""))
 
 
-def setup_periodic_sync():
-    step_print("5. 配置自动定期从 GitHub 拉取最新代码")
-    sync_script = REPO_DIR / "scripts" / "auto_sync.py"
-    if not sync_script.exists():
+def step_periodic_sync():
+    step_print("4. 注册自动更新 (定时从 GitHub 拉取)")
+    script = SCRIPTS / "auto_sync.py"
+    if not script.exists():
         print("  ✗ 未找到 auto_sync.py")
         return
-        
-    if sys.platform == "darwin":
-        ok, out, _ = run_cmd([sys.executable, str(sync_script), "--install-launchd"])
-        print(f"  {out}")
+    flags = _supported_flags(script)
+    if sys.platform == "darwin" and "--install-launchd" in flags:
+        flag = "--install-launchd"
+    elif os.name == "nt" and "--install-schtasks" in flags:
+        flag = "--install-schtasks"
+    elif "--install-cron" in flags:
+        flag = "--install-cron"
     else:
-        ok, out, _ = run_cmd([sys.executable, str(sync_script), "--install-cron"])
-        print(f"  {out}")
+        print("  ✗ 当前平台没有可用的自动注册方式 —— auto_sync.py 支持的开关: %s"
+              % (", ".join(f for f in ("--install-launchd", "--install-cron",
+                                       "--install-schtasks") if f in flags) or "无"))
+        print("     Windows 可用计划任务手动注册: schtasks /create /tn via54MeditSync "
+              "/tr \"python <repo>\\scripts\\auto_sync.py\" /sc daily")
+        return
+    ok, out, err = run_cmd([sys.executable, str(script), flag])
+    print("  %s" % (out or err or ("已注册 %s" % flag)))
 
 
 def main():
     print("======================================================")
-    print(" via54Medit 设备一键部署与就绪初始化向导")
+    print(" via54Medit 设备部署 / 版本更新后的一键就绪初始化")
     print(" (兼容 Traework / Hermes / Codex / OpenClaw / DeepSeek)")
+    print(" 可重复运行: 只会补上当时缺的东西")
     print("======================================================")
-    
-    check_and_install_deps()
-    verify_vision_engine()
-    verify_powerpoint_engine()
-    build_go_binaries()
-    setup_periodic_sync()
-    
+    scan_ok = step_deep_scan()
+    step_render_doctor()
+    step_build_go()
+    step_periodic_sync()
+
     print("\n======================================================")
-    print(" ✅ via54Medit 初始化完成！")
-    print(" 默认配置清单:")
-    print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx)")
-    print("   • PPT Engine   : Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
-    print("   • Auto-Sync    : 已注册系统定时任务 (自动定期从 GitHub 拉取更新)")
+    print(" 初始化完成%s" % ("" if scan_ok else "(仍有缺口, 见上)"))
+    print(" 默认配置:")
+    print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx, 经 npm 安装)")
+    print("   • PPT Engine   : 桌面版 Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
+    print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装)")
+    print("   • Auto-Sync    : 已按平台注册系统定时任务")
+    print(" 复检任意时刻: python3 scripts/deploy_scan.py --check")
     print("======================================================")
+    return 0 if scan_ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                                       # noqa: BLE001
+        pass
+    sys.exit(main())

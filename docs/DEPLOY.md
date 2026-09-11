@@ -25,12 +25,19 @@ go build -o bin/medit ./cmd/medit/          # 或 make build
 
 ## 2. 环境自检与自动接入 (核心)
 
+**部署到任何新设备、或更新到任何版本之后, 先跑这一条**:
+
 ```bash
-medit doctor            # 全项探测: Python/包/浏览器/CDP/pdftotext/lark-cli
-medit doctor --fix      # 自动 pip 安装缺失的 Python 包
-medit browser start     # 自动探测 Chrome/Edge/Chromium 并启动 CDP 调试实例 (port 9223)
-medit browser health    # 验证 CDP 可达
-python3 scripts/render_doctor.py   # 渲染通道**真出图**自检 —— 跑管线前必做, 见 §2.1
+python3 scripts/bootstrap_device.py   # 深度扫描 + 按平台补齐缺口 + 渲染自检 + 构建 + 注册自动更新
+```
+
+只想看、不想改:
+
+```bash
+python3 scripts/deploy_scan.py --check   # 深度扫描(只报不改); 退出码 0 = 必需能力齐备
+medit doctor                              # 同一份扫描结果的 Go 侧渲染(多一项 CDP 可达性)
+medit browser start / health              # CDP 调试实例 (port 9223)
+python3 scripts/render_doctor.py          # 渲染通道**真出图**自检 —— 跑管线前必做, 见 §2.1
 ```
 
 ### 2.1 渲染前置条件 (部署后必读)
@@ -72,6 +79,44 @@ macOS 上若报 `AppleEvent -1712` / `-1708`: 手动打开一次 PowerPoint / Wo
 | 浏览器 CDP | Chrome/Edge 自动启动 | Chrome/Chromium 自动启动 | chromium 自动启动 |
 | pdftoppm (`RENDER_RASTERIZER=pdftoppm` 时) | 需 poppler (可选) | `brew install poppler` (可选) | `apt install poppler-utils` (可选) |
 | 飞书 CLI | `$LARK_CLI` 指定 | 内置默认 | `$LARK_CLI` 指定 |
+
+### 2.3 深度扫描: 按平台只装"相关且缺失"的
+
+能力矩阵的**唯一事实来源**是 `scripts/deploy_scan.py`。Go 侧的 `medit doctor`、
+`deps_auto.py`、`bootstrap_device.py` 都读它, 不再各自维护清单 ——
+历史上三份清单互相打架, 其中两份还写着 `pip install mmx-cli`, 而它**不是** PyPI 包
+(是 npm 包), 于是那一步**从来没能成功过**, 还被退出码吞掉。
+
+扫描分三段:
+
+| 段 | 内容 |
+| --- | --- |
+| 1. 环境 | OS / 架构 / 容器 / 解释器 / 包管理器 / 输出编码 |
+| 2. 能力 | 逐项探测; **与平台无关的标 `· 不适用`, 既不安装也不校验** |
+| 3. 兼容性 | 硬编码 `/tmp`、外机绝对路径、未加 darwin 守卫的 `osascript` 等平台相关代码点 |
+
+**平台过滤的实际效果**(这就是"部署到 Windows 不必管 macOS 那一套"的落点):
+
+| 能力 | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| `pywin32` (Office COM) | 必需, 缺失即装 | **不适用**(不装、不校验) | **不适用** |
+| 桌面版 PowerPoint / Word | 必需(装不了则强力提示) | 同左 | **不适用** → 用 `RENDER_ENGINE=graph` |
+| PaddleOCR (L2 中文 OCR) | 缺失即装 | 缺失即装 | 缺失即装 |
+| `mmx-cli` 视觉引擎 | 经 **npm** 装 | 同左 | 同左 |
+
+**安装通道**: Python 包 → pip;`mmx-cli` → npm;系统工具 → 本机可用的
+brew / apt / dnf / pacman / winget / choco / scoop。需要管理员权限却拿不到时会
+**打印该执行的完整命令**, 而不是静默失败。
+
+**只装缺失的**: 已就绪的能力不会被重装, 所以本命令可以反复运行 —— 版本更新后再跑一次即可。
+
+| 开关 | 作用 |
+| --- | --- |
+| `--check` | 只扫描, 不安装 |
+| `--json` | 机器可读(供 `medit doctor` / CI 消费) |
+| `--skip-heavy` | 跳过重依赖(OCR/Paddle, 数百 MB) |
+| `--strict` | 平台兼容性问题也计入失败 |
+| `make deploy-check` / `make deploy-fix` | 上面前两条的快捷方式 |
 
 ### 环境变量覆盖点 (新设备无需改代码)
 

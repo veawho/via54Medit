@@ -70,7 +70,35 @@ jobs:
         run: |
           # 渲染链路相关的模块必须一并探测到 —— 它们以前不在这个清单里, 于是
           # 渲染侧的平台问题在 Windows/Linux 上要到跑测试才暴露(甚至不暴露)。
-          python -c "import sys; sys.path[:0] = ['.', 'hl_v3_final']; import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final, unified_render_engine, render_doctor, graph_render, bootstrap_device; print('imports OK')"
+          python -c "import sys; sys.path[:0] = ['.', 'hl_v3_final']; import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final, unified_render_engine, render_doctor, graph_render, bootstrap_device, deploy_scan, install_mmx; print('imports OK')"
+
+      - name: Deploy scanner tests (platform-aware capability matrix)
+        working-directory: scripts
+        run: python -m unittest test_deploy_scan
+
+      - name: Deploy scan smoke (must run on all 3 platforms)
+        working-directory: scripts
+        run: |
+          # 只做"能跑通 + 输出是合法 JSON"的冒烟, **不断言全绿** —— 跑者镜像里没有
+          # 桌面 Office、也没装 OCR, 必然有缺口; 这里要验的是扫描器在三个平台上
+          # 都能正确按平台分类(不适用项标 na、缺失项标 missing), 而不是环境本身完备。
+          python deploy_scan.py --check --json > ds.json 2>/dev/null || true
+          python -c "
+          import json
+          d=json.load(open('ds.json', encoding='utf-8'))
+          caps={r['key']:r for r in d['capabilities']}
+          osname=d['environment']['os']
+          assert d['environment']['os'] in ('windows','macos','linux'), osname
+          # 平台过滤的硬断言: 与平台无关的能力必须标 na
+          if osname!='windows':
+              assert caps['pywin32']['status']=='na', caps['pywin32']
+          if osname=='linux':
+              assert caps['powerpoint']['status']=='na', caps['powerpoint']
+              assert caps['word']['status']=='na', caps['word']
+          assert 'ocr' in caps and 'mmx_cli' in caps
+          print('platform filtering OK on', osname)
+          "
+          rm -f ds.json
 
       # 注: 渲染通道的"真出图"探针 (scripts/render_doctor.py) **故意不放进 CI** ——
       # 跑者的镜像里没有(也不该有)桌面版 PowerPoint/Word, 它必然报不可用。

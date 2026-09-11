@@ -1,6 +1,10 @@
 # via54Medit Python 工具链依赖 (跨平台部署, 2026-08-21)
 # 安装: pip install -r requirements.txt
-# 或自动: python scripts/deps_auto.py (导入探测 + 按需安装)
+# 部署/更新后请先跑深度扫描(按平台只装相关且缺失的, 含 OCR 与 mmx-cli 视觉能力):
+#   python scripts/deploy_scan.py            # 扫描 + 补齐缺口
+#   python scripts/deploy_scan.py --check     # 只扫描
+# 或一键: python scripts/bootstrap_device.py
+# 注意: mmx-cli **不在本文件里** —— 它是 npm 包(npm install -g mmx-cli), PyPI 上没有这个发行版。
 #
 # 平台说明:
 #   pywin32 仅 Windows 需要 (PowerPoint/Word 的 COM 渲染), 其他平台自动跳过。

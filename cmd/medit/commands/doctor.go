@@ -1,17 +1,27 @@
 // Package commands — doctor subcommand (部署自检 + 自动接入).
 //
-// medit doctor — 新设备部署唯一入口: 逐项探测本机软件/工具/包/服务,
-// 输出可读矩阵, --fix 尝试自动修复 (pip 依赖走 scripts/deps_auto.py)。
+// medit doctor — 部署到新设备、或更新版本之后的设备自检入口。
+//
+// 深度扫描的**唯一事实来源**是 scripts/deploy_scan.py 里的能力矩阵, doctor 不自带清单:
+// 历史上 Go 侧、deps_auto.py、bootstrap_device.py 各有一份, 互相打架
+// (最典型的是 Go 侧还在把 LibreOffice 报成"PPT 真渲染", 而那个通道早已按规范删除)。
+//
+// 能力矩阵的三个承诺:
+//   - **按平台过滤**: 与平台无关的能力标"不适用", 既不安装也不校验
+//     (pywin32 只在 Windows; 桌面版 Office 只在 Windows/macOS; Linux 上不存在)。
+//   - **只装缺失的**: 已就绪的能力不会被重装。
+//   - **按正确通道装**: mmx-cli 走 npm(它**不是** PyPI 包), Python 包走 pip,
+//     系统工具走 brew/apt/winget/choco/scoop。
 package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,173 +32,195 @@ import (
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "部署自检: 探测本机软件/工具/包/CDP 并报告缺口",
-	Long: `doctor 逐项检查新设备集成面 (跨平台, 2026-08-21):
-  - Python 解释器 (探测链: $PYTHON > python3.11 > python3 > python)
-  - Python 包    (fitz/pptx/PIL; --fix 调 scripts/deps_auto.py 自动 pip 安装)
-  - 浏览器       (Chrome/Edge/Chromium 探测 + CDP 9223 可达性)
-  - 系统工具     (soffice/libreoffice, pdftotext, lark-cli)
-  - 环境变量     (TMA_PROJECT/HLO_DIR/HERMES_HOME 等覆盖点)
+	Short: "部署自检: 深度扫描本机环境/依赖/工具, 按平台报告缺口",
+	Long: `doctor 调用 scripts/deploy_scan.py 的能力矩阵做深度扫描 (跨平台, 2026-09-12):
+  - 环境     OS/架构/容器/解释器/包管理器/输出编码
+  - 依赖     PyMuPDF / python-pptx / Pillow / OCR(PaddleOCR) / pywin32 (仅 Windows)
+  - 视觉     mmx-cli 视觉引擎 (经 **npm** 安装, 不是 PyPI) + MINIMAX_API_KEY
+  - 渲染     桌面版 PowerPoint / Word (仅 Windows/macOS; Linux 无桌面 Office, 标"不适用")
+  - 工具     poppler / Chrome / Go 工具链 / lark-cli
+  - 兼容性   硬编码 /tmp、外机绝对路径、未加 darwin 守卫的 osascript 等平台相关代码点
 
-输出 每项 ✓/✗ + 修复建议; 退出码 0 = 全部就绪。`,
+与平台无关的能力标"不适用", 且**不安装、不校验**。
+--fix 真正执行安装 (缺什么装什么; 重依赖如 OCR 可用 --skip-heavy 跳过)。
+--strict 让平台兼容性问题也计入失败。
+
+退出码 0 = 必需能力齐备。`,
 	RunE: runDoctor,
 }
 
 var (
-	doctorFix     bool
-	doctorCDPPort int
+	doctorFix      bool
+	doctorStrict   bool
+	doctorSkipHevy bool
+	doctorCDPPort  int
 )
 
 func init() {
-	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "尝试自动修复 (pip 安装缺失 Python 包)")
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "执行安装 (缺什么装什么)")
+	doctorCmd.Flags().BoolVar(&doctorStrict, "strict", false, "平台兼容性问题也计入失败")
+	doctorCmd.Flags().BoolVar(&doctorSkipHevy, "skip-heavy", false, "跳过重依赖 (OCR/Paddle)")
 	doctorCmd.Flags().IntVar(&doctorCDPPort, "port", DefaultCDPPort, "DevTools 端口")
 }
 
-type doctorItem struct {
-	name   string
-	ok     bool
-	detail string
-	hint   string
+// ---- deploy_scan.py 的 JSON 契约 ----
+type dsRow struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Kind     string `json:"kind"`
+	Status   string `json:"status"`
+	Detail   string `json:"detail"`
+	Hint     string `json:"hint"`
+	Required bool   `json:"required"`
+	Heavy    bool   `json:"heavy"`
+	Gate     bool   `json:"gate"`
+}
+
+type dsFinding struct {
+	File   string `json:"file"`
+	Line   int    `json:"line"`
+	Detail string `json:"detail"`
+}
+
+type dsResult struct {
+	Capabilities []dsRow `json:"capabilities"`
+	Compat       struct {
+		Findings      []dsFinding `json:"findings"`
+		ScannedFiles  int         `json:"scanned_files"`
+		AffectedFiles int         `json:"affected_files"`
+	} `json:"compat"`
+	Summary struct {
+		Blockers      int `json:"blockers"`
+		Warnings      int `json:"warnings"`
+		NotApplicable int `json:"not_applicable"`
+		Fixed         int `json:"fixed"`
+	} `json:"summary"`
+	OK bool `json:"ok"`
+}
+
+// locateRepoScript 按"已安装的 skill -> 仓库 scripts/ -> 相对可执行文件"三处找脚本。
+func locateRepoScript(name string) string {
+	cands := []string{
+		foundation.HermesPath("skills", "via54medit", name),
+		filepath.Join("scripts", name),
+	}
+	if exe, err := os.Executable(); err == nil {
+		// bin/medit -> 仓库根
+		cands = append(cands, filepath.Join(filepath.Dir(filepath.Dir(exe)), "scripts", name))
+	}
+	for _, c := range cands {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
 }
 
 func runDoctor(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
-	items := []doctorItem{}
-	report := func(name, detail, hint string, ok bool) {
-		items = append(items, doctorItem{name: name, ok: ok, detail: detail, hint: hint})
-	}
-
-	// 1. 平台 + 二进制版本
-	report("平台", fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH), "", true)
-
-	// 2. Python 解释器
-	py, err := foundation.ResolvePython(nil)
-	if err != nil {
-		report("Python 解释器", "未找到", "安装 Python 3.10+ 或设置 $PYTHON", false)
-		py = ""
-	} else {
-		ver := ""
-		if py != "" {
-			if v, verr := exec.Command(py, "--version").Output(); verr == nil {
-				ver = strings.TrimSpace(string(v))
-			}
-		}
-		report("Python 解释器", fmt.Sprintf("%s (%s)", py, ver), "", true)
-	}
-
-	// 3. Python 包 (通过解释器探测)
-	if py != "" {
-		for _, pkg := range []struct{ mod, label string }{
-			{"fitz", "PyMuPDF (PDF/highlight)"},
-			{"pptx", "python-pptx (PPT)"},
-			{"PIL", "Pillow (图像)"},
-		} {
-			ok := pythonModuleOK(py, pkg.mod)
-			hint := ""
-			if !ok {
-				hint = "pip install " + map[string]string{"fitz": "pymupdf", "pptx": "python-pptx", "PIL": "Pillow"}[pkg.mod]
-				if doctorFix {
-					if installPythonPkg(py, map[string]string{"fitz": "pymupdf", "pptx": "python-pptx", "PIL": "Pillow"}[pkg.mod]) {
-						ok = true
-						hint = "已自动安装"
-					}
-				}
-			}
-			report(pkg.label, boolLabel(ok), hint, ok)
-		}
-	}
-
-	// 4. 浏览器 + CDP
-	chrome, cerr := source.DetectChrome()
-	if cerr != nil {
-		report("浏览器", "未找到 Chrome/Edge/Chromium", "安装 Chrome 或设置 $CHROME_PATH", false)
-	} else {
-		cdp := fmt.Sprintf("http://127.0.0.1:%d", doctorCDPPort)
-		ctx, cancel := context.WithTimeout(cmd.Context(), 3*time.Second)
-		cdpOK := source.ChromeHealth(ctx, cdp) == nil
-		cancel()
-		hint := ""
-		if !cdpOK {
-			hint = fmt.Sprintf("`medit browser start` 自动启动调试实例 (port %d)", doctorCDPPort)
-		}
-		detail := filepath.Base(chrome)
-		if cdpOK {
-			detail += " + CDP 就绪"
-		}
-		report("浏览器", detail, hint, cdpOK)
-	}
-
-	// 5. 系统工具 (soffice/libreoffice 任一命中即可)
-	sofficeOK := false
-	for _, tool := range []struct{ name, hint string }{
-		{"soffice", "LibreOffice (PPT 真渲染, 可选): brew/apt 安装 libreoffice"},
-		{"libreoffice", "LibreOffice 别名 (soffice 未命中时)"},
-		{"pdftotext", "poppler-utils (PDF 文本提取): brew install poppler / apt install poppler-utils"},
-	} {
-		p, lerr := exec.LookPath(tool.name)
-		ok := lerr == nil
-		if tool.name == "soffice" || tool.name == "libreoffice" {
-			if ok {
-				sofficeOK = true
-			}
-			continue // 合并为一行 "LibreOffice (soffice)"
-		}
-		detail := "未安装"
-		if ok {
-			detail = p
-		}
-		report("工具: "+tool.name, detail, tool.hint, ok)
-	}
-	loDetail := "未安装"
-	loHint := "LibreOffice (PPT 真渲染, 可选): brew/apt 安装 libreoffice"
-	if sofficeOK {
-		loDetail = "soffice 可用"
-		loHint = ""
-	}
-	report("工具: LibreOffice (soffice)", loDetail, loHint, sofficeOK)
-
-	// 6. lark-cli (Feishu 集成)
-	if p, lerr := exec.LookPath("lark-cli"); lerr == nil {
-		report("lark-cli (飞书)", p, "", true)
-	} else if env := os.Getenv("LARK_CLI"); env != "" {
-		report("lark-cli (飞书)", env+" ($LARK_CLI)", "", true)
-	} else {
-		report("lark-cli (飞书)", "未安装", "设置 $LARK_CLI 指向可执行文件或安装 lark-cli", false)
-	}
-
-	// 7. 关键环境变量覆盖点 (info 级: 未设置不失败, 仅提示)
-	envs := []struct{ name, desc string }{
-		{"TMA_PROJECT", "TMA highlight 项目根"},
-		{"HLO_DIR", "HLO 脚本目录"},
-		{"HERMES_HOME", "skills/venv 数据根"},
-		{"LIT_ROOT", "文献库根 (self_check)"},
-		{"PYTHON", "Python 解释器覆盖"},
-		{"CHROME_PATH", "浏览器路径覆盖"},
-	}
-	for _, e := range envs {
-		v := os.Getenv(e.name)
-		report("env: "+e.name, orDefault(v, "(未设置, 用内置默认)"), e.desc, true) // info 级, 不参与 fail
-	}
-
-	// 8. 输出
 	fmt.Fprintln(out, "== medit doctor — 部署自检 ==")
-	fail := 0
-	for _, it := range items {
-		mark := "✓"
-		if !it.ok {
-			mark = "✗"
-			fail++
+	fmt.Fprintf(out, "  平台: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+
+	py, err := foundation.ResolvePython(nil)
+	if err != nil || py == "" {
+		fmt.Fprintln(out, "  ✗ Python 解释器: 未找到 → 装 Python 3.10+ 或设置 $PYTHON")
+		return fmt.Errorf("doctor: 没有可用 Python 解释器, 深度扫描无法进行")
+	}
+
+	script := locateRepoScript("deploy_scan.py")
+	if script == "" {
+		fmt.Fprintln(out, "  ✗ 未找到 scripts/deploy_scan.py → 深度扫描无法进行 (请用完整仓库形态部署)")
+		return fmt.Errorf("doctor: 缺少 scripts/deploy_scan.py")
+	}
+
+	args := []string{script, "--json"}
+	if !doctorFix {
+		args = append(args, "--check")
+	}
+	if doctorStrict {
+		args = append(args, "--strict")
+	}
+	if doctorSkipHevy {
+		args = append(args, "--skip-heavy")
+	}
+	cctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Minute)
+	defer cancel()
+	proc := exec.CommandContext(cctx, py, args...)
+	proc.Stderr = os.Stderr
+	raw, runErr := proc.Output()
+
+	var res dsResult
+	if jerr := json.Unmarshal(raw, &res); jerr != nil {
+		fmt.Fprintf(out, "  ✗ 解析 deploy_scan.py 输出失败: %v\n", jerr)
+		if runErr != nil {
+			return fmt.Errorf("doctor: deploy_scan 失败: %w", runErr)
 		}
-		line := fmt.Sprintf("  %s %-28s %s", mark, it.name, it.detail)
-		if !it.ok && it.hint != "" {
-			line += fmt.Sprintf("  → %s", it.hint)
+		return fmt.Errorf("doctor: 输出不是合法 JSON")
+	}
+
+	// 能力矩阵(按平台过滤后的结果)
+	fail := 0
+	for _, r := range res.Capabilities {
+		var mark string
+		switch r.Status {
+		case "ok":
+			mark = "✓"
+		case "fixed":
+			mark = "＋"
+		case "na":
+			mark = "·"
+		default:
+			mark = "✗"
+			if r.Required && r.Gate {
+				fail++
+			}
+		}
+		line := fmt.Sprintf("  %s %-34s %s", mark, r.Label, r.Detail)
+		if r.Status == "missing" && r.Hint != "" {
+			line += fmt.Sprintf("  → %s", r.Hint)
 		}
 		fmt.Fprintln(out, line)
 	}
-	fmt.Fprintf(out, "== 结果: %s (%d 项需处理; 修复建议: --fix 装 pip 包, `medit browser start` 起 Chrome) ==\n",
-		boolLabel(fail == 0), fail)
+
+	// Go 侧才能做的: CDP 可达性
+	if chrome, cerr := source.DetectChrome(); cerr == nil {
+		cdp := fmt.Sprintf("http://127.0.0.1:%d", doctorCDPPort)
+		hctx, hcancel := context.WithTimeout(cmd.Context(), 3*time.Second)
+		cdpOK := source.ChromeHealth(hctx, cdp) == nil
+		hcancel()
+		if cdpOK {
+			fmt.Fprintf(out, "  ✓ %-34s %s + CDP 就绪\n", "CDP 调试实例", filepath.Base(chrome))
+		} else {
+			fmt.Fprintf(out, "  ~ %-34s 浏览器在, 但 CDP 未起 → `medit browser start`\n",
+				"CDP 调试实例")
+		}
+	}
+
+	// 平台兼容性
+	c := res.Compat
+	if len(c.Findings) == 0 {
+		fmt.Fprintf(out, "  ✓ %-34s 扫描 %d 个 .py, 未发现不兼容点\n", "平台兼容性", c.ScannedFiles)
+	} else {
+		fmt.Fprintf(out, "  ✗ %-34s %d 处 / %d 个文件 (最多列 5)\n",
+			"平台兼容性", len(c.Findings), c.AffectedFiles)
+		for i, f := range c.Findings {
+			if i >= 5 {
+				fmt.Fprintf(out, "      ... 其余 %d 处见 `python3 scripts/deploy_scan.py --json`\n",
+					len(c.Findings)-5)
+				break
+			}
+			fmt.Fprintf(out, "      %s:%d  %s\n", f.File, f.Line, f.Detail)
+		}
+	}
+
+	fmt.Fprintf(out, "== 结果: %s (必需缺口 %d · 提示 %d · 本平台不适用 %d · 本次补齐 %d) ==\n",
+		boolLabel(fail == 0), fail, res.Summary.Warnings, res.Summary.NotApplicable, res.Summary.Fixed)
 	if fail > 0 {
-		return fmt.Errorf("doctor: %d 项未就绪", fail)
+		fmt.Fprintln(out, "   修复: `medit doctor --fix` (缺什么装什么)")
+		return fmt.Errorf("doctor: %d 项必需能力未就绪", fail)
+	}
+	if runErr != nil {
+		return fmt.Errorf("doctor: 扫描返回非零: %w", runErr)
 	}
 	return nil
 }
@@ -205,17 +237,4 @@ func orDefault(v, d string) string {
 		return d
 	}
 	return v
-}
-
-// pythonModuleOK probes a module via the resolved interpreter.
-func pythonModuleOK(py, mod string) bool {
-	out, err := exec.Command(py, "-c", "import "+mod).CombinedOutput()
-	return err == nil || len(out) == 0
-}
-
-// installPythonPkg pip-installs one package via the interpreter.
-func installPythonPkg(py, pkg string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	return exec.CommandContext(ctx, py, "-m", "pip", "install", pkg).Run() == nil
 }
