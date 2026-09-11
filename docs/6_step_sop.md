@@ -376,13 +376,18 @@ python3 scripts/via54.py diff                                       # 双项目�
 | Step 4 GLM 应证 | `glm_integration.py` | ✓ TMA 5#3 0%→17.6% |
 | Step 5 三方对齐 | `step5_alignment.py` | ✓ 雷管 100/100/99.4%, TMA 98/98/0% (GLM 后 17.6%) |
 | Step 6 目录合并 | `literature_v8_fix_merge_dirs.py` | ✓ 雷管 1 个 (P4-1P36-1) |
-| 6 步规则校验 | `via54_rules.py check` | ✓ 雷管 6/7, TMA 5/7 (v10.2 后 TMA 7/7; 见 `AGENTS.md` 快照说明) |
+| 6 步规则校验 | `via54_rules.py check` | ✓ TMA **7/7 (2026-09-11 实测可复现)**, 106 Pn-x / 90 目录 |
 | CI gate | `.github/workflows/ci.yml` (Go build/vet/race + Python 单测) | ✓ push/PR 自动跑 |
 
-> 注: 上表为 **2026-08-10 项目数据齐全时的快照**。原 `.github/workflows/rules_check.yml`
-> 已在 `bc96e45` ("tmp: remove workflow for push test") 中删除且未恢复, `via54.py rules`
-> 现无 CI 集成。两个项目的原始目录已归档, 重跑规则校验无法复现上述通过率
-> (缺 Step 1/3/4/5/6 的输入目录, 非规则回归)。
+> 注: 上表其余行为 **2026-08-10 项目数据齐全时的快照**; 雷管方案的目录已不在本机, 其数值不可复现。
+> 原 `.github/workflows/rules_check.yml` 已在 `bc96e45` ("tmp: remove workflow for push test") 中删除且未恢复,
+> `via54.py rules` 现无 CI 集成, 需本地手动跑。<br>
+> **勘误 (v5.4.17)**: 曾把 TMA 只能报 2/7 归因为"输入目录缺失" —— **这是错的**。真实原因是
+> `via54_rules.py` 的候选目录名过期: TMA 的产物目录随文献数从 `…_96目录` 改名成了
+> `step3_pdf下载_106目录` / `step4_highlight_106目录_合并DOI`, 而清单里只写死了
+> `step3_pdf下载_160目录`(雷管的 160)与 `…_96目录_合并DOI`。数据一直是齐的
+> (Step 3 实测 106/106 有 PDF)。已改为「显式清单 + 命名族正则兜底」, 并让 Step 4/5 按
+> **文献**而非按**目录**比较(合并目录需展开), 修复后 TMA 稳定 7/7。
 
 ---
 

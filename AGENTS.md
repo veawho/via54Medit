@@ -641,13 +641,17 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 6 步规则 vs 8 列 CSV (双项目验证)
 
-> ⚠️ **历史快照 (2026-08-11)**。两个项目的工作目录已不在本机 (`Desktop/雷管*`、`Desktop/TMA_文献整理/_2_pdfs` 均已归档),
-> 因此重跑 `via54_rules.py check <project>` 无法复现下面这条 7/7 —— 现在对残留的 TMA 目录只报 2/7,
-> 原因是 Step 1/3/4/5/6 的输入目录缺失, **不是规则回归**。数字仅在数据齐全时成立。
+> ✅ **TMA 的 7/7 已于 2026-09-11 复现**（`scripts/via54_rules.py check "/Users/david/Desktop/TMA_文献整理"`）。
+> 此前一度只能报 2/7，**原因不是数据缺失，而是校验脚本的候选目录名过期**：TMA 的产物目录随文献数
+> 从 `…_96目录` 改名成了 `step3_pdf下载_106目录` / `step4_highlight_106目录_合并DOI`，而
+> `via54_rules.py` 里只写死了 `step3_pdf下载_160目录`（那是雷管方案的 160）与 `…_96目录_合并DOI`。
+> 已在 v5.4.17 改为「显式清单 + 命名族正则兜底」，并让 Step 4/5 按**文献**而非按**目录**比较
+> （合并目录 `P3-2_P4-2` 要展开成 2 篇，否则会被误报成「缺 28 / 多 12」）。
+> 雷管方案的目录已不在本机，故其 7/7 仍是历史记录。
 
 - **雷管方案**: 7/7 步过 ✅, 99.4% 三方对齐, 160 Pn-x
-- **TMA**: 7/7 步过 ✅, 85.8% GLM highlight, 106 Pn-x
-- 测试 (可复现): `test_via54_rules.py` 28/28 ✓ + `test_via54_highlight_fix_v10.py` 41/41 ✓ (后者 4 个真实 TMA 用例因 `_2_pdfs/` 归档自动 skip); 合计 69 项无失败
+- **TMA**: 7/7 步过 ✅（可复现）, 85.8% GLM highlight, 106 Pn-x
+- 测试 (可复现): `test_via54_rules.py` **41/41** ✓ + `test_via54_highlight_fix_v10.py` 41/41 ✓ (后者 4 个真实 TMA 用例因 `_2_pdfs/` 归档自动 skip)
 - CI: 仅 `.github/workflows/ci.yml` (Go build/vet/race + Python 单测)。`via54.py rules <project>` **无 CI 集成**, 需本地手动跑
 - v10.2 增强 (2026-08-10): TMA 5/7 → 7/7 (修了 via54_rules.py 兼容 TMA nested 结构和 _jpgs/ 辅助目录)
 
