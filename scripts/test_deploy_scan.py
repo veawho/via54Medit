@@ -81,6 +81,23 @@ class _LyingRecorder(_Recorder):
         super().__init__(missing, resolves_on_install=False)
 
 
+class _PlanAssertions:
+    """与平台无关的"计划里含这条命令"断言。
+
+    **不要**写 ``assertIn("npm install -g mmx-cli", plan)``: Windows 上 npm 的可执行文件是
+    ``npm.CMD``, 于是这句在 Linux/macOS 上过、在 Windows 跑者上必然挂 —— v5.4.36 实际
+    就这样红过一次。改成"这些片段**按顺序**出现", 就与具体路径与扩展名无关了。
+    """
+
+    def assert_plan_has(self, plan, parts):
+        pos = 0
+        for p in parts:
+            idx = plan.find(p, pos)
+            if idx < 0:
+                self.fail("计划里缺少片段 %r (需按序出现): %r" % (p, plan))
+            pos = idx + len(p)
+
+
 @contextlib.contextmanager
 def env_for(osname, rec, **kwargs):
     """在指定平台上跑 run(); 记录 probe/install 调用。"""
@@ -439,7 +456,7 @@ class TestPostInstallReverify(unittest.TestCase):
         self.assertEqual(data["summary"]["fixed"], 1)
 
 
-class TestDryRun(unittest.TestCase):
+class TestDryRun(_PlanAssertions, unittest.TestCase):
     """``--dry-run`` (openclaw): 只打印将要执行的动作, 绝不落地任何修改。"""
 
     def test_dry_run_never_installs(self):
@@ -453,13 +470,36 @@ class TestDryRun(unittest.TestCase):
         self.assertEqual(code, ds.EXIT_OK, "计划生成成功就该退 0")
 
     def test_dry_run_plan_shows_the_real_command(self):
-        """计划里必须是**真会执行的那条命令**, 不是一句"将安装 pymupdf"。"""
+        """计划里必须是**真会执行的那条命令**, 不是一句"将安装 pymupdf"。
+
+        断言必须走 ``self.assert_plan_has`` 这种**按词元**的写法 —— 直接
+        ``assertIn("npm install -g mmx-cli", plan)`` 在 Linux/macOS 上会过、
+        在 Windows 跑者上必挂(那里的可执行文件是 ``npm.CMD``)。v5.4.36 实际挂过一次。
+        """
         rec = _Recorder(missing=["pymupdf", "mmx_cli"])
         with env_for("macos", rec, install=False, dry_run=True, as_json=True) as (_, out):
             data = json.loads(out)
         plans = {r["key"]: r["detail"] for r in data["capabilities"]}
-        self.assertIn("pip install pymupdf", plans["pymupdf"])
-        self.assertIn("npm install -g mmx-cli", plans["mmx_cli"])
+        self.assert_plan_has(plans["pymupdf"], ["-m", "pip", "install", "pymupdf"])
+        self.assert_plan_has(plans["mmx_cli"], ["npm", "install", "-g", "mmx-cli"])
+
+    def test_plan_assertion_helper_is_platform_agnostic(self):
+        """自守卫: 上面的辅助断言本身要能同时吃下 POSIX 与 Windows 形态的命令行。
+
+        价值在于 —— 即便在 macOS 上跑, 它也会拿 Windows 形态的字符串去验断言逻辑,
+        于是"断言写得依赖平台"这件事**在本机就会被发现**, 不必等 CI 变红。
+        """
+        cases = [
+            ("/usr/local/bin/npm install -g mmx-cli", ["npm", "install", "-g", "mmx-cli"]),
+            (r"C:\Program Files\nodejs\npm.CMD install -g mmx-cli",
+             ["npm", "install", "-g", "mmx-cli"]),
+            ("/opt/python/bin/python3 -m pip install pymupdf",
+             ["-m", "pip", "install", "pymupdf"]),
+            (r"C:\hostedtoolcache\windows\Python\3.11.9\x64\python.exe -m pip install pymupdf",
+             ["-m", "pip", "install", "pymupdf"]),
+        ]
+        for plan, tokens in cases:
+            self.assert_plan_has(plan, tokens)
 
     def test_dry_run_does_not_write_stamp(self):
         rec = _Recorder(missing=["pymupdf"])

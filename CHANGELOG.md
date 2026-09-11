@@ -102,12 +102,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`medit doctor` 的 JSON 契约**: 差点把 `channel`(JSON 里是**对象**)用 Go 的 `string` 去接,
   那会让 `json.Unmarshal` 整份失败、doctor 报"输出不是合法 JSON"。已避免并留下注释;
   同时把 `verify_failed` / `unresolvable` / `planned` / `verified` 接上。
+- **又一条带平台假设的断言, 再次被 Windows 跑者抓到**: 新加的 dry-run 用例写了
+  `assertIn("npm install -g mmx-cli", plan)` —— 在 Linux/macOS 上过, 在 Windows 上必挂,
+  因为那里的可执行文件是 `npm.CMD`(`C:\Program Files\nodejs\npm.CMD install -g mmx-cli`)。
+  改为**按序片段**断言(`_PlanAssertions.assert_plan_has`), 并加了一条**自守卫**:
+  即便在 macOS 上跑, 也拿 Windows 形态的命令行去验断言逻辑 —— 让这类问题在本机就暴露,
+  不必等 CI。这是同类问题的第三次(前两次见 v5.4.32 与 v5.4.35), 所以这次把守卫也一起补上。
 - OCR 探测不再吞异常: 失败时带出 `异常类型: 原因`, 而不是只说一句 `paddleocr=False` ——
   "没装"和"装了但 ABI 不匹配"需要完全不同的处置。
 
 ### 测试
 
-`test_deploy_scan` **28 → 77** 项(`make test-py` = 73 + 24 + 77, 全绿);
+`test_deploy_scan` **28 → 78** 项(`make test-py` = 73 + 24 + 78, 全绿);
 `go vet` / `go test ./...` 干净。新增覆盖: dry-run 绝不落地、`--only` 只动点名项、
 **"安装器报成功但没产出"必须报成缺失**(`_LyingRecorder`)、探测超时**不得污染后续探测**、
 npm 私有前缀兜底与戳记沿用、PEP 668 默认不越界、退出码 2、阶段帧、git 能力、入口不崩。
