@@ -48,6 +48,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.10] - 2026-09-11 (优化: 包级导入改惰性, 消除无谓依赖与输出污染)
+
+承接对 `telemetry` 包 eager import 的核查 —— 确认问题真实存在, 并量化了代价。
+
+### Changed
+- **`telemetry/__init__.py` 改为惰性加载**: 本文件只暴露 `__version__`, 其余 13 个对外符号经 PEP 562 模块级 `__getattr__` 按需加载 (解析后写回 `globals()` 缓存), 并保留 `__all__` 与 `__dir__`; 未知属性仍抛 `AttributeError`。既有的 `from telemetry import TelemetryDB` 写法完全不受影响。
+- **`telemetry/cli.py` 下沉重依赖导入**: 唯二会经 `watcher -> pdf_utils -> fitz` 拉起 PyMuPDF 的 `from .daemon import ...` 与 `from .watcher import WorkspaceScanner`, 移入真正使用它们的函数体 (`cmd_daemon` / `_install_autostart` / `_uninstall_autostart` / `cmd_scan` / `cmd_backfill`), 使 `--help` / `--env-check` / `alert` / `status` 等轻量命令不再付这份开销。
+
+### 实测收益
+| 调用 | 修复前 | 修复后 |
+| --- | --- | --- |
+| `import telemetry.alerter` | 131 模块 / 82 ms / 含 fitz | **70 模块 / 12 ms / 不含 fitz** |
+| `import telemetry.envcheck` | 26 模块 / 42 ms / 含 fitz | **2 模块 / 0 ms** |
+| `import telemetry.db` | (同样被牵连) | 17 模块, 不含 fitz |
+| `--env-check` / `--help` 的 stderr | 各 1 行 fitz 弃用警告 | **0 行** |
+
+### 一处自我纠正
+最初怀疑这还会造成「一处依赖缺失 → 全包不可导入」。**实测不成立**: `fitz` 在 `watcher.py` 里包了 `try/except`、在 `pdf_utils.py` 里是函数内导入 —— 屏蔽掉 fitz 后 `envcheck` / `alerter` / `db` 仍可正常导入。所以本轮的实际收益是**开销与输出污染**, 不是健壮性; 该结论已写进 `__init__.py` 的注释, 以免后人误信。
+
+### 验证
+- **test_telemetry 58/58 passed** (新增 `TestPackageImportStrategy` 4 项: 轻量子模块不连带 PDF 栈且无弃用警告、13 个惰性符号仍可解析且 `dir()` 可见、未知属性仍抛 `AttributeError`、CLI 轻量命令输出无 PDF 噪音)。全部经**独立子进程**验证, 避免测试自身的导入污染结论。
+- 兼容性: 8 个既有符号的 `from telemetry import ...` 全部成功; `daemon --status` / `status` / `alert` 子命令照常; 守护进程未受影响。
+- 被下沉的 9 个 `daemon` 名字 + `WorkspaceScanner` 均已确认可导入, 5 个函数的函数体内导入语句经源码核对存在。
+
 ## [5.4.9] - 2026-09-11 (新增: 定时同步失败接入飞书告警)
 
 把 `auto_sync` 的失败接到 5.4.7 建好的告警通道上 —— 此前这类失败只有退出码与日志, 仍需要有人主动去看 (5.4.5 的文件描述符耗尽静默了十余小时, auto_sync 的构建失败静默了数周)。
