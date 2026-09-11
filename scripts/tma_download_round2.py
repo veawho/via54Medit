@@ -7,7 +7,11 @@
 输出 _download_round2_report.json; 成功的写入 _2_pdfs
 """
 import json, os, re, io, sys, time, urllib.request, urllib.parse, pymupdf as fitz
-import sys as _sys; _sys.path.insert(0, r'G:genti\projects\deepseek-harness-desktop')
+# 同目录的 tma_scihub 要能 import。这一行原先是**另一台机器上的 G: 盘绝对路径**
+# (某 Windows 目录, 其中的 `\a` 转义还退化成了真正的 BEL 控制字符), 既不是本仓库的
+# 目录, 也不是 tma_scihub 的来源 —— 来源就是同目录的 tma_scihub.py。
+# 改为按本文件所在目录定位 (与 strict_eval_ocr_locate.py 同一处理)。见 v5.4.29。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tma_scihub import scihub_pdf
 
 T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'

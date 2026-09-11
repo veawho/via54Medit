@@ -21,9 +21,10 @@
 
 3) 仓库级约定
    - 不得再出现裸 ``import fitz``(``TestFitzImportForm``);
-   - PPT 的版式与文字必须来自 PowerPoint, 但**只禁会重新排版的引擎**,
+   - PPT 的版式与文字必须来自微软引擎, 但**只禁会重新排版的引擎**,
      只光栅化的下游工具 (PyMuPDF / pdftoppm) 允许换 (``TestRenderFidelity``,
-     判定标准见 ``docs/ppt-render-fidelity.md``)。
+     判定标准见 ``docs/ppt-render-fidelity.md``);
+   - 源码里不得有控制字符、``sys.path`` 里不得有外机盘符路径(``TestSourceHygiene``)。
 """
 import os
 import re
@@ -423,6 +424,88 @@ class TestRenderFidelity(unittest.TestCase):
         stale = [rel for rel in self.ALLOWED
                  if not os.path.exists(os.path.join(REPO, rel))]
         self.assertEqual(stale, [], f"ALLOWED 里这些文件已不存在: {stale}")
+
+
+class TestSourceHygiene(unittest.TestCase):
+    """源码里不该有的东西: 控制字符、外机盘符路径。
+
+    由来 (v5.4.29 审计): ``scripts/tma_download_round2.py`` 里原有一行把**另一台机器 G: 盘上的
+    目录**插进 ``sys.path``; 但那两个 ``\\a`` 转义**已经退化成真正的 BEL 控制字符 0x07** ——
+    于是插进去的实际是 ``'G:' + BEL + 'gent' + BEL + 'i' + ...``, 一个既不存在也不可能存在的路径。
+    一直没暴露的原因有两条: 这个 insert 本就多余(同目录的 ``tma_scihub.py`` 在直接运行时已由
+    Python 自动入路径), 而 CI 是先 insert ``scripts/`` 再 import 它, 于是先命中了正路。
+
+    这类"转义被写坏"的痕迹靠肉眼很难发现 —— 所以设成不变量: 与其等下次手工审计, 不如当场红。
+    """
+
+    #: 允许的控制字符(制表 / 换行 / 回车); 其余一律视为被写坏。
+    _ALLOWED_CTRL = {9, 10, 13}
+
+    #: 已知例外 -> 理由。每条都必须写明, 不许无理由放行。
+    #: 注意: 这两条**不是"没问题"**, 而是"涉及已交付内容, 待用户确认后再改"。
+    CTRL_CHAR_ALLOWED = {
+        os.path.join("scripts", "hl_v3_final", "examples", "hl_p24-1.py"):
+            "P24-1 的证据原文里有 3 处 0x01。用 git 查过: **自 2026-08-18 首次入库就如此**, "
+            "不是后来被写坏的。按语义几乎肯定是 `≥`(LDH ≥2 times the ULN / rUPCR ≥1 mg/mg / "
+            "proteinuria ≥1 mg/mg)。但它属**已交付的临床证据文本**, 改写可能影响该例的重跑结果, "
+            "故未擅自改 —— 待用户确认。",
+        os.path.join("skills", "via54medit-literature-pipeline", "scripts",
+                     "hl_pnx_examples", "hl_p24-1.py"):
+            "同上(技能分发包里的镜像副本)。",
+    }
+
+    #: sys.path 里不该出现外机盘符路径(Windows 盘符或 UNC 前缀)。
+    _FOREIGN_PATH = re.compile(r"""sys\.path\.(?:insert|append)\([^)]*(?:[A-Za-z]:[\\/]|\\\\)""")
+
+    def _sources(self):
+        for top in ("scripts", "skills", "tests", "telemetry"):
+            base = os.path.join(REPO, top)
+            if not os.path.isdir(base):
+                continue
+            for root, dirs, files in os.walk(base):
+                dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+                for fn in files:
+                    if fn.endswith(".py"):
+                        path = os.path.join(root, fn)
+                        yield os.path.relpath(path, REPO), path
+
+    def test_no_control_characters_in_source(self):
+        bad, allowed_hit = [], []
+        norm = {k.replace(os.sep, "/") for k in self.CTRL_CHAR_ALLOWED}
+        for rel, path in self._sources():
+            with open(path, "rb") as fh:
+                data = fh.read()
+            hits = sorted({b for b in data if b < 32 and b not in self._ALLOWED_CTRL})
+            if not hits:
+                continue
+            if rel.replace(os.sep, "/") in norm:
+                allowed_hit.append(rel)
+                continue
+            bad.append("%s: %s" % (rel, ", ".join("0x%02x" % b for b in hits)))
+        self.assertEqual(
+            bad, [],
+            "这些文件含控制字符 —— 多半是某种转义(如 \\a)被写坏成了真控制符:\n  " + "\n  ".join(bad))
+        # 例外清单不该留僵尸: 哪天把那些字节改回正常字符, 这里就该跟着清掉。
+        hit_norm = {r.replace(os.sep, "/") for r in allowed_hit}
+        stale = [k for k in self.CTRL_CHAR_ALLOWED if k.replace(os.sep, "/") not in hit_norm]
+        self.assertEqual(stale, [],
+                         f"CTRL_CHAR_ALLOWED 里这些条目已不再含控制字符, 请删掉: {stale}")
+
+    def test_no_foreign_machine_path_in_sys_path(self):
+        bad = []
+        for rel, path in self._sources():
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(text.split("\n"), 1):
+                if self._FOREIGN_PATH.search(line):
+                    bad.append("%s:%d  %s" % (rel, i, line.strip()[:100]))
+        self.assertEqual(
+            bad, [],
+            "sys.path 里出现了外机盘符路径(本仓库跑在 macOS/Linux 上, 那种路径必然不存在):\n  "
+            + "\n  ".join(bad))
 
 
 if __name__ == "__main__":
