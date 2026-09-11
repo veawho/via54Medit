@@ -14,10 +14,80 @@ import sys
 import time
 import argparse
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 REPO_DIR = Path(__file__).resolve().parent.parent
+
+# 日志落在 ~/.medit 下 (与遥测模块一致), 不再放 /tmp。
+# /tmp 会被 macOS 的 periodic(8) 回收 —— 3 天未访问即删除, 历史说没就没, 出了问题无从回溯。
+LOG_FILE = Path.home() / ".medit" / "autosync.log"
+LOG_BACKUP_FILE = Path(str(LOG_FILE) + ".1")
+LOG_MAX_BYTES = 5 * 1024 * 1024
+
+# 拉取重试: 网络 / 代理抖动 (Clash 换节点、重连) 常在一两秒内自愈, 短重试远比等 6 小时划算。
+PULL_ATTEMPTS = 3
+PULL_RETRY_DELAY_SECONDS = 10
+
+
+def rotate_log_if_needed():
+    """日志超过上限时留一份 .1 备份再就地清空。
+
+    用「复制 + 截断」而不是「改名 + 新建」: launchd 的 StandardOutPath 只在启动时打开
+    文件一次并长期持有该 fd, 改名会让它继续写旧 inode, 与按路径写新文件的进程分叉。
+    """
+    try:
+        if LOG_FILE.stat().st_size <= LOG_MAX_BYTES:
+            return
+    except OSError:
+        return
+    try:
+        shutil.copy2(LOG_FILE, LOG_BACKUP_FILE)
+        with open(LOG_FILE, "w", encoding="utf-8"):
+            pass
+    except Exception:
+        pass
+
+
+def _stdout_is_log_file() -> bool:
+    """stdout 是否已经就是日志文件本身 (launchd 的 StandardOutPath 场景)。"""
+    try:
+        out = os.fstat(sys.stdout.fileno())
+        target = LOG_FILE.stat()
+    except Exception:
+        return False
+    return (out.st_dev, out.st_ino) == (target.st_dev, target.st_ino)
+
+
+def log(message: str = ""):
+    """打一行**带时间戳**的日志。
+
+    时间戳是这次排查最大的障碍 —— 旧日志一行时间都没有, 失败无法与时刻对应。
+
+    落点只有一处, 避免重复: launchd 已经把 stdout 重定向到同一个文件, 这时只 print
+    (由 launchd 落盘); 手工在终端跑时则 print + 自己写文件, 两边都能看到。
+    """
+    line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}" if message else ""
+
+    # 轮转无条件执行: 即使本次由 launchd 落盘, 也需要有人把超限的日志收一下。
+    try:
+        rotate_log_if_needed()
+    except Exception:
+        pass
+
+    if not _stdout_is_log_file():
+        try:
+            LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
+
+    try:
+        print(line)
+    except Exception:
+        pass
 
 
 def launchd_path() -> str:
@@ -57,89 +127,139 @@ def run_cmd(cmd, cwd=REPO_DIR, timeout=300):
 
 def check_updates():
     """检查远程是否有新 commit"""
-    print("[auto_sync] 正在检查 GitHub 远程更新...")
+    log("[auto_sync] 正在检查 GitHub 远程更新...")
     ok, _, err = run_cmd(["git", "fetch", "origin", "main"])
     if not ok:
-        print(f"  ⚠️ git fetch 失败: {err}")
+        log(f"  ⚠️ git fetch 失败 (疑似网络/代理抖动): {err}")
         return False, "fetch_failed"
-    
+
     ok, count, _ = run_cmd(["git", "rev-list", "HEAD..origin/main", "--count"])
     if ok and count.isdigit() and int(count) > 0:
-        print(f"  ✓ 发现远程有 {count} 个新提交待更新")
+        log(f"  ✓ 发现远程有 {count} 个新提交待更新")
         return True, int(count)
-    print("  ✓ 本地代码已是最新版本")
+    log("  ✓ 本地代码已是最新版本")
     return False, 0
 
 
+def worktree_is_dirty() -> bool:
+    """工作区是否有未提交改动。"""
+    ok, out, _ = run_cmd(["git", "status", "--porcelain"])
+    return bool(ok and out.strip())
+
+
+def pull_with_retry():
+    """拉取 origin/main, 返回 (是否成功, 末次输出, 实际尝试次数)。
+
+    本机 git 走 Clash 本地代理, 换节点 / 重连会让 TLS 会话被中途掐断
+    (`SSL_ERROR_SYSCALL`), 这类抖动通常一两秒内自愈 —— 短重试远比留到 6 小时后划算。
+    """
+    last = ""
+    for attempt in range(1, PULL_ATTEMPTS + 1):
+        ok, out, err = run_cmd(["git", "pull", "--rebase", "origin", "main"])
+        if ok:
+            return True, out, attempt
+        last = err or out
+        if attempt < PULL_ATTEMPTS:
+            log(f"  ⚠️ 第 {attempt}/{PULL_ATTEMPTS} 次拉取失败: {last}")
+            log(f"     疑似网络/代理抖动, {PULL_RETRY_DELAY_SECONDS}s 后重试...")
+            time.sleep(PULL_RETRY_DELAY_SECONDS)
+    return False, last, PULL_ATTEMPTS
+
+
 def pull_and_rebuild():
-    """拉取最新代码并重新编译部署"""
-    print("[auto_sync] 开始执行代码同步与重新编译...")
-    
-    # 1. Git pull
-    ok, out, err = run_cmd(["git", "pull", "--rebase", "origin", "main"])
-    if not ok:
-        print(f"  ✗ git pull 失败: {err}")
-        return False
-    print(f"  ✓ 代码拉取成功: {out}")
-    
+    """同步代码并重新构建部署, 返回 (部署是否已更新, 拉取状态)。
+
+    拉取状态取 ``ok`` / ``skipped_dirty`` / ``failed``。
+
+    关键原则: **任何拉取问题都不应中止构建**。构建用的是本地工作区, 与拉取成功与否无关;
+    过去一遇拉取失败就 return, 白白放弃了一次更新二进制并验证的机会 —— 这也是"构建失败"
+    看起来层出不穷的原因之一 (其实是根本没走到构建)。
+    """
+    log("[auto_sync] 开始执行代码同步与重新编译...")
+
+    # 1. 代码同步
+    pull_state = "ok"
+    if worktree_is_dirty():
+        # 刻意不用 --autostash: 无人值守时一旦 autostash 回放冲突, 会在工作区留下冲突现场,
+        # 下一个周期照样卡住。跳过更安全, 且构建仍然照做。
+        pull_state = "skipped_dirty"
+        log("  ⚠️ 工作区有未提交改动, 本次跳过代码拉取 (避免 autostash 回放冲突)。")
+        log("     仍会从当前工作区重新构建; 提交或 stash 后下个周期自动恢复同步。")
+    else:
+        ok, detail, attempts = pull_with_retry()
+        if ok:
+            suffix = f" (第 {attempts} 次尝试)" if attempts > 1 else ""
+            log(f"  ✓ 代码拉取成功: {detail}{suffix}")
+        else:
+            pull_state = "failed"
+            log(f"  ✗ 代码拉取失败 (已重试 {attempts} 次): {detail}")
+            log("     → 判定为暂时性网络/代理故障; 本次仍继续构建, 下个周期会自动重试拉取。")
+
     # 2. 编译 Go 核心 (走 Makefile, 以便按 git describe 打上正确的版本戳)
-    print("[auto_sync] 重新构建 Go 核心二进制 (bin/medit, bin/medit-mcp)...")
+    log("[auto_sync] 重新构建 Go 核心二进制 (bin/medit, bin/medit-mcp)...")
     ok, out, err = run_cmd(["make", "build"])
     build_ok = ok
     if ok:
-        print("  ✓ bin/medit, bin/medit-mcp 构建成功")
+        log("  ✓ bin/medit, bin/medit-mcp 构建成功")
     else:
         detail = [ln.strip() for ln in (out + "\n" + err).splitlines() if ln.strip()]
-        print(f"  ✗ 构建失败: {detail[-1] if detail else '(无输出)'}")
+        log(f"  ✗ 构建失败: {detail[-1] if detail else '(无输出)'}")
 
     # 3. 运行 Python 单元测试验证
-    print("[auto_sync] 验证 Python 核心算法健康状态...")
+    log("[auto_sync] 验证 Python 核心算法健康状态...")
     test_script = REPO_DIR / "scripts" / "hl_v3_final" / "test_hl_lib.py"
     if test_script.exists():
         ok, _, err = run_cmd([sys.executable, str(test_script)])
         if ok:
-            print("  ✓ 核心单元测试全部通过")
+            log("  ✓ 核心单元测试全部通过")
         else:
-            print(f"  ⚠️ 测试提示: {err}")
-            
-    if not build_ok:
-        print("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
-        print("         排查: 确认 go / make 在 PATH 中 (launchd 默认 PATH 不含 Homebrew),")
-        print("         或在仓库根目录手工执行 make build 复现。")
-        return False
+            log(f"  ⚠️ 测试提示: {err}")
 
-    print("[auto_sync] ✅ 本地部署已更新至最新版本！")
-    return True
+    # 4. 结论: 只有「构建没成功」才算部署未更新; 拉取问题单独表述, 不掩盖也不冒领
+    if not build_ok:
+        log("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
+        log("         排查: 确认 go / make 在 PATH 中 (launchd 默认 PATH 不含 Homebrew),")
+        log("         或在仓库根目录手工执行 make build 复现。")
+        return False, pull_state
+
+    if pull_state == "ok":
+        log("[auto_sync] ✅ 本地部署已更新 (代码已同步 + 二进制已重建)。")
+    elif pull_state == "skipped_dirty":
+        log("[auto_sync] ✅ 二进制已从当前工作区重建; 代码未同步 (工作区有未提交改动)。")
+    else:
+        log("[auto_sync] ⚠️ 二进制已重建, 但代码未同步 (本次拉取失败, 下个周期重试)。")
+    return True, pull_state
 
 
 def install_cron(interval_hours=6):
     """注册 crontab 周期拉取 (macOS / Linux)"""
     script_path = os.path.abspath(__file__)
     python_path = sys.executable
-    cron_job = f"0 */{interval_hours} * * * {python_path} {script_path} --pull >> /tmp/via54medit_sync.log 2>&1"
-    
+    cron_job = (f"0 */{interval_hours} * * * {python_path} {script_path} --pull "
+                f">> {LOG_FILE} 2>&1")
+
     ok, current_cron, _ = run_cmd(["crontab", "-l"])
     current_cron = current_cron if ok else ""
-    
+
     if script_path in current_cron:
-        print("[auto_sync] Crontab 定时任务已存在，无需重复添加。")
+        log("[auto_sync] Crontab 定时任务已存在，无需重复添加。")
         return True
-        
+
     new_cron = (current_cron.strip() + "\n" + cron_job + "\n").lstrip()
     proc = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
     proc.communicate(input=new_cron)
     if proc.returncode == 0:
-        print(f"[auto_sync] ✓ 成功注册 Crontab 定时同步任务 (每 {interval_hours} 小时执行一次)")
+        log(f"[auto_sync] ✓ 成功注册 Crontab 定时同步任务 (每 {interval_hours} 小时执行一次)")
         return True
     else:
-        print("[auto_sync] ✗ 注册 Crontab 失败")
+        log("[auto_sync] ✗ 注册 Crontab 失败")
         return False
 
 
 def install_launchd(interval_hours=6):
     """注册 macOS LaunchAgent 守护任务"""
     if sys.platform != "darwin":
-        print("[auto_sync] LaunchAgent 仅支持 macOS。")
+        log("[auto_sync] LaunchAgent 仅支持 macOS。")
         return False
         
     plist_dir = Path.home() / "Library" / "LaunchAgents"
@@ -171,10 +291,12 @@ def install_launchd(interval_hours=6):
     </dict>
     <key>StartInterval</key>
     <integer>{interval_seconds}</integer>
+    <!-- 与脚本自身的写日志目标是同一个文件: 脚本写业务日志, launchd 兜住未捕获的 traceback。
+         两边指向同一路径不会重复 —— 脚本只在非终端 (即此处) 模式下不 print。 -->
     <key>StandardOutPath</key>
-    <string>/tmp/via54medit_sync.log</string>
+    <string>{escape(str(LOG_FILE))}</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/via54medit_sync_err.log</string>
+    <string>{escape(str(LOG_FILE))}</string>
 </dict>
 </plist>
 """
@@ -184,23 +306,23 @@ def install_launchd(interval_hours=6):
     run_cmd(["launchctl", "unload", str(plist_path)])
     ok, _, err = run_cmd(["launchctl", "load", str(plist_path)])
     if ok:
-        print(f"[auto_sync] ✓ 成功安装并启动 macOS LaunchAgent ({plist_path})，每 {interval_hours} 小时自动同步")
+        log(f"[auto_sync] ✓ 成功安装并启动 macOS LaunchAgent ({plist_path})，每 {interval_hours} 小时自动同步")
         return True
     else:
-        print(f"[auto_sync] ⚠️ 加载 LaunchAgent 提示: {err}")
+        log(f"[auto_sync] ⚠️ 加载 LaunchAgent 提示: {err}")
         return False
 
 
 def run_daemon(interval_minutes=360):
     """前台守护循环模式"""
-    print(f"[auto_sync] 启动自动同步守护进程 (轮询周期: {interval_minutes} 分钟)...")
+    log(f"[auto_sync] 启动自动同步守护进程 (轮询周期: {interval_minutes} 分钟)...")
     while True:
         try:
             has_updates, _ = check_updates()
             if has_updates:
                 pull_and_rebuild()
         except Exception as e:
-            print(f"[auto_sync] 轮询周期发生异常: {e}")
+            log(f"[auto_sync] 轮询周期发生异常: {e}")
         time.sleep(interval_minutes * 60)
 
 
@@ -229,11 +351,20 @@ def main():
 
     # 默认行为: 检查更新，若有则拉取并重新编译
     has_updates, _ = check_updates()
-    if has_updates or args.pull:
-        if not pull_and_rebuild():
-            # 非零退出: 让 launchd / cron 的日志与退出码都能反映失败, 而不是把
-            # 「构建失败」伪装成一次成功同步 (此前正是如此, 故障因此静默数周)。
-            sys.exit(1)
+    if not (has_updates or args.pull):
+        return
+
+    updated, pull_state = pull_and_rebuild()
+
+    if not updated:
+        # 退出码 1 = 构建失败, 部署确实没更新。此前这种情况会照打 ✅ 并退出 0,
+        # 故障因此静默了数周 —— 退出码必须如实反映。
+        sys.exit(1)
+
+    if pull_state == "failed":
+        # 退出码 2 = 二进制已重建, 但代码没同步 (暂时性网络/代理故障)。
+        # 与"构建失败"分开, 便于从 launchctl 的退出码一眼判断要不要管。
+        sys.exit(2)
 
 
 if __name__ == "__main__":

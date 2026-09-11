@@ -1401,5 +1401,152 @@ class TestTelemetry(unittest.TestCase):
             os.path.join(tempfile.gettempdir(), "medit-definitely-not-on-path")))
 
 
+class TestAutoSync(unittest.TestCase):
+    """scripts/auto_sync.py 的同步 / 构建语义。
+
+    该脚本是 LaunchAgent 定时任务的入口。过去"拉取一有风吹草动就中止整轮、构建没跑却
+    照打 ✅"导致故障静默了数周, 所以这几条分支都要钉住。
+    """
+
+    def setUp(self):
+        from pathlib import Path
+
+        self.test_dir = tempfile.mkdtemp()
+        self.mod = self._load_auto_sync()
+        # 日志重定向到临时目录, 不碰真实的 ~/.medit/autosync.log
+        self.mod.LOG_FILE = Path(self.test_dir) / "autosync.log"
+        self.mod.LOG_BACKUP_FILE = Path(str(self.mod.LOG_FILE) + ".1")
+        self.mod.PULL_RETRY_DELAY_SECONDS = 0  # 测试里别真等
+        self.calls = []
+        self.state = {"dirty": False, "pull_ok": True, "build_ok": True}
+        self.mod.run_cmd = self._fake_run_cmd
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    @staticmethod
+    def _load_auto_sync():
+        """按文件路径加载 scripts/auto_sync.py。
+
+        scripts/ 没有 __init__.py (且有一条测试断言它必须不存在, 见打包假设),
+        因此不能用包导入。
+        """
+        import importlib.util
+
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(repo, "scripts", "auto_sync.py")
+        spec = importlib.util.spec_from_file_location("auto_sync_under_test", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _fake_run_cmd(self, cmd, cwd=None, timeout=300):
+        self.calls.append(list(cmd))
+        head = list(cmd[:2])
+        if head == ["git", "status"]:
+            return True, ("M x.py" if self.state["dirty"] else ""), ""
+        if head == ["git", "pull"]:
+            if self.state["pull_ok"]:
+                return True, "Already up to date.", ""
+            return False, "", ("fatal: unable to access 'https://github.com/x/y.git/': "
+                               "LibreSSL SSL_connect: SSL_ERROR_SYSCALL")
+        if cmd and cmd[0] == "make":
+            return (True, "", "") if self.state["build_ok"] else (False, "", "make: *** boom")
+        return True, "", ""
+
+    def _pulled(self):
+        return [c for c in self.calls if c[:2] == ["git", "pull"]]
+
+    def _built(self):
+        return [c for c in self.calls if c and c[0] == "make"]
+
+    def test_dirty_worktree_skips_pull_but_still_builds(self):
+        """工作区脏时跳过拉取 —— 但绝不因此放弃构建。"""
+        self.state.update(dirty=True)
+        updated, state = self.mod.pull_and_rebuild()
+        self.assertTrue(updated)
+        self.assertEqual(state, "skipped_dirty")
+        self.assertEqual(self._pulled(), [],
+                         "脏工作区不应尝试 pull (autostash 回放冲突风险)")
+        self.assertTrue(self._built(), "跳过拉取不等于跳过构建")
+
+    def test_pull_failure_is_transient_and_build_still_runs(self):
+        """网络/代理抖动导致拉取失败: 重试若干次, 仍继续构建, 状态标为 failed。"""
+        self.state.update(pull_ok=False)
+        updated, state = self.mod.pull_and_rebuild()
+        self.assertTrue(updated, "构建成功即视为部署已更新")
+        self.assertEqual(state, "failed")
+        self.assertEqual(len(self._pulled()), self.mod.PULL_ATTEMPTS, "应重试到上限")
+        self.assertTrue(self._built(), "拉取失败不应中止整轮")
+
+    def test_build_failure_means_not_updated(self):
+        """只有构建失败才算部署未更新。"""
+        self.state.update(build_ok=False)
+        updated, _ = self.mod.pull_and_rebuild()
+        self.assertFalse(updated)
+
+    def test_log_lines_are_timestamped(self):
+        """日志每行都必须带时间戳。
+
+        上一轮排查最大的障碍就是旧日志一行时间都没有, 失败无法与时刻对应。
+        """
+        self.mod.log("[auto_sync] 测试行")
+        lines = [ln for ln in self.mod.LOG_FILE.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        self.assertTrue(lines)
+        for ln in lines:
+            self.assertRegex(ln, r"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] ")
+
+    def test_launchd_log_is_not_in_tmp(self):
+        """日志默认必须落在 ~/.medit 下, 且 LaunchAgent 与脚本自身指向同一处。
+
+        /tmp 会被 macOS 的 periodic(8) 回收 (3 天未访问即删除), 历史说没就没。
+        """
+        import plistlib
+        from pathlib import Path
+        from unittest import mock
+
+        # 默认落点: 重新加载一份未被本次测试改写的模块
+        fresh = self._load_auto_sync()
+        self.assertEqual(fresh.LOG_FILE.parent, Path.home() / ".medit")
+        self.assertNotIn("/tmp", str(fresh.LOG_FILE))
+
+        with mock.patch("pathlib.Path.home", return_value=Path(self.test_dir)), \
+                mock.patch.object(self.mod, "run_cmd", return_value=(True, "", "")):
+            self.mod.install_launchd(6)
+
+        plist_path = os.path.join(self.test_dir, "Library", "LaunchAgents",
+                                  "com.via54medit.autosync.plist")
+        self.assertTrue(os.path.exists(plist_path))
+        with open(plist_path, "rb") as fp:
+            data = plistlib.load(fp)
+        for key in ("StandardOutPath", "StandardErrorPath"):
+            self.assertEqual(data[key], str(self.mod.LOG_FILE),
+                             f"{key} 应与脚本自身的日志目标一致, 否则 stdout 会跑到别处")
+            self.assertNotIn("via54medit_sync", data[key])
+
+    def test_exit_codes_distinguish_failure_modes(self):
+        """退出码契约: 0=正常(含脏工作区跳过), 1=构建失败(部署未更新), 2=已重建但代码未同步。"""
+        cases = [
+            ((True, "ok"), 0),
+            ((True, "skipped_dirty"), 0),
+            ((True, "failed"), 2),
+            ((False, "ok"), 1),
+        ]
+        for result, want in cases:
+            with self.subTest(result=result):
+                self.mod.check_updates = lambda: (False, 0)
+                self.mod.pull_and_rebuild = lambda _r=result: _r
+                old_argv = sys.argv
+                sys.argv = ["auto_sync.py", "--pull"]
+                try:
+                    self.mod.main()
+                    code = 0
+                except SystemExit as e:
+                    code = e.code if isinstance(e.code, int) else 0
+                finally:
+                    sys.argv = old_argv
+                self.assertEqual(code, want, f"{result} 的退出码应为 {want}")
+
+
 if __name__ == "__main__":
     unittest.main()
