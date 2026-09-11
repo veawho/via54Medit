@@ -120,6 +120,8 @@ Decoupled standalone package for tracking literature retrieval/download/highligh
   ```bash
   python telemetry/deploy.py --silent
   ```
+- **Key-event alerting (Feishu)**: `medit-telemetry alert --test` verifies the channel. Daemon file-descriptor pressure and scheduled-sync failures are pushed as cards; sync success and an expected "dirty worktree" skip stay silent. Alerts are rate-limited per key with the ledger persisted (`~/.medit/alerts_state.json`), so restarts never re-spam.
+- **Scheduled self-sync + rebuild**: `scripts/auto_sync.py` pulls, rebuilds and self-tests every 6 h via LaunchAgent / crontab. Failures never abort the run — network blips are retried 3×, a dirty worktree skips the pull but still rebuilds — and exit codes distinguish them: `0` updated, `1` build failed, `2` rebuilt-but-not-synced.
 - **Full Guide**: See [docs/TELEMETRY_DEPLOY.md](docs/TELEMETRY_DEPLOY.md) and [telemetry/README.md](telemetry/README.md).
 
 ## 测试

@@ -27,6 +27,16 @@
    - **字段自适应**：同步前读取目标表实际字段名自动判定 schema（自建标准表 15 字段 / 公司既有「监控数据周报明细」表 13 字段）。写入时按映射改名并丢弃目标表没有的列，读取时反向归一化为标准字段名，因此接入公司既有表无需改动图表大屏与战报逻辑。
    - **幂等上传**：以「汇报周期 + 成员」为 upsert 键，同一周重复上传只更新原记录不新增；目标表备注列已有人工内容时不覆盖。
    - **演练与备份**：`bitable --sync --dry-run` 先看 schema 判定与将写入字段，不提交也不写备份；本地 `~/.medit/team_bitable_backup.csv` 恒以标准字段名、固定 15 列落盘，与目标表 schema 无关。
+6. **关键事件外部告警 (飞书)**：
+   - **让「不崩溃的故障」也能被看见**：守护进程的文件描述符占用达到软上限 80% 时推一条飞书告警。这类资源耗尽不会让进程退出，`KeepAlive` 之类手段无从感知 —— 只在本地日志里留痕，就得靠人主动去看。
+   - **定时同步失败同样告警**：构建失败推 `critical`、代码未同步推 `warning`。同步成功、以及「工作区有未提交改动而跳过拉取」保持安静，避免训练人忽略告警。
+   - **按 key 限流且跨重启生效**：同类告警默认静默 60 分钟（发送失败则 10 分钟后重试），账本落盘 `~/.medit/alerts_state.json`，因此守护进程被反复拉起也不会重复刷屏。
+   - **绝不反噬调用方**：告警链路抛出任何异常都只记一行日志并返回失败，不会影响守护进程或同步任务本身。
+7. **定时同步与自愈 (`scripts/auto_sync.py`)**：
+   - **每 6 小时自动拉取并重建**：`git pull --rebase` → `make build` → 核心单测，由 LaunchAgent（macOS）或 crontab（macOS / Linux）触发。
+   - **任一环节出问题都不让整轮白跑**：拉取遇网络/代理抖动会短重试 3 次（间隔 10s），仍失败也继续构建；工作区有未提交改动时跳过拉取（避免 autostash 回放冲突）但仍从当前工作区重建。
+   - **退出码如实反映**：`0` = 部署已更新（含「脏工作区跳过同步」这种预期情况）／`1` = 构建失败，部署确实未更新／`2` = 二进制已重建但代码未同步（暂时性网络故障）。
+   - **日志可回溯**：每行带时间戳，落在 `~/.medit/autosync.log`（超 5 MB 留一份 `.1` 后轮转）。
 
 ---
 
@@ -115,6 +125,40 @@ python -m telemetry.cli token --mode exact         # 设置默认模式 (exact /
 python -m telemetry.cli --env-check
 ```
 
+### D. 关键事件外部告警与定时同步
+
+```bash
+# 1. 关键事件外部告警 (飞书)
+python -m telemetry.cli alert                      # 查看通道状态与最近发送记录
+python -m telemetry.cli alert --test               # 发一条测试告警, 验证通道是否打通
+python -m telemetry.cli alert --disable            # 关闭告警 (--enable 重新开启)
+python -m telemetry.cli alert --min-interval 30    # 调整同类告警静默期 (分钟, 默认 60)
+
+# 2. 定时同步 (部署后由 LaunchAgent / crontab 每 6 小时自动执行)
+python scripts/auto_sync.py --check                # 仅检查远端是否有新提交
+python scripts/auto_sync.py --pull                 # 手动跑一轮: 拉取 + 重建 + 自测
+python scripts/auto_sync.py --install-launchd      # 注册 macOS LaunchAgent
+python scripts/auto_sync.py --install-cron         # 注册 crontab (macOS / Linux)
+```
+
+**告警触发点与级别**
+
+| 来源 | 触发条件 | 级别 |
+| --- | --- | --- |
+| 守护进程 | 文件描述符占用达软上限 80% | `warning`（≥90% 升为 `critical`） |
+| 定时同步 | 构建失败 | `critical` |
+| 定时同步 | 拉取重试后仍失败（代码未同步） | `warning` |
+
+**不会上报的情况**：同步成功、工作区有未提交改动而跳过拉取、告警开关被关闭、同类告警仍在静默期内。
+
+**定时同步的退出码**
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 部署已更新（含「脏工作区跳过同步」这种预期情况） |
+| `1` | 构建失败，部署确实未更新 |
+| `2` | 二进制已重建，但代码未同步（暂时性网络 / 代理故障） |
+
 ---
 
 ## 3. 在 Python 流水线中集成探针
@@ -156,7 +200,10 @@ record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_n
 
 - **统一主配置文件**：`~/.medit/telemetry_config.json`
 - **本地 SQLite 数据库**：`~/.medit/telemetry.db`
-- **守护进程日志与心跳**：`~/.medit/daemon.log`、`~/.medit/daemon_heartbeat.json`
+- **守护进程日志与心跳**：`~/.medit/daemon.log`、`~/.medit/daemon_heartbeat.json`。日志超 5 MB 时留一份 `daemon.log.1` 后轮转；同类重复错误会被限流聚合（只在换消息时补一条累计次数汇总），不再逐条刷屏。
+- **守护进程资源观测**：`python -m telemetry.cli daemon --status` 会显示实时文件描述符占用（如 `文件描述符: 4/4096`）。该值在守护进程内每轮采集，并写入心跳文件的 `fd` 字段，供外部巡检读取。
+- **定时同步日志**：`~/.medit/autosync.log`（每行带时间戳；超 5 MB 留一份 `.1` 后轮转）。放在 `~/.medit` 而不是 `/tmp`，因为 macOS 的 `periodic(8)` 会回收 3 天未访问的临时文件，历史说没就没。
+- **告警限流账本**：`~/.medit/alerts_state.json`。记录每类告警最近一次发送时间与成败，权限 0600 —— 它让「按 key 限流」跨进程重启依然有效。
 - **公共表本地双备份**：`~/.medit/company_public_stats.csv`
 - **多维表格本地备份**：`~/.medit/team_bitable_backup.csv`（恒以标准字段名、固定 15 列落盘，与目标表采用哪种 schema 无关）
 - **TraeWork 预装飞书源** (`channel_config.json`)：由 `telemetry/platform_paths.py` 统一解析，当前平台根目录优先，其余平台根目录兜底：

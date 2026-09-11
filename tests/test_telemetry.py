@@ -1689,6 +1689,27 @@ class TestPackageImportStrategy(unittest.TestCase):
         self.assertIn("OK", r.stdout)
         self.assertNotIn("deprecated", r.stderr, "PDF 导入不该打弃用警告")
 
+    def test_docs_cover_alert_channel_and_sync_exit_codes(self):
+        """新增能力必须落到用户可见的文档里, 而不只是代码里。
+
+        这一条本身就是为了一次真实疏漏: 告警通道与定时同步上线后, 根 README (中/英) 与
+        完整指南三处都漏了, 只有模块 README 更新了 —— 补完文档再加这道防护。
+        """
+        targets = {
+            "README.md": ["alert", "exit codes"],
+            "README.zh-CN.md": ["alert", "退出码"],
+            "docs/TELEMETRY_GUIDE.md": ["alert", "退出码"],
+            "telemetry/README.md": ["alert", "退出码"],
+        }
+        for rel, needles in targets.items():
+            with self.subTest(doc=rel):
+                path = os.path.join(self.REPO, rel)
+                self.assertTrue(os.path.exists(path), f"缺少文档 {rel}")
+                with open(path, encoding="utf-8") as fp:
+                    text = fp.read()
+                for needle in needles:
+                    self.assertIn(needle, text, f"{rel} 未提及 {needle}")
+
 
 if __name__ == "__main__":
     unittest.main()
