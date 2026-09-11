@@ -48,6 +48,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.24] - 2026-09-11 (勘误: 违反"只使用 PowerPoint、禁用其它通道"的规范 —— 含我写的引导与一处既有代码)
+
+**我先犯错, 这里如实记录。** 规范(2026-09-04)是"默认 PowerPoint 并禁用其它引擎自动切换",
+用户 2026-09-11 再次强调"只使用 PowerPoint 渲染, 禁用其它通道"。而我:
+
+1. 在 v5.4.23 的**失败提示文案**里写了"或改用 libreoffice / python-pptx";
+2. 在 v5.4.22/5.4.23 的 **CHANGELOG** 与**自检报告**里反复把"换通道"当作解决方案之一推荐。
+
+这些都是**引导改用其它通道**, 与规范直接冲突。已全部删除, 并留下勘误说明。
+
+### Fixed (我写的引导)
+- `ppt_render_engine.py` 的 `_MACOS_BLOCKED_HINT` 改为**只讲怎么把 PowerPoint 修好**:
+  "请手动打开一次 PowerPoint, 关掉该对话框后再重试。若仍然卡住, 需排查 PowerPoint 自身状态
+  (是否已激活、是否允许被自动化控制), 而不是绕过它 —— 按规范渲染只走 PowerPoint 这一条通道,
+  不会自动改用其它引擎。"
+- `CHANGELOG.md` 的 v5.4.22 条目就地加勘误: 原附建议**指名了另一个渲染引擎**, 已删。
+  (保留发布记录本身, 只钉掉其中的错误引导 —— 与 v5.4.16 的处理方式一致。)
+
+### Fixed (既有代码里同类违规 —— 这个更要紧)
+- **`_build_engine_list()` 在 `pref=powerpoint` 且 PowerPoint 不可用时, 会静默回落到
+  LibreOffice 或 python-pptx** —— 那等于自动切换渲染通道, 同样违反规范。现改为**直接抛错**:
+  ```
+  [render] 偏好引擎 PowerPoint 在本机不可用 —— 规范要求只使用 PowerPoint 渲染、禁用其它通道,
+  故不自动降级。请确认 PowerPoint 已安装并激活; macOS 还需在 系统设置 › 隐私与安全性 › 自动化
+  里允许其被控制。
+  ```
+  即: 宁可返回 0 张, 也不偷偷换通道。(Windows 侧原本就是抛错, 行为不变。)
+- **模块 docstring 改写** —— 原文写的是"按优先级自动接入系统可用引擎 / macOS-Linux 优先
+  soffice 否则 python-pptx 兜底"。**这份文档本身就是把我带偏的源头**: 我照着它把"换通道"
+  当成了系统设计意图。现改为开篇即写明"只使用 PowerPoint、禁用其它通道、不可用即失败"。
+
+### Added
+- `test_powerpoint_pref_never_falls_back_to_other_channels` —— 钉住新行为: 有 PowerPoint 时
+  单通道; 没有时抛错; 渲染入口返回 `(0,"none")` 且**绝不**调用 `render_via_soffice` /
+  `render_via_python_pptx`(这两个被 mock 成会抛 AssertionError, 一旦被调用测试立刻炸)。
+- `test_windows_powerpoint_unavailable_raises_without_fallback` —— Windows 侧同规范。
+- **`test_no_advice_to_switch_render_channels`** —— **给我自己上的锁**: 全仓(py + md)禁止出现
+  "改用 <另一个引擎>"这类引导表述。光把文案删掉不够, 得有测试防止再写回去。
+  (模式用拼接构造, 否则定义它的那两行会命中自己; 这是实现时实际踩到的自我引用问题。)
+
+### 验证
+- 三处文案实测: 提示只含 PowerPoint 修复路径; 不可用报错明说"不自动降级"; 本机默认偏好
+  仍解析为**单一** `macos_ppt` 引擎。
+- **负向对照**: 把"或改用 …libreoffice"插回提示文案 → `test_no_advice_to_switch_render_channels`
+  立刻失败并精确报出 `scripts/ppt_render_engine.py:152`; 还原后通过。
+- 测试 **89 → 92 项**全过; `TestRenderEngine` 17 项 0.15s。
+- `make test-py` 67 + 24 全过; `gofmt` / `go vet` 干净; 镜像 `--check` 退出码 0; 规则校验 7/7。
+- 版本号三处同步 `1.5.23` → `1.5.24`。
+
+### 待你确认
+- 规范注释里仍保留 `wps` / `libreoffice` / `python_pptx` / `auto` 这些**显式覆盖**取值
+  (2026-09-04 的注释原文就是这个列表)。本轮只禁掉了**默认路径上的自动切换与引导**,
+  没有动显式覆盖机制。**若你要的是连显式覆盖也一并删掉**(即物理上只留 PowerPoint 一条路),
+  说一声我就改 —— 那需要同时清掉 `_PREF_MAP` 里的对应项、`detect_engines()` 的枚举,
+  以及 `render_via_soffice` / `render_via_python_pptx` 两个函数本体。
+
 ## [5.4.23] - 2026-09-11 (macOS PowerPoint 渲染: 加快速预检 (a) + 超时可配并下调默认 (b))
 
 承接 5.4.22 隔离出的缺陷: `open` 这一步被模态对话框挡住(AppleEvent -1712), 而 PowerPoint
@@ -160,7 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   **本轮未改** —— 涉及渲染行为与超时的取值, 属 2026-09-04 偏好规范的领域, 需你定夺。可选:
   (a) 加**快速预检**: 先 `launch`+`get version`(实测 0.4s), 不应答就立刻报错并给出可操作提示
-      ("请手动打开一次 PowerPoint 关掉对话框, 或改 `RENDER_ENGINE=libreoffice`"), 而不是等 300s;
+      (提示文案见 v5.4.24 —— 本条原附的建议**指名了另一个渲染引擎**, 属引导改用其它通道,
+      **违反"只使用 PowerPoint、禁用其它通道"的规范, 已删除**), 而不是等 300s;
   (b) 把 300s 的 open/save 超时改为可用环境变量覆盖(默认下调, 如 60s);
   (c) 什么都不改, 仅在文档里写明"装了 PowerPoint 但自动化被模态框挡住时会静默返回 0 张"。
 
