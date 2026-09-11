@@ -48,6 +48,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.35] - 2026-09-12 (CI 修红: 我把 POSIX 假设写进了新加的 CI 步骤 —— 断言下移到脚本, 不再依赖 shell)
+
+v5.4.34 推送后 CI 的 `python (windows-latest)` **失败**, 原因是**我自己刚写下的那类问题**:
+新加的冒烟步骤里用了 `2>/dev/null` 与 `|| true`, 而 Windows 跑者默认用 PowerShell,
+`/dev/null` 被解析成 `D:\dev\null` →
+`Out-File: Could not find a part of the path 'D:\dev\null'`。
+
+这正好是本轮扫描器要报的 POSIX 专属假设 —— 我在给它写验证的同一刻踩了进去。
+
+### Fixed
+
+- **断言从 workflow 下移到脚本**: 新增 `deploy_scan.py --verify-platform`, 在真
+  Windows/Linux/macOS 跑者上校验"平台分类是否与宿主一致"(非 Windows 上 `pywin32` 必须是
+  `na`、Linux 上 Office 必须是 `na`、Windows 上 `pywin32` 不得是 `na`)。
+  CI 那一步现在只有一行 `python deploy_scan.py --verify-platform` ——
+  **没有任何重定向、没有 `|| true`、不依赖任何 shell 语义**, 临时文件也一并去掉了。
+- 留在脚本里的额外好处: 该断言**在本机就能单测**。新增 `TestPlatformSelfCheck` 5 项, 含
+  "伪造分类错位必须被报出来"与"不得触发安装"两条。
+
+### 测试
+
+`test_deploy_scan` 23 → **28** 项; `make test-py` 73+24+28; `test_pipeline_ha` 8 过 3 跳过;
+`go test ./...` 24 包; 本机 `--verify-platform` 输出
+`os=macos pywin32=na powerpoint=ok word=ok ocr=missing mmx_cli=ok`(OCR 缺失是实情)。
+
 ## [5.4.34] - 2026-09-12 (部署工具升级为"深度扫描 + 按平台补缺口": 修掉三个让它形同虚设的硬伤)
 
 回应"确保部署到任何设备 / 更新任何版本后, 部署工具会深度扫描系统环境与依赖, 只部与系统环境
