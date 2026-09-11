@@ -35,6 +35,11 @@ def call_sensenova(imgs, prompt, max_tokens=2000):
                          "Content-Type": "application/json"}, method="POST")
             with urllib.request.urlopen(req, timeout=240) as r:
                 d = json.loads(r.read())
+            try:
+                from telemetry.token_tracker import record_llm_usage
+                record_llm_usage(response=d, provider="sensenova", model="SenseNova-V6.5", project_name="TMA", source="vision_check.py:sensenova")
+            except Exception:
+                pass
             msg = d["choices"][0]["message"]
             txt = (msg.get("content") or "").strip() or (msg.get("reasoning") or "").strip()
             if txt:
@@ -58,6 +63,11 @@ def call_m3(imgs, prompt, max_tokens=2000):
                  "content-type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=180) as r:
         d = json.loads(r.read())
+    try:
+        from telemetry.token_tracker import record_llm_usage
+        record_llm_usage(response=d, provider="minimax", model="MiniMax-M3", project_name="TMA", source="vision_check.py:m3")
+    except Exception:
+        pass
     return d["content"][0]["text"].strip()
 
 
@@ -72,6 +82,11 @@ def call_glm(imgs, prompt, max_tokens=2000):
         try:
             with urllib.request.urlopen(req, timeout=180) as r:
                 d = json.loads(r.read())
+            try:
+                from telemetry.token_tracker import record_llm_usage
+                record_llm_usage(response=d, provider="zhipu", model="glm-4.6v-flash", project_name="TMA", source="vision_check.py:glm")
+            except Exception:
+                pass
             return d["choices"][0]["message"]["content"].strip()
         except urllib.error.HTTPError as e:
             if e.code == 429 and attempt < 2:

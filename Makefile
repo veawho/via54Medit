@@ -45,6 +45,7 @@ help:
 	@echo "Targets:"
 	@echo "  build            - build medit + medit-mcp for the current OS"
 	@echo "  test             - go test -race ./..."
+	@echo "  test-py          - Python 测试 (遥测模块 + 仓库卫生不变量)"
 	@echo "  lint             - go vet ./..."
 	@echo "  fmt              - gofmt -w ."
 	@echo "  clean            - remove build artifacts"
@@ -144,3 +145,9 @@ telemetry-status:
 
 telemetry-test:
 	python -m unittest tests/test_telemetry.py
+
+# 仓库卫生不变量: 技能分发包不得携带过期的高亮工具链; 命令不得重复注册。
+# 漂移的修法是 `python3 scripts/sync_skill_bundle.py`。
+.PHONY: test-py
+test-py:
+	python3 -m unittest tests.test_telemetry tests.test_repo_hygiene

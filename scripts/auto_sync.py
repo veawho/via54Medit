@@ -250,6 +250,33 @@ def pull_and_rebuild():
         else:
             log(f"  ⚠️ 测试提示: {err}")
 
+    # 3b. 仓库卫生不变量: 技能分发包不得携带过期的高亮工具链; 命令不得重复注册。
+    #     这两类问题都不会让任何东西报错, 只会静默退化 (2026-09-11 实测: 手工同步漏了 6 个
+    #     文件, 分发包带着旧版工具链跑了 4 天无人发现), 所以放进每 6 小时的巡检里。
+    log("[auto_sync] 校验仓库卫生不变量 (工具链镜像一致 + 命令注册无重复)...")
+    hyg_ok, hyg_out, hyg_err = run_cmd(
+        [sys.executable, "-m", "unittest", "tests.test_repo_hygiene"]
+    )
+    if hyg_ok:
+        log("  ✓ 仓库卫生不变量通过")
+    else:
+        hyg_lines = [ln.strip() for ln in (hyg_err or hyg_out).splitlines() if ln.strip()]
+        hyg_detail = hyg_lines[-1] if hyg_lines else "(无输出)"
+        log(f"  ⚠️ 仓库卫生不变量失败: {hyg_detail}")
+        notify(
+            "定时同步巡检: 仓库卫生不变量失败",
+            [
+                f"**仓库**：`{REPO_DIR}`",
+                f"**失败摘要**：`{hyg_detail}`",
+                "**常见原因**：只改了 `scripts/hl_v3_final/` 而没同步技能分发包 —— "
+                "技能会带着旧代码被分发出去。",
+                "**修法**：`python3 scripts/sync_skill_bundle.py` "
+                "(若是命令重复注册, 按测试提示定位 `rootCmd.AddCommand`)。",
+            ],
+            key="autosync-hygiene-failed",
+            level="warning",
+        )
+
     # 4. 结论: 只有「构建没成功」才算部署未更新; 拉取问题单独表述, 不掩盖也不冒领
     if not build_ok:
         log("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
