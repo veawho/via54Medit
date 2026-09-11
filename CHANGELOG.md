@@ -48,6 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.9] - 2026-09-11 (新增: 定时同步失败接入飞书告警)
+
+把 `auto_sync` 的失败接到 5.4.7 建好的告警通道上 —— 此前这类失败只有退出码与日志, 仍需要有人主动去看 (5.4.5 的文件描述符耗尽静默了十余小时, auto_sync 的构建失败静默了数周)。
+
+### Added
+- **`auto_sync.notify()`**: 直接复用 `telemetry.alerter`, 因此与守护进程走同一条链路、同一份限流账本 (`~/.medit/alerts_state.json`), 不重复实现一套。
+- **两处触发, 只在失败时**:
+  - 构建失败 → `critical`, key `autosync-build-failed`。卡片带仓库路径、`make` 的失败摘要、当时的代码同步状态, 以及影响与排查建议。
+  - 拉取重试后仍失败 → `warning`, key `autosync-pull-failed`。说明重试次数、判读为网络/代理抖动、二进制已按本地工作区重建、下个周期会自动重试。
+- 工作区脏导致的「跳过拉取」属预期状态, **刻意不告警** —— 否则会训练人忽略告警。
+
+### 设计取舍
+- **惰性导入 + 整段吞异常**: 告警通道不可用时 (包未部署 / 依赖缺失 / 网络不通) 只记一行日志并返回 `False`, 绝不影响同步任务本身 —— 「发不出告警」不该升级成新的故障。
+- **复用而非重写**: 卡片结构、分级着色、按 key 限流、失败快速重试全部沿用 `alerter`, 避免两套行为漂移。
+
+### 验证
+- test_telemetry **54/54 passed** (`TestAutoSync` 新增 2 项并加固 3 项: 成功路径保持安静、构建失败以 `critical` 告警且卡片带失败摘要、拉取失败以 `warning` 告警、脏工作区不告警、通道抛异常时 `notify` 返回 `False` 而不外抛)。
+- 单测全部打桩 `notify`, 并已核对 `~/.medit/alerts_state.json` 未出现 `auto_sync` 相关 key —— 即测试没有真发卡片。
+- **真机端到端**: 用 `auto_sync` 自己的解释器 (工具链 Python 3.10) 走真实 `notify()` 路径投递一张标注演练的卡片, 推送成功 (Message ID `om_x100b650e930dd510c15480b648d3b75`), 并把结果带时间戳写进 `~/.medit/autosync.log`。
+
+### 说明
+- 至此告警通道覆盖两类来源: 守护进程资源吃紧、定时同步失败。README 已同步说明。
+
 ## [5.4.8] - 2026-09-11 (修复: auto_sync 拉取失败不再中止构建 + 日志带时间戳并迁出 /tmp)
 
 承接对「auto_sync 构建失败」的专项排查。结论是三种失败叠加且互相掩盖: `go` 不在 launchd PATH (5.4.5 已修)、脏工作区让 `git pull --rebase` 直接拒绝、Clash 隧道抖动导致拉取失败。后两者都会让脚本**根本走不到构建**; 而构建失败又只报「编译警告」、照打 ✅ 并退出 0 —— 28 次运行里 25 次打印成功, 其中 23 次压根没构建。
