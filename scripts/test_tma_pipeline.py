@@ -481,7 +481,17 @@ class TestRenderEngine(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(out, "slide_001.png")))
 
     def test_render_auto_falls_back_when_com_fails(self):
-        # COM 全失败 → 必须降级 python-pptx 且不抛异常
+        """auto 模式下 COM 全失败 → 必须降级 python-pptx 且不抛异常。
+
+        **必须显式设 RENDER_ENGINE=auto**: 默认偏好是 powerpoint, 而按 2026-09-04 规范
+        默认**禁用自动切换**; 只有 auto 才走 ``detect_engines()`` 的降级链。
+
+        这条以前是坏的 —— 它 mock 了 ``detect_engines`` 却没设 auto, 而默认偏好下
+        ``render_ppt_slides_auto`` 走的是 ``_build_engine_list()``, 于是**mock 完全不生效**,
+        测试实际去跑真引擎: 本机装了 PowerPoint 就落到 macOS AppleScript 路径, 因
+        AppleEvent -1712 超时耗 300s 后返回 0 页而失败; CI windows-latest 上则因
+        ``_build_engine_list`` 抛错被吞成 ``(0,"none")`` 同样失败。
+        """
         try:
             from pptx import Presentation
         except ImportError:
@@ -492,13 +502,68 @@ class TestRenderEngine(unittest.TestCase):
         prs.slides.add_slide(prs.slide_layouts[6])
         prs.save(pptx)
         out = os.path.join(tmp, "out2")
-        with mock.patch.object(pre, "detect_engines", return_value=[
-            ("fake", "com", "No.Such.ProgID.999"),
-            ("python-pptx", "python_pptx", ""),
-        ]):
+        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "auto"}), \
+                mock.patch.object(pre, "detect_engines", return_value=[
+                    ("fake", "com", "No.Such.ProgID.999"),
+                    ("python-pptx", "python_pptx", ""),
+                ]):
             n, engine = pre.render_ppt_slides_auto(pptx, out)
         self.assertGreaterEqual(n, 1)
         self.assertEqual(engine, "python-pptx")
+
+    def test_auto_mode_mock_seam_is_effective(self):
+        """钉住上一条的前提: auto 模式下 mock ``detect_engines`` 真的会被用到。
+
+        这是对"失效 mock"这类 bug 的直接防护 —— 只要 seam 写错(比如代码改回用别的函数),
+        引擎名就对不上, 测试立刻失败, 而不是悄悄去跑真引擎、耗时几分钟再报一个误导性的错。
+        """
+        try:
+            from pptx import Presentation
+        except ImportError:
+            self.skipTest("python-pptx 缺失")
+        tmp = tempfile.mkdtemp()
+        pptx = os.path.join(tmp, "t.pptx")
+        prs = Presentation()
+        prs.slides.add_slide(prs.slide_layouts[6])
+        prs.save(pptx)
+        out = os.path.join(tmp, "out_seam")
+        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "auto"}), \
+                mock.patch.object(pre, "detect_engines",
+                                  return_value=[("sentinel-engine", "python_pptx", "")]):
+            n, engine = pre.render_ppt_slides_auto(pptx, out)
+        self.assertEqual(engine, "sentinel-engine", "mock 没生效 —— seam 可能又被改错了")
+        self.assertGreaterEqual(n, 1)
+
+    def test_default_pref_does_not_silently_switch_engine(self):
+        """默认偏好下引擎不可用 → 不静默降级到其它引擎 (2026-09-04 用户规范)。
+
+        同时钉住"为什么上面那条必须显式设 auto": 默认走的是 ``_build_engine_list()``,
+        不是 ``detect_engines()`` 的降级链。返回 (0, "none") 而不是偷偷换低保真引擎。
+        """
+        try:
+            from pptx import Presentation
+        except ImportError:
+            self.skipTest("python-pptx 缺失")
+        tmp = tempfile.mkdtemp()
+        pptx = os.path.join(tmp, "t.pptx")
+        prs = Presentation()
+        prs.slides.add_slide(prs.slide_layouts[6])
+        prs.save(pptx)
+        out = os.path.join(tmp, "out3")
+        clean = {k: v for k, v in os.environ.items() if k != "RENDER_ENGINE"}
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(pre, "_build_engine_list",
+                                  side_effect=RuntimeError("偏好引擎不可用")):
+            n, engine = pre.render_ppt_slides_auto(pptx, out)
+        self.assertEqual(n, 0)
+        self.assertEqual(engine, "none")
+
+    def test_engine_pref_default_is_powerpoint(self):
+        """不带 RENDER_ENGINE 时默认偏好是 powerpoint。"""
+        clean = {k: v for k, v in os.environ.items() if k != "RENDER_ENGINE"}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            self.assertEqual(pre._engine_pref(), "powerpoint")
+            self.assertEqual(pre.render_ppt_slides_auto.__name__, "render_ppt_slides_auto")
 
 
 # ---------- T13: 自然语言一键全自动管线 (via54_auto) ----------
