@@ -48,6 +48,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.25] - 2026-09-11 (按规范把其它渲染通道**整体删除**: 只留 PowerPoint 一条路)
+
+承接 5.4.24。用户明确要求"只使用 PowerPoint 渲染, 禁用其它通道", 本轮把 WPS / LibreOffice /
+python-pptx 三条通道从代码里**物理删除** —— 不是"禁用", 而是不存在。
+
+### Removed
+- `_PREF_MAP` 里的 `wps` / `libreoffice` / `soffice` / `python_pptx` / `python-pptx` 取值
+  → 现在只剩 `powerpoint` / `ppt`; 其它取值 `_build_engine_list()` 直接报错。
+- `_build_engine_list()` 的 `auto` 分支(按可用性枚举并降级) —— 降级链整体消失。
+- `render_via_soffice()` / `render_via_python_pptx()` / `_find_cjk_font()` 与 `_FONT_CANDIDATES`
+  —— 共 **124 行**实现。
+- `_find_soffice()` 探测函数; `COM_ENGINES` 里的 WPS 项(`KWPP.Application`)。
+- `render_ppt_slides_auto()` 循环里 `soffice` / 兜底 两条分支(已无对应引擎可走)。
+- `import io` —— 删除 python-pptx 渲染后已无使用者。
+
+### Changed
+- **`detect_engines()` 改为只探测 PowerPoint**(kind 只可能是 `com` / `macos_ppt`)。
+  它仍保留, 因为 `deps_auto.py` 与 `bootstrap_device.py` 用它做依赖与设备就绪检查 —— 两处均已验证可用。
+- 拿不到 PowerPoint 时的收尾日志改为
+  `"[render] PowerPoint 渲染失败, 返回 0 张幻灯片 (按规范不切换其它通道)"`。
+- 模块 docstring 的引擎偏好一节改为"只认 powerpoint; 其它通道已整体删除"。
+
+### 保留(需要区分清楚)
+- **`python-pptx` 这个库仍在 `requirements.txt` 里** —— 仓库里另有 8 个脚本用它**生成** PPTX
+  (`via54_ppt_visual_to_pdf.py`、`ppt_expand.py`、`hl_v3_final/step2_extract_refs.py` 等)。
+  本轮删的是"用它来**渲染**"这条通道, 不是删这个库。
+
+### 测试
+- **删除 3 条**已失去前提的测试: `test_render_python_pptx_fallback`(调已删函数)、
+  `test_render_auto_falls_back_when_com_fails` 与 `test_auto_mode_mock_seam_is_effective`
+  (都建立在 `auto` 降级链上)。
+- `test_detect_engines_always_has_fallback` **断言反转**为 `test_detect_engines_reports_only_powerpoint`:
+  原断言"python_pptx 一定在列表里"→ 现断言"绝不允许出现非 PowerPoint 通道"。
+- **`test_other_render_channels_are_gone`** —— 断言那些名字**在模块里已不存在**
+  (`hasattr` 检查 5 个符号)、偏好表只剩 `powerpoint`/`ppt`、COM 引擎表只剩 PowerPoint,
+  并验证 `RENDER_ENGINE=soffice` 会报错。这比"mock 掉不让调用"强: 没有函数可调, 就不存在误走通道的可能。
+- `test_powerpoint_pref_never_falls_back_to_other_channels` 去掉了对已删名字的 mock。
+
+### 验证
+- 测试 **92 → 90 项**全过(删 3 增 1); `TestRenderEngine` **17 → 15 项**, 0.20s。
+- 本机实测: `detect_engines()` 只返回 `[('PowerPoint (macOS)', 'macos_ppt', ...)]`;
+  `deps_auto` / `bootstrap_device` 导入正常; 收尾日志已含"按规范不切换其它通道"。
+- 全仓 `grep` 已删符号: 仅剩新测试里那处"必须不存在"的断言。
+- `make test-py` 67 + 24 全过; `gofmt` / `go vet` 干净; 镜像 `--check` 退出码 0; 规则校验 7/7。
+- 版本号三处同步 `1.5.24` → `1.5.25`。
+
 ## [5.4.24] - 2026-09-11 (勘误: 违反"只使用 PowerPoint、禁用其它通道"的规范 —— 含我写的引导与一处既有代码)
 
 **我先犯错, 这里如实记录。** 规范(2026-09-04)是"默认 PowerPoint 并禁用其它引擎自动切换",
