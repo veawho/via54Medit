@@ -13,7 +13,7 @@ if os.path.exists(readme_path):
 
 setup(
     name="medit-telemetry",
-    version="1.5.26",
+    version="1.5.27",
     description="TraeWork 文献整理与 Highlight 监控统计、人效分析及飞书自动同步工具 (via54Medit 独立模块)",
     long_description=long_description,
     long_description_content_type="text/markdown",

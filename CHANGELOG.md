@@ -48,6 +48,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.27] - 2026-09-11 (勘误: "禁用其它通道"我禁过头了 —— 判定标准是**保真**, 不是程序名)
+
+用户澄清(原话):
+
+> "事实上，我是认为 PowerPoint 渲染出来的图片更符合原版，如果有其他渲染图片并不会改变 PowerPoint 排版与文字的方式也可以集成"
+
+即: 要保的是**版式与文字**; 只要某个出图方式**不改变 PowerPoint 的排版与文字**, 就可以接入。
+而我 v5.4.24 ~ v5.4.26 把规则读成了"只允许 PowerPoint 这一个程序", 连"把 PowerPoint 自己导出的
+PDF 转成 PNG"都想禁掉 —— **比规则本身更严**。本轮按澄清改正。
+
+### 关键区分: 只有第一步不可替代
+
+| 环节 | 能否换 | 理由 |
+| --- | --- | --- |
+| PPTX → 画面 (版式/文字) | ❌ 不可换 | PPTX 只是描述性格式; 第三方引擎各自重排 OOXML, 字体/断行/autofit 都分叉 |
+| PowerPoint 产物 → 图片 (栅格化) | ✅ 可以换 | PDF 是固定版式, 栅格化器只解释绘制指令, **不重排** |
+
+### Added
+
+- **`docs/ppt-render-fidelity.md`** —— 判定标准 + 各方案结论表(附来源) + 允许/禁止清单 + 字体内嵌的坑。
+  调研结论: 没有任何第三方 PPTX 渲染器能复现 PowerPoint 的版式 —— LibreOffice / WPS / Keynote /
+  Google Slides / Aspose / Spire / GroupDocs / Syncfusion 全是各自重排, python-pptx 根本不渲染;
+  2024–2026 冒出来的几个"高保真"新项目也没有逐像素对照证据。**微软自家引擎是唯一合格来源**:
+  桌面 PowerPoint, 以及免装桌面版的 Microsoft Graph `pptx→jpg`(需 OAuth + 网络, 尚未接入)。
+- **`RENDER_RASTERIZER`** —— 栅格化器闸口: `pymupdf`(默认) / `pdftoppm`。这正是用户说的
+  "也可以集成": 两者都只做光栅化、不重排。**pdftoppm 强制带 `-cropbox`** —— 实测不带时它按
+  MediaBox 出图(600×400), 带上才与 PyMuPDF 一致(500×300, 即 CropBox); 不带就会带出白边/偏移,
+  那等于改了版式。
+- **保真检查**: PowerPoint 导出 PDF 后查一次**字体是否内嵌**, 未内嵌就打印警告 —— 字形不随
+  文档走时, 栅格化只能用替代字体画, 那就是"改变了文字"。判定依据实测(`get_fonts()` 的 `ext`):
+  内嵌→`ttf`/`cff`/`cid`; 未内嵌→`''`; base-14(Helvetica 等)→`n/a`(同样不随文档走)。
+- 首选 PowerPoint **直接出位图**(Windows `Slide.Export`) —— 保真上限更高, 且绕开字体内嵌风险。
+
+### Changed — 把过严的措辞改回来
+
+- `ppt_render_engine.py` / `hl_v3_final/ppt_to_pdf.py` / `ppt_expand.py` /
+  `render_ppt_slides.py` 的 docstring 与报错文案: 由"只使用 PowerPoint 渲染、禁用其它通道"
+  改为"版式与文字必须由 PowerPoint 产出; **只光栅化、不重排**的下游工具可以换"。
+- `.trae/rules/project_rules.md` 规则 5 重写为"两步判定"。
+- `tests/test_repo_hygiene.py`: `TestPowerPointOnlyRender` → **`TestRenderFidelity`**, 语义从
+  "禁止其它程序"改为"禁止**会重新排版**的引擎"(名单纳入 Aspose / Spire / GroupDocs / Syncfusion),
+  并新增 `test_rasterizer_whitelist_is_only_fixed_layout_tools`。
+- 权威规则文档 `references/v2.12.0-powerpoint-render-mandatory.md` 增加 2026-09-11 澄清一节。
+  (顺带发现: 该文件原本的示例实现就是"PowerPoint 导 PDF + **pdftoppm** 转 JPG" —— 原设计本就
+  允许下游换工具, 是我后来把它读严了。)
+
+### 测试
+
+- `test_tma_pipeline` **90 → 95 项**: 新增 栅格化器闸口 / `-cropbox` 硬要求 / 字体内嵌判定 /
+  有警告 / 无警告 五条; 另修一条断言旧文案的用例(断言的是"不降级"这个行为, 文案已随规范更新)。
+- 反向控制: 往 `_RASTERIZERS` 塞 `libreoffice` → `TestRenderFidelity` 当场红(报出具体条目)。
+- **端到端实测(本机)**: 同一个固定版式 PDF 用 pymupdf 与 pdftoppm(带 `-cropbox`)出图
+  **像素尺寸完全一致**(1125×625)、页数一致; 不带 `-cropbox` 时是 600×400 vs 500×300 ——
+  证实该参数是保真硬要求, 而不是形式主义。
+- `make test-py`(71 + 24) / `test_tma_pipeline`(95) / `test_pipeline_ha`(7 过 3 跳过) /
+  `gofmt` / `go vet` / `go test ./...` 全过; 镜像 `--check` 退出码 0。
+
+### 未处理
+
+- **Microsoft Graph `pptx→jpg` 未接入** —— 它是本轮唯一被判定为**合格**的"另一个通道"
+  (微软自家引擎、免装桌面版)。需要 OAuth 与网络, 等你要用再接。
+- `unified_render_engine.render_docx_to_images()` 仍用 LibreOffice 转 **Word**。按"版式保真"
+  的同一条道理, Word 也该只认 Word 本体; 但规则原话针对 PPT, 故本轮仍按 PPT 范围处理,
+  并把它列进守卫白名单写明理由。**要收口就说一声。**
+- 本机 PowerPoint 自动化仍不可用(`save ... as PDF` → AppleEvent -1712), 属环境问题,
+  排查记录见 v5.4.26。
+
 ## [5.4.26] - 2026-09-11 (收口"禁用其它通道": 上轮只改到 1 个文件, 还有 4 个 PPT 渲染入口在走别的通道)
 
 承接 5.4.24 / 5.4.25。用户重申"只使用 PowerPoint 渲染, 禁用其它通道"后复盘发现: **上一轮
