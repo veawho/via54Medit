@@ -48,6 +48,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.18] - 2026-09-11 (收尾: 下线 2 个无后缀的同类 v1 脚本)
+
+承接 5.4.17 的「已知残留」第 2 条。上一轮已确认这两个**按同一判据也已死**,
+只因不在当轮的授权范围内而未动; 本轮一并清掉, 版本族不再残缺。
+
+### Removed
+- `scripts/tma_batch_redownload.py`（204 行）—— 三个硬编码路径**全部不存在**:
+  `_2_pdfs/`、`_3_highlight_v10_glm/_redownload_suggestions.json`、
+  `_3_highlight_v10_glm/_tma_redownload_log.json`。零引用。
+- `scripts/redownload_36.py`（239 行）—— `SRC = f'{TMA}/_2_pdfs'`、
+  `LOG = f'{TMA}/_3_highlight_v10_glm/_redownload_36_log.json'`, 两个目录均已不存在;
+  输入 `/tmp/to_fix_36.json` 也已不在（临时文件）。零代码级引用。
+
+  两者分别是 `tma_batch_redownload_v2/v3.py` 与 `redownload_36_v2/v3.py` 的**无后缀前身(v1)**。
+  留着 v1 而删掉 v2/v3 会让版本族更不完整, 这是本轮清掉它们的主要理由。
+  它们的目标目录也正是 5.4.17 已确认收尾的那批(`_2_pdfs/` 已被 `step3_pdf下载_106目录/`
+  取代, 106/106 有 PDF)。
+
+### 验证
+- 删除前确认: 两者均**不被 `via54.py` 分发**、无任何代码级引用
+  （全仓仅 CHANGELOG 与审计文档提及, 属文档记录）; 硬编码目标逐个断言不存在。
+- 删除后 `scripts/` 下 **241 个 `.py` 语法零失败**; `make test-py` **62 passed**;
+  `test_via54_rules.py` **41/41**; TMA 规则校验仍 **7/7**。
+- 版本号三处同步 `1.5.17` → `1.5.18`。
+
+### 索引
+- `scripts/` 下版本后缀文件维持 **9 个**（本次清的是**无后缀**的 v1, 不改变该计数）:
+  4 个仍接线/仍活 + 4 个 v13 审计族（待定）+ 1 个固有命名。
+
 ## [5.4.17] - 2026-09-11 (修复: 规则校验看不见真实产物目录 + 下线 6 个已收尾脚本)
 
 两件事: ① 把 6 个"任务是否已收尾"不明的脚本查清并下线; ② **修掉我上一轮自己写错的一处归因** ——
@@ -107,8 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 已知残留 (仍未处理)
 - `scripts/hl_v3_final/` 下约 20 处弃用式 `import fitz`(承接 5.4.16 的记录)。
-- `scripts/tma_batch_redownload.py` 与 `scripts/redownload_36.py`(无后缀)按同一判据也已死
-  (硬编码的 `_2_pdfs/`、`_3_highlight_v10_glm/` 均不存在), 但不在本轮授权范围内, 未删 —— 建议同批清掉。
+- ~~`scripts/tma_batch_redownload.py` 与 `scripts/redownload_36.py`(无后缀)按同一判据也已死,
+  但不在本轮授权范围内, 未删~~ → **已于 [5.4.18] 清掉**。
 
 ## [5.4.16] - 2026-09-11 (清理: 下线 4 个版本后缀死脚本 + 修正指向不存在 CI 工作流的文档)
 
