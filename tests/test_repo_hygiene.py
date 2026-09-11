@@ -169,50 +169,93 @@ class TestCommandRegistration(unittest.TestCase):
 
 
 class TestFitzImportForm(unittest.TestCase):
-    """高亮工具链不得再出现裸 ``import fitz``。
+    """仓库内不得再出现裸 ``import fitz``。
 
     为什么值得设成不变量: PyMuPDF 1.24 起 ``fitz`` 只是别名, 用它会在 stderr 打一行
-    弃用警告, 且官方已声明将来会**移除**该别名 —— 到那天全部脚本一起坏。所以统一写成
-    ``import pymupdf as fitz`` + 旧版回退。
+    弃用警告, 且官方已声明将来会**移除**该别名 —— 到那天全部脚本一起坏。
+    ``requirements.txt`` 已声明 ``pymupdf>=1.24``, 所以 ``import pymupdf as fitz``
+    就是正确形态, 不需要旧版回退。
 
-    实测: 2026-09-11 前 ``scripts/hl_v3_final/`` 下有 **195 处**裸 ``import fitz``
-    (117 个文件; 其中 182 处在 105 个 ``examples/hl_p*.py`` 里, 以函数内局部导入的形式)。
-    v5.4.20 全部改掉: 核心文件写完整 try/except, 示例脚本改为 ``from hl_lib import fitz``
-    (它们本来就依赖 hl_lib, 由那一处统一决定导入名)。
+    历史 (2026-09-11 的两轮):
+      * ``hl_v3_final/`` **195 处 / 117 文件**(182 处在 105 个 examples 脚本里, 函数内局部导入)
+        -> 核心文件写 try/except, 示例脚本改为 ``from hl_lib import fitz``。
+      * ``scripts/`` + ``skills/`` **83 处 / 63 文件** -> 统一 ``import pymupdf as fitz``。
 
-    本测试把允许的形态钉死:
-      * ``from hl_lib import fitz, ...``            —— 允许 (示例脚本走这条)
-      * ``import pymupdf as fitz``                  —— 允许
-      * ``import fitz`` 紧跟 ``except ImportError:`` —— 允许 (旧版回退)
-      * 其它任何 ``import fitz`` / ``import fitz, x`` —— 不允许
+    **这条测试的第一版有盲区**: 它只匹配「行首 ``import fitz``」, 于是
+    ``import json, os, re, io, sys, fitz``(fitz 在逗号列表末尾) 这类被漏掉 ——
+    第一轮改完后 CI 的 import 探针**仍在报弃用警告**, 才把剩下的 12 处抓出来。
+    现在覆盖全部形态: 逗号列表任意位置 / ``as`` 别名 / ``from fitz import``。
+
+    允许的形态:
+      * ``import pymupdf as fitz``               —— 唯一推荐写法
+      * ``from hl_lib import fitz, ...``         —— 示例脚本走这条(由 hl_lib 单点决定)
+      * ``import fitz`` 紧跟 ``except ImportError:`` —— 仅限 hl_v3_final 的旧版回退
+      * ``BARE_FITZ_ALLOWED`` 里逐条注明理由的例外
     """
 
-    def test_no_bare_fitz_import(self):
+    #: 允许出现裸 ``import fitz`` 的文件 -> 理由。每条都必须写明, 不许无理由放行。
+    BARE_FITZ_ALLOWED = {
+        "telemetry/watcher.py": "v5.4.11 的旧版回退 (except ImportError: import fitz)",
+        "telemetry/pdf_utils.py": "同上",
+        "tests/test_telemetry.py":
+            "故意 import fitz —— 它是 'telemetry 导入路径不带弃用警告' 这条断言的对照面",
+    }
+
+    #: hl_v3_final 及其分发副本保留旧版回退 (技能工具链要分发出去, 版本不可控)
+    FALLBACK_DIRS = ("scripts/hl_v3_final/",
+                     "skills/via54medit-literature-pipeline/scripts/")
+
+    _IMPORT_LINE = re.compile(r"^(\s*)import\s+([^#]+?)\s*(#.*)?$")
+    _FROM_FITZ = re.compile(r"^(\s*)from\s+fitz\b")
+
+    def _scan(self):
         offenders = []
-        for root, dirs, files in os.walk(MIRROR_A):
-            dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        for root, dirs, files in os.walk(REPO):
+            dirs[:] = [d for d in dirs
+                       if d not in IGNORE_DIRS and d not in {".git", "node_modules"}]
             for fn in files:
                 if not fn.endswith(".py"):
                     continue
                 path = os.path.join(root, fn)
-                with open(path, encoding="utf-8") as f:
-                    lines = f.read().split("\n")
+                rel = os.path.relpath(path, REPO)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        lines = f.read().split("\n")
+                except (UnicodeDecodeError, OSError):
+                    continue
                 for i, line in enumerate(lines):
-                    m = re.match(r"^(\s*)import\s+fitz\s*(,.*)?$", line)
-                    if not m:
+                    if "pymupdf" in line:
                         continue
-                    if m.group(2):                      # import fitz, x —— 复合形式
-                        offenders.append((path, i + 1, line.strip()))
+                    m = self._IMPORT_LINE.match(line)
+                    hit = False
+                    if m and "fitz" in [x.strip() for x in m.group(2).split(",")]:
+                        hit = True
+                    if self._FROM_FITZ.match(line):
+                        hit = True
+                    if not hit:
+                        continue
+                    if rel in self.BARE_FITZ_ALLOWED:
                         continue
                     prev = lines[i - 1].strip() if i else ""
-                    if not prev.startswith("except ImportError"):
-                        offenders.append((path, i + 1, line.strip()))
+                    if (rel.replace(os.sep, "/").startswith(self.FALLBACK_DIRS)
+                            and prev.startswith("except ImportError")):
+                        continue
+                    offenders.append(f"{rel}:{i + 1}  {line.strip()}")
+        return offenders
 
-        rel = [f"{os.path.relpath(p, REPO)}:{n}  {t}" for p, n, t in offenders]
+    def test_no_bare_fitz_import(self):
+        offenders = self._scan()
         self.assertEqual(
-            rel, [],
-            "这些位置用了裸 import fitz (应为 `import pymupdf as fitz` + except ImportError 回退, "
-            "或示例脚本的 `from hl_lib import fitz`):\n  " + "\n  ".join(rel))
+            offenders, [],
+            "这些位置用了裸 import fitz。应为 `import pymupdf as fitz`"
+            "(或示例脚本的 `from hl_lib import fitz`); 若确属例外, 加进 "
+            "BARE_FITZ_ALLOWED 并写明理由:\n  " + "\n  ".join(offenders))
+
+    def test_allowlist_has_no_zombie_entries(self):
+        """例外清单不该留僵尸条目 —— 文件改名/删除后条目要跟着清。"""
+        stale = [rel for rel in self.BARE_FITZ_ALLOWED
+                 if not os.path.exists(os.path.join(REPO, rel))]
+        self.assertEqual(stale, [], f"BARE_FITZ_ALLOWED 里这些文件已不存在: {stale}")
 
     def test_fitz_alias_resolves_to_pymupdf(self):
         """``hl_lib.fitz`` 必须是 pymupdf 模块本身 —— 示例脚本都靠它取导入名。"""

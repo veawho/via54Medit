@@ -48,6 +48,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.21] - 2026-09-11 (清理: scripts/ + skills/ 的裸 import fitz 一并消除 (83 处 / 64 文件))
+
+承接 5.4.20 的「已知残留」。5.4.20 只清了 ``hl_v3_final/``, 本轮把 ``scripts/`` 与 ``skills/``
+剩下的也清掉 —— 而且**过程中发现我 5.4.20 的盘点方式本身有盲区**, 详见下。
+
+### Changed
+- **`scripts/` + `skills/` 下 83 处 / 64 个文件**的裸 `import fitz` 改为 `import pymupdf as fitz`
+  (`scripts/` 57 文件 + `skills/` 另 4 个技能包 7 文件)。
+  这批是**在用**的生产工具链(`process_all_pn_x.py`、`vision_highlight_workflow.py`、
+  `glm_integration.py`、`via54_highlight_v3_final.py`、CI 会跑的 `test_tma_pipeline.py` 等)。
+
+  用**正式名**而不是 5.4.20 那种 try/except 回退, 依据是 `requirements.txt` 已声明
+  `pymupdf>=1.24` —— 回退保护的版本是项目明确不支持的, 属死代码。
+  (`hl_v3_final/` 保留回退不动: 那是要分发出去的技能工具链, 版本不可控; 两处风格差异是有意的。)
+  形态上覆盖了 `import fitz` / `import fitz as _alias` / `import a, b, fitz` 三种。
+
+### Fixed
+- **我 5.4.20 的盘点正则只匹配「行首 `import fitz`」**, 漏掉了 `fitz` 出现在**逗号列表**里的形态
+  (如 `import json, os, re, io, sys, fitz`)。所以 5.4.20 声称"已知残留 64 处 / 46 文件"时,
+  `scripts/` 的真实数字是 **76 处 / 57 文件**。
+
+  **发现方式**: 5.4.20 改完后 CI 那条 import 探针
+  (`import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final`)
+  **仍在报弃用警告** —— 逐模块二分定位到 `tma_verify_highlights`, 再看它的第 9 行才发现是
+  `import json, os, re, io, sys, fitz`。**是探针的干净与否暴露了盘点漏项, 不是靠再读一遍清单。**
+
+### Added
+- `TestFitzImportForm` **升级为覆盖全部导入形态并扩到全仓**:
+  - 逗号列表**任意位置**的 `fitz` / `as` 别名 / `from fitz import`;
+  - 例外改为显式 `BARE_FITZ_ALLOWED` 白名单, **每条必须写明理由**:
+    `telemetry/watcher.py` 与 `telemetry/pdf_utils.py`(v5.4.11 的旧版回退)、
+    `tests/test_telemetry.py`(故意 import, 作为"telemetry 导入不带弃用警告"断言的对照面);
+  - 另加 `test_allowlist_has_no_zombie_entries` 防止白名单留僵尸条目。
+  没有这次升级, 上面那 12 处漏项随时会以同样方式再漏一次。
+
+### 验证
+- **CI 的 import 探针 stderr 终于干净**(5.4.20 时仍会打 `The \`fitz\` API is deprecated`);
+  5 个模块逐个复核也全干净。
+- **负向对照(三种形态都验过)**: 插入行首 `import fitz` / 逗号列表形态 / `from fitz import`
+  → 测试均精确报出文件:行号; 还原后通过。逗号列表那一条正是旧版盲区, 旧版会放过它。
+- `make test-py` **67 + 24** 全过(仓库卫生 6 → 7); 高亮工具链 `test_hl_lib` **36 passed** +
+  `test_forbidden_zones` **24 passed**; 本轮改动的 **65 个 `.py` 语法零失败**;
+  镜像 `--check` 退出码 0; TMA 规则校验仍 **7/7**; `gofmt` / `go vet` 干净。
+- 版本号三处同步 `1.5.20` → `1.5.21`。
+
+### 已知残留
+- 全仓只剩 **3 处**裸 `import fitz`, 均已白名单化并写明理由(见上), 不是缺陷。
+- **`test_tma_pipeline.py` 有 1 项既有失败, 与本轮无关**(已实测确认):
+  `TestRenderEngine.test_render_auto_falls_back_when_com_fails` 断言渲染页数 ≥1 但得到 0,
+  耗时 302s(在等 PowerPoint/AppleScript 超时)。用 `git stash` 把本轮改动全部移除后在**基线**上
+  单跑该测试, **以完全相同的方式失败** —— 属环境依赖(PowerPoint 自动化), 非导入改写引起。
+  该测试同时被 CI 调用, 建议单独排查。
+
 ## [5.4.20] - 2026-09-11 (清理: hl_v3_final 全量消除裸 import fitz + 分发包独有文件白名单化)
 
 两项收尾。过程中**更正了我自己先前两处说法**: ① fitz 的规模我少报了一个数量级;
