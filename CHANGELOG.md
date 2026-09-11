@@ -48,6 +48,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.15] - 2026-09-11 (清理: 冗余 .gitkeep + deps_auto.py 的 BOM)
+
+二次核查（扫查盲区）确认无功能性缺陷之后, 顺手清掉两项装饰性问题。
+
+### Removed
+- **13 个冗余 `.gitkeep`**: 它们所在目录早就有真实内容, 占位作用已失效 ——
+  `cmd/medit`、`cmd/medit-mcp`、`configs`、`internal/anno2ppt`、`internal/dedupe`、
+  `internal/enrich`、`internal/persist`、`internal/router`、`internal/source`、
+  `internal/version`、`pkg`、`rust/src`、`scripts`。
+
+  **保留了 7 个**仍在起作用的: `internal/extract`、`templates/{config,latex,pptx}`、
+  `tests/{e2e,stress,unit}` —— 这些目录确实只有 `.gitkeep` 一项, 删掉会让目录在 git 中消失
+  （git 不跟踪空目录）。删除前逐个断言了"目录内确有其它条目", 不是按硬编码清单盲删。
+
+### Fixed
+- **`scripts/deps_auto.py` 开头的 UTF-8 BOM 剥离**（5411 → 5408 字节, 按字节精确操作）。
+  需要说明这**不是**运行期缺陷 —— 实测 Python 的 import 机制、`py_compile` 以及 CI 的
+  `import deps_auto` 都容忍文件开头的 BOM（只有朴素的 `ast.parse` 会报
+  `invalid non-printable character`）。剥掉之后全仓库 **416 个 `.py` 语法检查零失败**,
+  对任何工具链都不再是例外。
+
+### 验证
+- `make test-py` **62 passed**; Go `test -race` **24 包全绿 0 失败**; `gofmt -l` 归零;
+  `go vet` 干净; 高亮工具链 **36/0**; 镜像 `--check` 退出码 0; `.gitkeep` 由 20 减至 7;
+  `medit --help` 仍列出 30 个命令。
+- `import deps_auto`、`py_compile`、以及全仓 416 个文件的 `ast.parse` 全部通过。
+
 ## [5.4.14] - 2026-09-11 (仓库卫生: 命令去重 / 工具链镜像补齐 / 生成物入库治理)
 
 承接同日那次成体系扫查。四项处置里, 有一项在核查后**推翻了我先前的建议** —— 见下。
