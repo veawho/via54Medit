@@ -48,6 +48,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.26] - 2026-09-11 (收口"禁用其它通道": 上轮只改到 1 个文件, 还有 4 个 PPT 渲染入口在走别的通道)
+
+承接 5.4.24 / 5.4.25。用户重申"只使用 PowerPoint 渲染, 禁用其它通道"后复盘发现: **上一轮
+只把 `scripts/ppt_render_engine.py` 收口了**, 而同一个仓库里还有 4 个 PPT 渲染入口各自调用
+LibreOffice / soffice, 外加 1 条被上轮改红的测试。也就是说"禁用其它通道"当时并没有禁干净。
+本轮把它们逐一对齐, 并补一条不变量测试, 防止下次再漏。
+
+### Fixed — 仍在走其它通道的 PPT 渲染入口
+
+| 入口 | 原先 | 现在 |
+| --- | --- | --- |
+| `scripts/ppt_expand.py` `render_pptx_images()` | 自己调 `libreoffice --headless` | 委托 `ppt_render_engine.render_ppt_slides_auto()` |
+| `scripts/hl_v3_final/step1_export_slides.py` | `soffice --headless` 转 PDF | 委托 `ppt_to_pdf.export_ppt_to_pdf()` |
+| `skills/…/literature-dir-init/scripts/render_ppt_slides.py` | 双引擎 `--engine applescript\|libreoffice` | 只剩 PowerPoint; 传其它引擎名直接报错 |
+| `scripts/unified_render_engine.py` | 文档写 PPT 支持 LibreOffice / python-pptx | 文档改为"只用 PowerPoint"(PPT 分支本就委托引擎) |
+
+- **`scripts/test_pipeline_ha.py::test_01_ppt_render_engine_fallback` 是 v5.4.25 改红的** ——
+  它把渲染通道指向 python-pptx 并断言"优雅降级"渲染出 3 页; v5.4.25 删掉 python-pptx 通道后
+  它必然失败, 当时没有同步改。现替换为 `test_01_ppt_render_engine_uses_powerpoint_only`
+  (验证渲染循环确实走 PowerPoint 的实现) 与 `test_01b_ppt_render_never_switches_channel`
+  (验证拿不到 PowerPoint 时返回 0 张、不降级)。
+- `scripts/deps_auto.py` 的环境自检把 WPS / soffice 列成"PPT 引擎"并提示
+  `brew install --cask libreoffice` —— 那是**引导改用其它通道**, 已删除; 改为提示
+  `pdftoppm`(PowerPoint 导出 PDF 之后才会用到的 PDF→JPG 工具)。
+- `scripts/ppt_render_engine.py` `render_via_com()` docstring 残留 "PowerPoint/WPS COM"。
+- `AGENTS.md` Step 1 摘要、`.trae/rules/project_rules.md`、两份 SKILL.md 里的
+  "soffice→PDF→JPG" / "双引擎" 表述。
+
+### Added
+
+- **`scripts/hl_v3_final/ppt_to_pdf.py`** —— PPT→PDF 的唯一实现 (`export_ppt_to_pdf()`)。
+  放在 `hl_v3_final/` 而不是 `scripts/`: 该目录会被 `sync_skill_bundle.py` 整目录镜像到技能
+  分发包, 而技能包必须**自包含**(要被分发到 `~/.hermes/skills/`), 不能 import 上层
+  `scripts/ppt_render_engine.py`。内含同样的快速预检与 `PPT_RENDER_TIMEOUT`。
+- `ppt_render_engine.export_ppt_to_pdf()` —— Windows COM / macOS AppleScript 的 PPT→PDF 原语;
+  `render_via_macos_powerpoint()` 改为复用它(先出 PDF, 再 PyMuPDF 渲染成 PNG), 消掉了两处
+  重复的 AppleScript。
+- **`tests/test_repo_hygiene.py::TestPowerPointOnlyRender`** —— 不变量: `scripts/` 与 `skills/`
+  下的非测试 Python 里不得再出现其它渲染器可执行名、LibreOffice 转换开关、已删除的通道函数名,
+  也不得再设置指向其它通道的 `RENDER_ENGINE` 取值。**这条测试的由来就是本轮的漏改** ——
+  没有它, 下次新增渲染入口时还会只改一个文件。
+- 反向控制: 临时塞一行 `subprocess.run(["libreoffice", …])` → 测试当场失败并报出
+  `文件:行号`; 删掉后恢复绿。
+
+### Changed — 渲染相关测试不再依赖本机 PowerPoint
+
+- `test_pipeline_ha.py` 的 test_06 / test_07 / test_09 需要**真实** PPT 渲染。本机 PowerPoint
+  自动化当前不可用(见下), 于是它们以"跳过 + 写明原因"呈现, 而不是伪装成管线回归。
+  探测只做一次(结果缓存)并用 `PPT_RENDER_TIMEOUT=8` 保证失败时快速返回。
+  整文件 **264s → 80s**。
+
+### Known issue — 本机 PowerPoint 自动化当前不可用 (环境问题, 不是代码)
+
+排查结论(2026-09-11 实测):
+- 通道本身是通的: `get version` → `16.112.1`; `count of presentations` → `1`。
+- 但 `save thePres in POSIX file "…" as save as PDF` **超时 -1712**; 换目标目录
+  (`~/Desktop` / `~/Documents` / `/tmp`) 一样; 改用参考文档里的 `as PDF` 写法还会退化成
+  `front document` → `-1728`(文件其实已在 GUI 打开)。
+- 与两份 SKILL.md 里已记录的 "PowerPoint AppleScript -1728 假失败" 属同一类问题。
+- 影响: PPT 渲染返回 0 页 → 依赖它的 Step 1 与 5 步端到端整体失败。
+- 修法: 手动打开一次 PowerPoint 关掉模态对话框; 并在 系统设置 › 隐私与安全性 › 自动化
+  允许当前终端/Agent 控制 PowerPoint。**代码侧不会绕过它** —— 按规范只走 PowerPoint 这一条路。
+
+### 待你确认
+
+- `scripts/unified_render_engine.py::render_docx_to_images()` 仍用 LibreOffice 把 **Word**
+  (DOC/DOCX) 转 PDF。该规则的原话与理由是"PPT 是 PowerPoint 做的, 其它渲染器视觉不一致",
+  而 PowerPoint 无法渲染 Word 文档, 故本轮**按 PPT 范围**处理、没有动它, 并把它列入
+  `TestPowerPointOnlyRender.ALLOWED` 写明理由。若你要 Word 也一并收口(只保留 Word AppleScript),
+  说一声我就改。
+
+### 验证
+
+- `make test-py` 全过(遥测 + 仓库卫生 10 项, 含本轮新增 3 项 + 禁止区 24 项)。
+- `python3 -m unittest test_tma_pipeline` 90 项全过。
+- `python3 -m pytest scripts/test_pipeline_ha.py` → 7 过 / 3 跳过(跳过原因已打印)。
+- `gofmt` / `go vet` 干净; `go test ./...` 全过。
+- 镜像一致性 `sync_skill_bundle.py --check` 退出码 0(`ppt_to_pdf.py` 已同步到技能包)。
+- 功能探针: `ppt_to_pdf.py` CLI 失败时退出码 1 + 可操作提示(不抛 traceback);
+  `render_ppt_slides.py --engine libreoffice` 被 argparse 拒绝;
+  `ppt_expand.render_pptx_images()` 返回 `[]` 并打印"按规范不切换其它通道"。
+- 版本号三处同步 `1.5.25` → `1.5.26`。
+
 ## [5.4.25] - 2026-09-11 (按规范把其它渲染通道**整体删除**: 只留 PowerPoint 一条路)
 
 承接 5.4.24。用户明确要求"只使用 PowerPoint 渲染, 禁用其它通道", 本轮把 WPS / LibreOffice /
