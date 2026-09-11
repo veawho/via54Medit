@@ -12,7 +12,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
 from .aggregator import TelemetryAggregator
-from .config import load_config, WEEKDAY_NAMES
+from .config import (
+    DEFAULT_MONTHLY_SCHEDULE,
+    DEFAULT_WEEKLY_SCHEDULE,
+    WEEKDAY_NAMES,
+    load_config,
+)
 from .db import TelemetryDB
 from .feishu_sync import FeishuSyncClient
 from .platform_paths import desktop_dir, trae_work_exe, windows_startup_dir
@@ -109,6 +114,9 @@ class TelemetryDaemon:
         self.scanner = WorkspaceScanner(self.db)
         self.last_weekly_sent = ""
         self.last_monthly_sent = ""
+        # 已处理过的"别关机提醒"幂等 key (按提醒日分桶)。跨重启的幂等由 alerter
+        # 落盘的状态保证, 这里只是避免同一天里每 5 秒反复走一遍判断。
+        self._last_reminder_key = ""
         self.last_scan_time = 0.0
         # 重复消息限流状态 (见 log)
         self._last_msg = ""
@@ -230,7 +238,7 @@ class TelemetryDaemon:
         weekly_cfg = cfg.get("schedule", {}).get("weekly", {})
         if weekly_cfg.get("enabled", True):
             target_weekday = weekly_cfg.get("day_of_week", 0)  # 0=Monday
-            target_time = weekly_cfg.get("time", "09:00")
+            target_time = weekly_cfg.get("time", DEFAULT_WEEKLY_SCHEDULE["time"])
             if now.weekday() == target_weekday and time_str == target_time:
                 if self.last_weekly_sent != today_str:
                     self.last_weekly_sent = today_str
@@ -258,7 +266,7 @@ class TelemetryDaemon:
         monthly_cfg = cfg.get("schedule", {}).get("monthly", {})
         if monthly_cfg.get("enabled", True):
             target_day = monthly_cfg.get("day_of_month", 1)
-            target_time = monthly_cfg.get("time", "09:00")
+            target_time = monthly_cfg.get("time", DEFAULT_MONTHLY_SCHEDULE["time"])
 
             is_month_trigger = False
             if target_day == -1:
@@ -292,12 +300,67 @@ class TelemetryDaemon:
                     except Exception as e:
                         self.log(f"  ❌ 月报自动推送异常: {e}")
 
+        # --- C. 推送日的前一个工作日提醒 ("别关机") ---
+        self._check_reminder(cfg, now)
+
+    def _check_reminder(self, cfg: Dict[str, Any], now: datetime):
+        """在推送日的**前一个工作日**提醒用户别关机。
+
+        为什么需要: 推送是到点触发的 —— 机器关机或休眠, 那一次周报/月报就静默丢失,
+        不报错也不补发。提前提醒是唯一能在事前降低这种概率的手段。
+
+        "前一个工作日"必须查法定节假日安排(春节连休、国庆调休都会让简单加减一天失效),
+        见 reminders / holidays 两个模块。
+
+        本方法只为记录**进程内**幂等 key; 跨重启的幂等由 alerter 落盘的状态保证,
+        因此守护进程被反复拉起也不会重复打扰。
+        """
+        try:
+            from .reminders import due_reminders, reminder_key, send_due
+
+            items = due_reminders(cfg, now)
+            if not items:
+                return
+            key = reminder_key(items[0]["remind_date"])
+            if key == self._last_reminder_key:
+                return                      # 本进程今天已经处理过, 不必再走一遍发送判断
+            result = send_due(cfg, now, logger=self.log)
+            if result:
+                self._last_reminder_key = result[2]
+        except Exception as e:                              # noqa: BLE001
+            # 提醒失败绝不能影响守护进程本身 —— 它是"锦上添花", 不是主链路。
+            self.log(f"提醒检查异常(已忽略): {e}")
+
     def _update_heartbeat(self, cfg: Dict[str, Any], now: datetime):
+        weekly = (cfg.get("schedule") or {}).get("weekly") or {}
+        monthly = (cfg.get("schedule") or {}).get("monthly") or {}
+        try:
+            widx = int(weekly.get("day_of_week", DEFAULT_WEEKLY_SCHEDULE["day_of_week"]))
+        except (TypeError, ValueError):
+            widx = DEFAULT_WEEKLY_SCHEDULE["day_of_week"]
+        # 下次推送时刻与提醒设置也写进心跳: 推送是到点触发的, "下次什么时候推"
+        # 是排查"为什么这次没推"时的第一个问题, 不该只能靠读配置去猜。
+        next_at: Dict[str, str] = {}
+        try:
+            from .reminders import reminder_settings, upcoming_pushes
+
+            for kind, when in upcoming_pushes(cfg, now):
+                next_at[kind] = when.strftime("%Y-%m-%d %H:%M")
+            rconf = reminder_settings(cfg)
+        except Exception:                                   # noqa: BLE001
+            rconf = {"enabled": False, "time": ""}
         hb = {
             "pid": os.getpid(),
             "last_tick": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "weekly_schedule": f"{WEEKDAY_NAMES[cfg['schedule']['weekly']['day_of_week']]} {cfg['schedule']['weekly']['time']}",
-            "monthly_schedule": f"每月{cfg['schedule']['monthly']['day_of_month']}日 {cfg['schedule']['monthly']['time']}",
+            "weekly_schedule": "%s %s" % (
+                WEEKDAY_NAMES[widx] if 0 <= widx < len(WEEKDAY_NAMES) else "?",
+                weekly.get("time", DEFAULT_WEEKLY_SCHEDULE["time"])),
+            "monthly_schedule": "每月%s日 %s" % (
+                monthly.get("day_of_month", DEFAULT_MONTHLY_SCHEDULE["day_of_month"]),
+                monthly.get("time", DEFAULT_MONTHLY_SCHEDULE["time"])),
+            "next_weekly": next_at.get("weekly", ""),
+            "next_monthly": next_at.get("monthly", ""),
+            "reminder": {"enabled": rconf.get("enabled", False), "time": rconf.get("time", "")},
             "user": cfg["user"]["nickname"],
             "open_id": cfg["user"]["open_id"],
             "fd": self.last_fd,

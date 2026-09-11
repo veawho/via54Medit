@@ -43,6 +43,13 @@ param (
     [Parameter(Mandatory=$false)]
     [string]$Monthly = "",
 
+    # 推送日的前一个工作日「别关机」提醒时刻 (如 "18:00"); 默认 18:00, 见 reminders.py
+    [Parameter(Mandatory=$false)]
+    [string]$Reminder = "",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoReminder,
+
     [Parameter(Mandatory=$false)]
     [switch]$Silent,
 
@@ -116,6 +123,8 @@ if ($AppSecret) { $pyArgs += "--app-secret"; $pyArgs += $AppSecret }
 if ($Bitable) { $pyArgs += "--bitable"; $pyArgs += $Bitable }
 if ($Weekly) { $pyArgs += "--weekly"; $pyArgs += $Weekly }
 if ($Monthly) { $pyArgs += "--monthly"; $pyArgs += $Monthly }
+if ($Reminder) { $pyArgs += "--reminder"; $pyArgs += $Reminder }
+if ($NoReminder) { $pyArgs += "--no-reminder" }
 if ($NoStartup) { $pyArgs += "--no-startup" }
 if ($NoLauncher) { $pyArgs += "--no-launcher" }
 if ($Uninstall) { $pyArgs += "--uninstall" }

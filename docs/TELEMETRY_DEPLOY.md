@@ -28,8 +28,11 @@ powershell -ExecutionPolicy Bypass -File .\telemetry\deploy.ps1 -Silent
 
 #### 自定义花名与定时排程单行示例:
 ```powershell
+# 默认即为 每周一 10:30 / 每月 1 日 10:30; 下面演示改成自定义时间
 powershell -ExecutionPolicy Bypass -File .\telemetry\deploy.ps1 -Nickname "张三" -Weekly "Friday 18:00" -Monthly "last 18:00" -Silent
 ```
+
+> **默认排程**: 周报推送与同步 **每周一 10:30**、月报 **每月 1 日 10:30**；并在推送日的**前一个工作日 18:00** 自动提醒「别关机」（推送是到点触发的，关机或休眠那一次会静默漏推）。提醒日按**法定节假日**推算 —— 避开春节/国庆连休，并把调休补班的周六算作工作日，数据取自国务院办公厅公告。查看: `python -m telemetry.cli holiday`；关闭提醒: `-NoReminder`。
 
 #### 跨机器/内网远程管道单行 (下载即跑):
 ```powershell
@@ -80,8 +83,10 @@ telemetry\deploy.bat --silent
 | `-AppId` | `--app-id` | 企业自建飞书应用 App ID (若不传则自动继承 TraeWork) | `"cli_a1b2c3d4..."` |
 | `-AppSecret` | `--app-secret` | 企业自建飞书应用 App Secret | `"your_app_secret"` |
 | `-Bitable` | `--bitable` | 团队飞书多维表格 (Bitable Base) App Token 或完整 URL | `"bascny4kK..."` 或 `"https://feishu.cn/base/..."` |
-| `-Weekly` | `--weekly` | 每周定时报告与表格同步时间 | `"Friday 18:00"`, `"周一 09:00"` |
-| `-Monthly` | `--monthly` | 每月定时报告与历史战报时间 | `"1 09:00"`, `"last 18:00"` |
+| `-Weekly` | `--weekly` | 每周定时报告与表格同步时间（**默认 每周一 10:30**） | `"Monday 10:30"`, `"周一 10:30"` |
+| `-Monthly` | `--monthly` | 每月定时报告与历史战报时间（**默认 每月 1 日 10:30**） | `"1 10:30"`, `"last 18:00"` |
+| `-Reminder` | `--reminder` | 「别关机」提醒时刻（推送日的**前一个工作日**，按法定节假日推算；默认 18:00 开启） | `"18:00"` |
+| `-NoReminder` | `--no-reminder` | 关闭「别关机」提醒 | 标志位 |
 | `-Silent` | `--silent`, `-s` | 无交互静默模式，直接应用参数或嗅探凭据 | 标志位 |
 | `-NoStartup` | `--no-startup` | 不注册开机自启（macOS LaunchAgent / Windows Startup VBS） | 标志位 |
 | `-NoLauncher` | `--no-launcher` | 不在桌面生成 TraeWork 伴随启动器快捷方式 | 标志位 |

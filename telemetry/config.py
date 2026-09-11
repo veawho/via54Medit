@@ -30,6 +30,31 @@ WEEKDAY_MAP = {
 }
 WEEKDAY_NAMES = ["周一 (Monday)", "周二 (Tuesday)", "周三 (Wednesday)", "周四 (Thursday)", "周五 (Friday)", "周六 (Saturday)", "周日 (Sunday)"]
 
+# --------------------------------------------------------------------------- #
+# 默认排程 —— **唯一事实来源**
+#
+# 周报: 每周一 10:30   月报: 每月 1 日 10:30
+# 提醒: 推送日的前一个工作日 18:00 提醒用户别关机 (见 reminders.py)
+#
+# 这些常量同时被 config.DEFAULT_CONFIG、daemon 的兜底取值与 nlp_deploy 的默认值引用 ——
+# 之前默认时间散落在三处字面量里("09:00" 抄了三遍), 改一次要改三处, 迟早漏一处。
+# --------------------------------------------------------------------------- #
+DEFAULT_WEEKLY_SCHEDULE: Dict[str, Any] = {
+    "enabled": True,
+    "day_of_week": 0,       # 0 = Monday
+    "time": "10:30",
+}
+DEFAULT_MONTHLY_SCHEDULE: Dict[str, Any] = {
+    "enabled": True,
+    "day_of_month": 1,      # 1..28 或 -1 (月末)
+    "time": "10:30",
+}
+#: 推送日前一个工作日的"别关机"提醒。
+DEFAULT_REMINDER_SCHEDULE: Dict[str, Any] = {
+    "enabled": True,
+    "time": "18:00",        # 该工作日下班前后, 用户离开工位之前
+}
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "version": 1,
     "user": {
@@ -54,16 +79,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "company_bitable_field_map": {}     # 可选：自定义 标准字段名 -> 目标表字段名 覆盖
     },
     "schedule": {
-        "weekly": {
-            "enabled": True,
-            "day_of_week": 0,  # 0 = Monday, 4 = Friday
-            "time": "09:00"    # HH:MM
-        },
-        "monthly": {
-            "enabled": True,
-            "day_of_month": 1, # 1..28 或 -1 (月末)
-            "time": "09:00"
-        }
+        "weekly": json.loads(json.dumps(DEFAULT_WEEKLY_SCHEDULE)),
+        "monthly": json.loads(json.dumps(DEFAULT_MONTHLY_SCHEDULE)),
+        "reminder": json.loads(json.dumps(DEFAULT_REMINDER_SCHEDULE)),
     },
     "watcher": {
         "poll_interval_seconds": 30,
@@ -80,6 +98,72 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "min_interval_minutes": 60
     }
 }
+
+
+#: 排程默认值迁移
+#
+# 旧版本默认是 09:00。已部署过的设备把 09:00 **写进了** ~/.medit/telemetry_config.json,
+# 因此只改 DEFAULT_CONFIG 对它们无效 —— 深合并时旧值会盖住新默认。
+#
+# 迁移规则: **只在该值仍等于旧默认值时才替换**, 也就是"用户没自定义过"的才动;
+# 用户自己设过的(例如 Friday 18:00)一律不碰。并且打一次版本戳, 只做一次 ——
+# 否则将来用户**故意**改回 09:00, 又会被悄悄顶成 10:30。
+SCHEDULE_DEFAULTS_VERSION = 2
+_FORMER_DEFAULTS = {
+    ("weekly", "time"): "09:00",
+    ("monthly", "time"): "09:00",
+}
+
+
+def _migrate_schedule_defaults(saved: Dict[str, Any], config: Dict[str, Any]) -> bool:
+    """把仍是旧默认值的排程升到当前默认。返回是否**需要落盘**。
+
+    ``saved`` 是磁盘上那份配置(用来看用户到底写了什么), ``config`` 是合并后的结果。
+    """
+    try:
+        version = int(saved.get("schedule_defaults_version", 1))
+    except (TypeError, ValueError):
+        version = 1
+    if version >= SCHEDULE_DEFAULTS_VERSION:
+        return False
+
+    schedule = config.setdefault("schedule", {})
+    changed = []
+    for (section, field_name), former in _FORMER_DEFAULTS.items():
+        new_default = (DEFAULT_CONFIG["schedule"][section] or {}).get(field_name)
+        node = schedule.setdefault(section, {})
+        # 只有"磁盘上明确写着旧默认值"才算没自定义过
+        stored = (saved.get("schedule", {}) or {}).get(section, {}) or {}
+        if str(stored.get(field_name, "")) != former:
+            continue
+        if str(node.get(field_name, "")) == former and new_default:
+            node[field_name] = new_default
+            changed.append("%s.%s: %s -> %s" % (section, field_name, former, new_default))
+
+    config["schedule_defaults_version"] = SCHEDULE_DEFAULTS_VERSION
+    if changed:
+        print("[Config] 排程默认值已升级: %s" % "; ".join(changed))
+    # 无论是否真的改了时间, 版本戳都要落盘一次 —— 否则"用户将来故意改回旧默认值"
+    # 又会被当成未迁移而再次顶掉。
+    return True
+
+
+def _persist_migration(config: Dict[str, Any]):
+    """静默回写迁移结果。只在配置文件**已存在**时写 —— 不能让只读命令顺手造出一个配置文件。"""
+    if not os.path.exists(CONFIG_FILE_PATH):
+        return
+    try:
+        directory = os.path.dirname(CONFIG_FILE_PATH)
+        os.makedirs(directory, exist_ok=True)
+        fd = os.open(CONFIG_FILE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        try:
+            os.chmod(CONFIG_FILE_PATH, 0o600)
+        except OSError:
+            pass
+    except OSError as e:
+        print(f"[Config] 排程迁移回写失败 (本次运行仍已生效): {e}")
 
 
 def load_config() -> Dict[str, Any]:
@@ -122,6 +206,9 @@ def load_config() -> Dict[str, Any]:
                         config[k].update(v)
                     else:
                         config[k] = v
+            # 旧默认值(09:00)已被写进老设备的配置文件, 光改 DEFAULT_CONFIG 对它们无效。
+            if _migrate_schedule_defaults(saved, config):
+                _persist_migration(config)
         except Exception as e:
             print(f"[Config] 读取配置文件异常: {e}")
 
@@ -289,11 +376,38 @@ def interactive_setup():
             except Exception as e:
                 print(f"   ⚠️ 输入格式有误 ({e})，保持默认。")
 
+    # 4. 「别关机」提醒 (推送日的前一个工作日)
+    print("4. 「别关机」提醒:")
+    print("   推送是**到点触发**的: 目标时刻机器关机或休眠, 这一次就静默漏推、不补发。")
+    print("   因此默认在推送日的**前一个工作日**(按法定节假日推算, 会避开连休与调休)提醒一次。")
+    rem = current["schedule"].setdefault(
+        "reminder", json.loads(json.dumps(DEFAULT_REMINDER_SCHEDULE)))
+    cur_rtime = rem.get("time", DEFAULT_REMINDER_SCHEDULE["time"])
+    cur_ren = rem.get("enabled", True)
+    ans_r = input(f"   是否开启？(Y/n) [当前: {'已开启' if cur_ren else '已关闭'}]: ").strip().lower()
+    if ans_r in ["n", "no"]:
+        rem["enabled"] = False
+        print("   ✓ 已关闭提醒 (可随时用 `config --set-reminder 18:00` 重新开启)。\n")
+    else:
+        rem["enabled"] = True
+        r_input = input(f"   提醒时刻 (格式 HH:MM) [{cur_rtime}]: ").strip()
+        if r_input:
+            try:
+                hh, mm = r_input.split(":")
+                h, m = int(hh), int(mm)
+                if not (0 <= h <= 23 and 0 <= m <= 59):
+                    raise ValueError
+                rem["time"] = f"{h:02d}:{m:02d}"
+            except Exception:
+                print(f"   ⚠️ 时间格式有误，保持 {cur_rtime}。")
+        print(f"   ✓ 将在推送日的前一个工作日 {rem['time']} 提醒。\n")
+
     # 保存配置
     save_config(current)
     print("\n================================================================")
     print("🎉 部署初始化完成！您现在可以随时执行以下命令：")
     print("  • 启动主动后台监控守护: python -m telemetry.cli daemon --start")
     print("  • 查看/修改当前配置:     python -m telemetry.cli config")
+    print("  • 查看法定节假日日历:     python -m telemetry.cli holiday")
     print("  • 推送测试卡片:           python -m telemetry.cli push --period week")
     print("================================================================\n")

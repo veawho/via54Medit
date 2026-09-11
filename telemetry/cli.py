@@ -217,6 +217,62 @@ def cmd_backfill(args):
     print(f"[Backfill] 全部录入完成！历史累计录入: 检索 {total_stats['retrieval']} 项, 下载 {total_stats['download']} 篇, 高亮 {total_stats['highlight']} 篇。")
 
 
+def cmd_holiday(args):
+    """法定节假日日历的查看与刷新。
+
+    用途: 确认"前一个工作日"是怎么算出来的。提醒要在推送日的前一个工作日发出, 而
+    那一天可能是调休补班的周六、也可能因为连休而往前推好几天 —— 这张日历就是依据。
+    """
+    from datetime import date as _date
+
+    from . import holidays
+
+    if args.refresh:
+        for path in holidays.clear_cache(args.year or None):
+            print(f"[Holiday] 已清除缓存: {path}")
+        holidays.reset_cache()
+        print("[Holiday] 缓存已清, 下次判断将重新取数。")
+
+    if args.check:
+        try:
+            d = _date.fromisoformat(args.check.strip())
+        except ValueError:
+            print(f"[Holiday] 日期格式错误: {args.check!r} (应为 YYYY-MM-DD)")
+            return
+        ok, text = holidays.workday_status(d)
+        print(f"[Holiday] {d.isoformat()} {text} → {'工作日' if ok else '非工作日'}")
+        print(f"          前一个工作日: {holidays.previous_workday(d).isoformat()}")
+        return
+
+    st = holidays.cache_status(args.year or None)
+    print("=======================================================")
+    print(f"📅 法定节假日日历 ({st['year']} 年)")
+    print("=======================================================")
+    print(f"• 数据来源:   {st['source']}{'' if st['authoritative'] else '  (非权威: 仅按周末推算)'}")
+    print(f"• 放假天数:   {st['off_days']} 天    调休补班: {st['work_days']} 天")
+    print(f"• 缓存目录:   {st['cache_dir']}"
+          f"{'  (距今 %.1f 天)' % st['cache_age_days'] if st['cache_age_days'] is not None else '  (无缓存)'}")
+    if st["papers"]:
+        print("• 依据公告:")
+        for paper in st["papers"]:
+            print(f"    - {paper}")
+    if st["note"]:
+        print(f"• 说明:       {st['note']}")
+    # 展示提醒实际会踩到的日期, 让"哪天该提醒"一目了然
+    try:
+        from .reminders import reminder_status
+
+        upcoming = reminder_status(load_config()).get("upcoming") or []
+        if upcoming:
+            print("• 排程与提醒日:")
+            for item in upcoming:
+                print(f"    - 下次{item['label']}: {item['target']}  →  提醒日 "
+                      f"{item['remind_date']}（{item['remind_status']}）")
+    except Exception:                                       # noqa: BLE001
+        pass
+    print("=======================================================")
+
+
 def cmd_init(args):
     """跨设备初始化向导。"""
     interactive_setup()
@@ -264,7 +320,7 @@ def cmd_config(args):
             except Exception as e:
                 print(f"[Config] 错误: {e}")
         else:
-            print("[Config] 格式错误，请使用: --set-weekly '<Day> <HH:MM>'，如 'Friday 18:00' 或 '周一 09:00'")
+            print("[Config] 格式错误，请使用: --set-weekly '<Day> <HH:MM>'，如 'Monday 10:30' 或 '周一 10:30'")
 
     if args.set_monthly:
         parts = args.set_monthly.strip().split()
@@ -279,7 +335,27 @@ def cmd_config(args):
             except Exception as e:
                 print(f"[Config] 错误: {e}")
         else:
-            print("[Config] 格式错误，请使用: --set-monthly '<Day> <HH:MM>'，如 '1 09:00' 或 'last 18:00'")
+            print("[Config] 格式错误，请使用: --set-monthly '<Day> <HH:MM>'，如 '1 10:30' 或 'last 18:00'")
+
+    if args.set_reminder:
+        parts = args.set_reminder.strip().split(":")
+        try:
+            h, m = int(parts[0]), int(parts[1])
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                raise ValueError
+        except Exception:
+            print("[Config] 格式错误，请使用: --set-reminder '18:00' (24 小时制 HH:MM)")
+        else:
+            node = cfg["schedule"].setdefault("reminder", {})
+            node["time"] = "%02d:%02d" % (h, m)
+            node["enabled"] = True
+            print("[Config] 已开启「别关机」提醒: 推送日的前一个工作日 %02d:%02d" % (h, m))
+            modified = True
+
+    if args.no_reminder:
+        cfg["schedule"].setdefault("reminder", {})["enabled"] = False
+        print("[Config] 已关闭「别关机」提醒 (可随时用 --set-reminder '18:00' 重新开启)")
+        modified = True
 
     if args.add_watch_dir:
         abs_p = os.path.abspath(args.add_watch_dir)
@@ -305,6 +381,20 @@ def cmd_config(args):
     print(f"• 公共表格 Token: {cfg['feishu']['company_sheet_token'] or '默认自动双备份至本地 CSV'}")
     print(f"• 每周汇报时间:    每{WEEKDAY_NAMES[w_day_idx]} {cfg['schedule']['weekly']['time']}")
     print(f"• 每月汇报时间:    每月{m_day_name} {cfg['schedule']['monthly']['time']}")
+    # 提醒与"下次什么时候推"一并展示: 推送是到点触发的, 这两个信息是理解
+    # "为什么这次没推 / 下次什么时候推"的关键, 不该只能靠读配置文件去拼。
+    try:
+        from .reminders import reminder_status
+
+        st = reminder_status(cfg)
+        print(f"• 别关机提醒:      {'已开启' if st['enabled'] else '已关闭'}"
+              f"  (推送日的前一个工作日 {st['time']} 提醒)")
+        for item in st["upcoming"]:
+            flag = "" if item["authoritative"] else "  ⚠️ 仅按周末推算"
+            print(f"    - 下次{item['label']}: {item['target']}  →  提醒日 {item['remind_date']}"
+                  f"（{item['remind_status']}）{flag}")
+    except Exception as e:                                  # noqa: BLE001
+        print(f"• 别关机提醒:      状态读取失败 ({e})")
     print(f"• 主动监控目录:    {len(cfg['watcher']['watch_dirs'])} 个:")
     for d in cfg["watcher"]["watch_dirs"]:
         print(f"    - {d}")
@@ -514,8 +604,11 @@ def main():
     p_cfg.add_argument("--app-secret", default="", help="修改飞书应用 App Secret")
     p_cfg.add_argument("--sheet", default="", help="修改企业公共统计表 Token")
     p_cfg.add_argument("--bitable", default="", help="绑定团队飞书多维表格 (Base) URL 或 Token")
-    p_cfg.add_argument("--set-weekly", default="", help="修改每周报告时间，例: 'Friday 18:00' 或 '周一 09:00'")
-    p_cfg.add_argument("--set-monthly", default="", help="修改每月报告时间，例: '1 09:00' 或 'last 18:00'")
+    p_cfg.add_argument("--set-weekly", default="", help="修改每周报告时间，例: 'Monday 10:30' 或 '周一 10:30'")
+    p_cfg.add_argument("--set-monthly", default="", help="修改每月报告时间，例: '1 10:30' 或 'last 18:00'")
+    p_cfg.add_argument("--set-reminder", default="",
+                       help="开启/修改「别关机」提醒时刻 (推送日的前一个工作日)，例: '18:00'")
+    p_cfg.add_argument("--no-reminder", action="store_true", help="关闭「别关机」提醒")
     p_cfg.add_argument("--add-watch-dir", default="", help="添加主动监控目录路径")
     p_cfg.set_defaults(func=cmd_config)
 
@@ -565,6 +658,13 @@ def main():
     p_bitable.add_argument("--report", action="store_true", help="汇总团队所有成员数据生成图表看板")
     p_bitable.add_argument("--open-browser", action="store_true", help="生成报告后在浏览器打开")
     p_bitable.set_defaults(func=cmd_bitable)
+
+    # holiday (法定节假日日历: 提醒日按它推算)
+    p_holiday = subparsers.add_parser("holiday", help="查看/刷新法定节假日日历 (提醒日的推算依据)")
+    p_holiday.add_argument("--year", type=int, default=0, help="查看指定年份 (默认今年)")
+    p_holiday.add_argument("--refresh", action="store_true", help="清除本地缓存后重新取数")
+    p_holiday.add_argument("--check", default="", help="判断某一天是否为工作日，例: '2026-10-01'")
+    p_holiday.set_defaults(func=cmd_holiday)
 
     # scan
     p_scan = subparsers.add_parser("scan", help="扫描特定项目目录并录入成果")

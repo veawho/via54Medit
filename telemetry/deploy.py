@@ -51,6 +51,7 @@ if PROJECT_ROOT not in sys.path:
 from telemetry.config import (
     CONFIG_FILE_PATH,
     DEFAULT_CONFIG,
+    DEFAULT_REMINDER_SCHEDULE,
     WEEKDAY_NAMES,
     interactive_setup,
     load_config,
@@ -383,6 +384,26 @@ def setup_configuration(args) -> dict:
             elif len(parts) == 1 and ":" in parts[0]:
                 cfg["schedule"]["monthly"]["time"] = parts[0]
 
+        # 「别关机」提醒
+        #
+        # 用 getattr 而不是直接取属性: setup_configuration 也会被测试/其它调用方以
+        # 手工构造的 Namespace 调用, 那种 Namespace 未必带这两个新参数 —— 直接取会
+        # AttributeError 把整个部署带崩。
+        rem = cfg["schedule"].setdefault("reminder", dict(DEFAULT_REMINDER_SCHEDULE))
+        if getattr(args, "no_reminder", False):
+            rem["enabled"] = False
+        reminder_time = getattr(args, "reminder", "")
+        if reminder_time:
+            try:
+                hh, mm = reminder_time.strip().split(":")
+                h, m = int(hh), int(mm)
+                if not (0 <= h <= 23 and 0 <= m <= 59):
+                    raise ValueError
+                rem["time"] = "%02d:%02d" % (h, m)
+                rem["enabled"] = True
+            except Exception:
+                print(f"    ⚠️ 提醒时刻格式有误 ({reminder_time!r}), 保持 {rem.get('time')}")
+
         if args.add_watch_dir:
             wdir = os.path.abspath(args.add_watch_dir)
             if wdir not in cfg["watcher"]["watch_dirs"]:
@@ -403,6 +424,12 @@ def setup_configuration(args) -> dict:
     m_day = "月末最后一天" if cfg['schedule']['monthly']['day_of_month'] == -1 else f"{cfg['schedule']['monthly']['day_of_month']}日"
     m_time = cfg['schedule']['monthly']['time']
     print(f"    • 每月汇报时间:  每月 {m_day} {m_time}")
+    rem = cfg["schedule"].get("reminder") or {}
+    if rem.get("enabled", True):
+        print(f"    • 别关机提醒:    已开启 — 推送日的前一个工作日 {rem.get('time', DEFAULT_REMINDER_SCHEDULE['time'])}"
+              f" (按法定节假日推算)")
+    else:
+        print("    • 别关机提醒:    已关闭")
     return cfg
 
 
@@ -492,8 +519,10 @@ def main():
     parser.add_argument("--app-secret", default="", help="企业自建飞书应用 App Secret")
     parser.add_argument("--sheet", default="", help="飞书公共多维表格/电子表格 Token")
     parser.add_argument("--bitable", default="", help="飞书团队多维表格 (Bitable) App Token 或完整 URL (用于团队数据周报自动上传汇总)")
-    parser.add_argument("--weekly", default="", help="每周定时报告时间，如: 'Friday 18:00' 或 '周一 09:00'")
-    parser.add_argument("--monthly", default="", help="每月定时报告时间，如: '1 09:00' 或 'last 18:00'")
+    parser.add_argument("--weekly", default="", help="每周定时报告时间，如: 'Monday 10:30' 或 '周一 10:30' (默认 周一 10:30)")
+    parser.add_argument("--monthly", default="", help="每月定时报告时间，如: '1 10:30' 或 'last 18:00' (默认 每月1日 10:30)")
+    parser.add_argument("--reminder", default="", help="「别关机」提醒时刻，如 '18:00' (默认 18:00, 在推送日的前一个工作日)")
+    parser.add_argument("--no-reminder", action="store_true", help="关闭推送日前一个工作日的「别关机」提醒")
     parser.add_argument("--add-watch-dir", default="", help="追加主动监控的工作区目录")
     parser.add_argument("--no-startup", action="store_true", help="不注册 Windows Startup 开机自启")
     parser.add_argument("--no-launcher", action="store_true", help="不创建桌面伴随启动器")

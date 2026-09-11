@@ -7,6 +7,21 @@ import re
 from typing import Any, Dict, Optional
 
 
+def _default_time(kind: str) -> str:
+    """取当前默认排程时间 (weekly / monthly)。
+
+    放在这里而不是写死字面量: 默认排程的唯一事实来源是 ``config.DEFAULT_*_SCHEDULE``,
+    NLP 解析只是"用户没写明时间"时回退到它。默认从 09:00 改到 10:30 时, 这一处会跟着变。
+    """
+    try:
+        from .config import DEFAULT_MONTHLY_SCHEDULE, DEFAULT_WEEKLY_SCHEDULE
+
+        node = DEFAULT_WEEKLY_SCHEDULE if kind == "weekly" else DEFAULT_MONTHLY_SCHEDULE
+        return str(node.get("time") or "10:30")
+    except Exception:                                       # noqa: BLE001
+        return "10:30"
+
+
 def parse_natural_language_instruction(text: str) -> Dict[str, Any]:
     """
     解析用户输入的自然语言部署指令。
@@ -84,18 +99,20 @@ def parse_natural_language_instruction(text: str) -> Dict[str, Any]:
     # 提取时间 (HH:MM 或 下午/晚上/上午 X 点)
     w_time = _extract_time_of_day(raw)
     if weekly_day:
-        result["weekly"] = f"{weekly_day} {w_time or '18:00'}"
+        # 未写明时间时用**当前默认排程**的值, 而不是另写一个字面量 ——
+        # 否则默认改了这里还停在旧值, 同一条"NLP 没给时间"的输入会得到两种结果。
+        result["weekly"] = f"{weekly_day} {w_time or _default_time('weekly')}"
 
     # 6. 提取每月汇报时间 (Monthly Schedule)
     # 支持: 每月1日 09:00, 月末 18:00, 每月最后一天
     if "月末" in raw or "最后一天" in raw or "last" in low:
-        m_time = w_time or "18:00"
+        m_time = w_time or _default_time("monthly")
         result["monthly"] = f"last {m_time}"
     else:
         m_day_match = re.search(r"每?月\s*([012]?\d)\s*[日号号]?", raw)
         if m_day_match:
             d_val = m_day_match.group(1)
-            m_time = w_time or "09:00"
+            m_time = w_time or _default_time("monthly")
             result["monthly"] = f"{d_val} {m_time}"
 
     # 7. 提取多维表格 Token 或完整 URL

@@ -21,12 +21,13 @@
    - **花名随时修改**：支持随时通过命令调整用户花名，并与所有统计报表实时联动。
 4. **主动监控与排程守护 (Daemon)**：
    - **后台主动嗅探**：守护进程每 30 秒主动轮询工作区，发现新下载/新高亮成果实时自动入库。
-   - **周报/月报自由排程**：支持自定义每周、每月推送时间（如“每周五 18:00”、“每月 1 日 09:00”）。
+   - **周报/月报自由排程**：默认 **周报每周一 10:30 / 月报每月 1 日 10:30**，可自定义（如“每周五 18:00”、“月末 18:00”）。
+   - **推送日的前一个工作日提醒「别关机」**：推送是到点触发的，机器关机或休眠那一次就静默漏推。提醒日按**法定节假日**推算（避开春节/国庆连休，并把调休补班的周六算作工作日），数据来自国务院办公厅公告，见 §1.8。
    - 到点自动推送交互式战报卡片至绑定飞书账号，并自动同步至公司公共统计表。
 5. **飞书多维表格 (Bitable) 团队协作**：
-   - **字段自适应**：同步前读取目标表实际字段名自动判定 schema（自建标准表 15 字段 / 公司既有「监控数据周报明细」表 13 字段）。写入时按映射改名并丢弃目标表没有的列，读取时反向归一化为标准字段名，因此接入公司既有表无需改动图表大屏与战报逻辑。
+   - **字段自适应**：同步前读取目标表实际字段名自动判定 schema（自建标准表见 `TABLE_SCHEMA_FIELDS` / 公司既有「监控数据周报明细」表 13 字段）。写入时按映射改名并丢弃目标表没有的列，读取时反向归一化为标准字段名，因此接入公司既有表无需改动图表大屏与战报逻辑。
    - **幂等上传**：以「汇报周期 + 成员」为 upsert 键，同一周重复上传只更新原记录不新增；目标表备注列已有人工内容时不覆盖。
-   - **演练与备份**：`bitable --sync --dry-run` 先看 schema 判定与将写入字段，不提交也不写备份；本地 `~/.medit/team_bitable_backup.csv` 恒以标准字段名、固定 15 列落盘，与目标表 schema 无关。
+   - **演练与备份**：`bitable --sync --dry-run` 先看 schema 判定与将写入字段，不提交也不写备份；本地 `~/.medit/team_bitable_backup.csv` 恒以标准字段名、按 `BACKUP_FIELDS` 固定列序落盘，与目标表 schema 无关。
 6. **关键事件外部告警 (飞书)**：
    - **让「不崩溃的故障」也能被看见**：守护进程的文件描述符占用达到软上限 80% 时推一条飞书告警。这类资源耗尽不会让进程退出，`KeepAlive` 之类手段无从感知 —— 只在本地日志里留痕，就得靠人主动去看。
    - **定时同步失败同样告警**：构建失败推 `critical`、代码未同步推 `warning`。同步成功、以及「工作区有未提交改动而跳过拉取」保持安静，避免训练人忽略告警。
@@ -37,6 +38,22 @@
    - **任一环节出问题都不让整轮白跑**：拉取遇网络/代理抖动会短重试 3 次（间隔 10s），仍失败也继续构建；工作区有未提交改动时跳过拉取（避免 autostash 回放冲突）但仍从当前工作区重建。
    - **退出码如实反映**：`0` = 部署已更新（含「脏工作区跳过同步」这种预期情况）／`1` = 构建失败，部署确实未更新／`2` = 二进制已重建但代码未同步（暂时性网络故障）。
    - **日志可回溯**：每行带时间戳，落在 `~/.medit/autosync.log`（超 5 MB 留一份 `.1` 后轮转）。
+8. **默认排程、法定节假日与「别关机」提醒**：
+
+   | 项 | 默认值 | 配置键 |
+   | :--- | :--- | :--- |
+   | 周报推送与同步 | **每周一 10:30** | `schedule.weekly` |
+   | 月报推送与同步 | **每月 1 日 10:30** | `schedule.monthly`（`-1` = 月末） |
+   | 「别关机」提醒 | **推送日的前一个工作日 18:00**，默认开启 | `schedule.reminder` |
+
+   推送是**到点触发**的：守护进程必须在目标时刻正在运行，机器关机或休眠那一次就**静默丢失**（不报错、不补发）。因此默认在推送日的**前一个工作日**提醒一次。
+
+   - **提醒日按法定节假日推算**，不能只按周末：春节/国庆连休会让"前一天"本身是假期（2026 年国庆 10-01 ~ 10-07），调休补班又会让周六变成工作日（2026 年 09-20、10-10 都是补班日）。
+   - **数据来源与权威性**：主源 [holiday-cn](https://github.com/NateScarlet/holiday-cn)（机器可读，且逐条标注对应的国务院公告链接 —— 2026 年指向《国务院办公厅关于2026年部分节假日安排的通知》国办发明电〔2025〕7 号：https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm）；备源 timor.tech；两者都取不到时**如实降级**为"仅按周末判断"并在输出里标 `⚠️ 仅按周末推算`，缓存于 `~/.medit/holidays/<年>.json`。
+   - **同一天只发一张卡**：2026-09-30 同时是「10-01 月报」与「10-05 周报」的前一个工作日，两条会合并成一张。
+   - **判定用"到点之后"而非"正好那一分钟"**：18:00 该提醒、机器 22:00 才开机，当晚仍会补上。
+   - **不重复打扰**：幂等 key 按提醒日分桶并落盘（`~/.medit/alerts_state.json`），守护进程被反复拉起也只发一次；发送失败则 10 分钟后重试。
+   - **提醒有独立开关**：`schedule.reminder.enabled`，不受 `alerts.enabled`（资源告警开关）影响。
 
 ---
 
@@ -53,14 +70,23 @@ python -m telemetry.cli config
 # 3. 随时修改用户花名 (例如修改为 "星云")
 python -m telemetry.cli config --nickname "星云"
 
-# 4. 灵活修改每周报告时间 (例: 每周五 18:00)
-python -m telemetry.cli config --set-weekly "Friday 18:00"
+# 4. 灵活修改每周报告时间 (默认 每周一 10:30)
+python -m telemetry.cli config --set-weekly "Monday 10:30"
 # 或中文
-python -m telemetry.cli config --set-weekly "周五 18:00"
+python -m telemetry.cli config --set-weekly "周一 10:30"
 
-# 5. 灵活修改每月报告时间 (例: 每月 1 日 09:00 或 月末最后一天 18:00)
-python -m telemetry.cli config --set-monthly "1 09:00"
+# 5. 灵活修改每月报告时间 (默认 每月 1 日 10:30)
+python -m telemetry.cli config --set-monthly "1 10:30"
 python -m telemetry.cli config --set-monthly "last 18:00"
+
+# 6. 「别关机」提醒 (推送日的前一个工作日, 默认 18:00 开启)
+python -m telemetry.cli config --set-reminder "18:00"
+python -m telemetry.cli config --no-reminder
+
+# 7. 查看法定节假日日历 (提醒日的推算依据)
+python -m telemetry.cli holiday
+python -m telemetry.cli holiday --check 2026-10-01
+python -m telemetry.cli holiday --refresh
 ```
 
 ### B. 主动监控守护服务 (Daemon)
@@ -203,9 +229,10 @@ record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_n
 - **守护进程日志与心跳**：`~/.medit/daemon.log`、`~/.medit/daemon_heartbeat.json`。日志超 5 MB 时留一份 `daemon.log.1` 后轮转；同类重复错误会被限流聚合（只在换消息时补一条累计次数汇总），不再逐条刷屏。
 - **守护进程资源观测**：`python -m telemetry.cli daemon --status` 会显示实时文件描述符占用（如 `文件描述符: 4/4096`）。该值在守护进程内每轮采集，并写入心跳文件的 `fd` 字段，供外部巡检读取。
 - **定时同步日志**：`~/.medit/autosync.log`（每行带时间戳；超 5 MB 留一份 `.1` 后轮转）。放在 `~/.medit` 而不是 `/tmp`，因为 macOS 的 `periodic(8)` 会回收 3 天未访问的临时文件，历史说没就没。
-- **告警限流账本**：`~/.medit/alerts_state.json`。记录每类告警最近一次发送时间与成败，权限 0600 —— 它让「按 key 限流」跨进程重启依然有效。
+- **告警限流账本**：`~/.medit/alerts_state.json`。记录每类告警最近一次发送时间与成败，权限 0600 —— 它让「按 key 限流」跨进程重启依然有效。「别关机」提醒的幂等 key（`reminder:<提醒日>`）也记在这里。
+- **法定节假日缓存**：`~/.medit/holidays/<年>.json`（有效数据缓存 30 天；「该年安排尚未公布」只缓存 3 天，公布后自动补上）。`holiday --refresh` 可强制重新取数。
 - **公共表本地双备份**：`~/.medit/company_public_stats.csv`
-- **多维表格本地备份**：`~/.medit/team_bitable_backup.csv`（恒以标准字段名、固定 15 列落盘，与目标表采用哪种 schema 无关）
+- **多维表格本地备份**：`~/.medit/team_bitable_backup.csv`（恒以标准字段名、按 `BACKUP_FIELDS` 固定列序落盘，与目标表采用哪种 schema 无关）
 - **TraeWork 预装飞书源** (`channel_config.json`)：由 `telemetry/platform_paths.py` 统一解析，当前平台根目录优先，其余平台根目录兜底：
 
 | 平台 | 应用数据根 | 完整路径 |

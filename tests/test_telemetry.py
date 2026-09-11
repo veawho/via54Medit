@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime
 
 from telemetry.models import TaskType, RetrievalItem, DownloadItem, HighlightItem, TaskRecord
@@ -1651,6 +1652,441 @@ class TestOtherCategory(unittest.TestCase):
         self.assertAlmostEqual(summary["total_other_hours"], 1.5)
         self.assertEqual(summary["total_other_tokens"], 250)
         self.assertEqual(summary["total_saved_hours"], 4.5, "主口径不受影响")
+
+
+class TestScheduleDefaults(unittest.TestCase):
+    """默认排程: 周报每周一 10:30 / 月报每月 1 日 10:30。"""
+
+    def test_default_config_uses_the_new_times(self):
+        from telemetry.config import (
+            DEFAULT_CONFIG, DEFAULT_MONTHLY_SCHEDULE, DEFAULT_REMINDER_SCHEDULE,
+            DEFAULT_WEEKLY_SCHEDULE,
+        )
+        self.assertEqual(DEFAULT_WEEKLY_SCHEDULE["day_of_week"], 0)
+        self.assertEqual(DEFAULT_WEEKLY_SCHEDULE["time"], "10:30")
+        self.assertEqual(DEFAULT_MONTHLY_SCHEDULE["day_of_month"], 1)
+        self.assertEqual(DEFAULT_MONTHLY_SCHEDULE["time"], "10:30")
+        self.assertEqual(DEFAULT_CONFIG["schedule"]["weekly"]["time"], "10:30")
+        self.assertEqual(DEFAULT_CONFIG["schedule"]["monthly"]["time"], "10:30")
+        self.assertTrue(DEFAULT_CONFIG["schedule"]["reminder"]["enabled"])
+        self.assertEqual(DEFAULT_CONFIG["schedule"]["reminder"]["time"],
+                         DEFAULT_REMINDER_SCHEDULE["time"])
+
+    def test_defaults_are_not_duplicated_as_literals(self):
+        """回归: 默认时间曾散落在三处字面量里(09:00 抄三遍), 改一处就会漏另一处。
+
+        这里直接查源码: daemon 的兜底取值与 nlp_deploy 的默认值都不得再写死 09:00。
+        """
+        import telemetry.daemon as daemon
+        import telemetry.nlp_deploy as nlp_deploy
+
+        for mod in (daemon, nlp_deploy):
+            with open(mod.__file__, encoding="utf-8") as fh:
+                src = fh.read()
+            self.assertNotIn('"09:00"', src, "%s 里仍有写死的 09:00 兜底" % mod.__name__)
+
+    def test_nlp_defaults_follow_config(self):
+        from telemetry.nlp_deploy import parse_natural_language_instruction
+
+        got = parse_natural_language_instruction("花名wtg，每周一汇报")
+        self.assertEqual(got["weekly"], "周一 10:30", "未写明时间时应回退到默认排程")
+
+    # ---- 默认值迁移 ----
+
+    def _load(self, saved):
+        from telemetry import config as cfgmod
+
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = os.path.join(tmp, "telemetry_config.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(saved, f, ensure_ascii=False)
+        with mock.patch.object(cfgmod, "CONFIG_FILE_PATH", path), \
+                mock.patch.object(cfgmod, "trae_work_config_candidates", return_value=[]):
+            cfg = cfgmod.load_config()
+        with open(path, encoding="utf-8") as f:
+            return cfg, json.load(f)
+
+    def test_old_default_is_upgraded(self):
+        """已部署的设备把 09:00 写进了配置文件 —— 只改 DEFAULT_CONFIG 对它无效。"""
+        cfg, on_disk = self._load({"schedule": {
+            "weekly": {"enabled": True, "day_of_week": 0, "time": "09:00"},
+            "monthly": {"enabled": True, "day_of_month": 1, "time": "09:00"}}})
+        self.assertEqual(cfg["schedule"]["weekly"]["time"], "10:30")
+        self.assertEqual(cfg["schedule"]["monthly"]["time"], "10:30")
+        self.assertEqual(on_disk["schedule"]["weekly"]["time"], "10:30", "应已落盘")
+        self.assertEqual(on_disk.get("schedule_defaults_version"), 2)
+
+    def test_customised_schedule_is_never_touched(self):
+        """用户自己设过的时间一律不碰 —— 迁移只针对"仍是旧默认值"的。"""
+        cfg, _ = self._load({"schedule": {
+            "weekly": {"enabled": True, "day_of_week": 4, "time": "18:00"},
+            "monthly": {"enabled": True, "day_of_month": -1, "time": "20:15"}}})
+        self.assertEqual(cfg["schedule"]["weekly"]["time"], "18:00")
+        self.assertEqual(cfg["schedule"]["weekly"]["day_of_week"], 4)
+        self.assertEqual(cfg["schedule"]["monthly"]["time"], "20:15")
+        self.assertEqual(cfg["schedule"]["monthly"]["day_of_month"], -1)
+
+    def test_deliberate_change_back_to_old_default_is_respected(self):
+        """迁移只做一次: 否则用户将来**故意**改回 09:00 又会被悄悄顶掉。"""
+        cfg, _ = self._load({"schedule_defaults_version": 2, "schedule": {
+            "weekly": {"enabled": True, "day_of_week": 0, "time": "09:00"},
+            "monthly": {"enabled": True, "day_of_month": 1, "time": "09:00"}}})
+        self.assertEqual(cfg["schedule"]["weekly"]["time"], "09:00")
+        self.assertEqual(cfg["schedule"]["monthly"]["time"], "09:00")
+
+    def test_reminder_section_is_backfilled_for_old_configs(self):
+        cfg, _ = self._load({"schedule": {"weekly": {"enabled": True, "day_of_week": 0,
+                                                     "time": "09:00"}}})
+        self.assertTrue(cfg["schedule"]["reminder"]["enabled"])
+        self.assertEqual(cfg["schedule"]["reminder"]["time"], "18:00")
+
+
+class TestHolidayCalendar(unittest.TestCase):
+    """法定节假日日历 —— 提醒日按它推算, 所以它算错, 提醒就会提醒错日子。
+
+    全部离线: 网络取数用真实报文(裁剪)打桩, 不依赖外网。
+    """
+
+    #: 摘自 国办发明电〔2025〕7 号《国务院办公厅关于2026年部分节假日安排的通知》
+    #: (https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm) 对应的
+    #: holiday-cn 报文, 为控制篇幅只保留测试用到的条目。
+    HOLIDAY_CN_2026 = {
+        "year": 2026,
+        "papers": ["https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"],
+        "days": [
+            {"name": "元旦", "date": "2026-01-01", "isOffDay": True},
+            {"name": "元旦", "date": "2026-01-04", "isOffDay": False},
+            {"name": "春节", "date": "2026-02-14", "isOffDay": False},
+            {"name": "春节", "date": "2026-02-15", "isOffDay": True},
+            {"name": "春节", "date": "2026-02-23", "isOffDay": True},
+            {"name": "春节", "date": "2026-02-28", "isOffDay": False},
+            {"name": "中秋节", "date": "2026-09-25", "isOffDay": True},
+            {"name": "中秋节", "date": "2026-09-27", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-09-20", "isOffDay": False},
+            # 国庆连休 10-01 ~ 10-07 必须整段齐全: 只写头尾会让中间的日期被当成
+            # 工作日, 于是"前一个工作日"算出错误结果(这正是本用例第一次跑挂的原因)。
+            {"name": "国庆节", "date": "2026-10-01", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-02", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-03", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-04", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-05", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-06", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-07", "isOffDay": True},
+            {"name": "国庆节", "date": "2026-10-10", "isOffDay": False},
+        ],
+    }
+
+    def setUp(self):
+        from telemetry import holidays
+
+        self.holidays = holidays
+        holidays.reset_cache()
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        for attr in ("HOLIDAY_DIR",):
+            p = mock.patch.object(holidays, attr, self.tmp)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self.holidays.reset_cache()
+
+    def _fetch_from_fixture(self, payload=None):
+        """让主源返回 fixture(payload=None 表示取不到), 备源也取不到。"""
+        return (mock.patch.object(self.holidays, "_fetch_holiday_cn",
+                                  return_value=self._parsed(payload)),
+                mock.patch.object(self.holidays, "_fetch_timor", return_value=None))
+
+    def _parsed(self, payload):
+        """复用真实解析器, 免得测试自己另写一份解析(那就测不到解析器了)。"""
+        if payload is None:
+            return None
+        with mock.patch.object(self.holidays, "_http_json", return_value=payload):
+            return self.holidays._fetch_holiday_cn(2026)
+
+    def test_parser_reads_official_payload(self):
+        parsed = self._parsed(self.HOLIDAY_CN_2026)
+        self.assertEqual(parsed["source"], "holiday-cn")
+        self.assertEqual(parsed["off_days"]["2026-10-01"], "国庆节")
+        self.assertIn("2026-09-20", parsed["work_days"], "调休补班日必须被识别")
+        self.assertNotIn("2026-09-20", parsed["off_days"])
+        self.assertEqual(parsed["papers"], self.HOLIDAY_CN_2026["papers"])
+
+    def test_workday_rules_with_real_calendar(self):
+        p1, p2 = self._fetch_from_fixture(self.HOLIDAY_CN_2026)
+        with p1, p2:
+            cal = self.holidays.load_calendar(2026)
+        from datetime import date
+
+        self.assertTrue(cal.authoritative)
+        # 调休补班: 周六上班
+        self.assertTrue(cal.is_workday(date(2026, 9, 20)))
+        self.assertIn("调休", cal.describe(date(2026, 9, 20)))
+        # 法定假期: 连普通工作日也不是工作日
+        self.assertFalse(cal.is_workday(date(2026, 10, 1)))
+        self.assertIn("国庆", cal.describe(date(2026, 10, 1)))
+        # 普通周末
+        self.assertFalse(cal.is_workday(date(2026, 9, 26)))
+        # 普通工作日
+        self.assertTrue(cal.is_workday(date(2026, 9, 30)))
+
+    def test_previous_workday_skips_holiday_block(self):
+        """国庆连休时, "前一个工作日"要一直往前找到 09-30, 而不是简单减一天。"""
+        p1, p2 = self._fetch_from_fixture(self.HOLIDAY_CN_2026)
+        with p1, p2:
+            cal = self.holidays.load_calendar(2026)
+        from datetime import date
+
+        self.assertEqual(cal.previous_workday(date(2026, 10, 1)), date(2026, 9, 30))
+        self.assertEqual(cal.previous_workday(date(2026, 10, 5)), date(2026, 9, 30))
+        # 周一的前一个工作日是上周五
+        self.assertEqual(cal.previous_workday(date(2026, 9, 14)), date(2026, 9, 11))
+        # 补班日之后按补班日算
+        self.assertEqual(cal.previous_workday(date(2026, 10, 12)), date(2026, 10, 10))
+
+    def test_previous_workday_crosses_year_boundary(self):
+        """1 月 1 日的前一个工作日落在上一年 —— 必须能取到上一年日历, 否则会算错。"""
+        from datetime import date
+
+        def loader(year, allow_fetch=True, force=False):
+            if year == 2026:
+                return self.holidays.HolidayCalendar(
+                    year=2026, off_days={"2026-01-01": "元旦"}, work_days={},
+                    source="holiday-cn", authoritative=True)
+            return self.holidays.HolidayCalendar(
+                year=2025, off_days={}, work_days={}, source="holiday-cn", authoritative=True)
+
+        with mock.patch.object(self.holidays, "load_calendar", side_effect=loader):
+            self.holidays.reset_cache()
+            self.assertEqual(
+                self.holidays.calendar_for(2026).previous_workday(date(2026, 1, 1)),
+                date(2025, 12, 31))
+
+    def test_missing_data_degrades_honestly(self):
+        """取不到数据时**如实降级**为"仅按周末判断", 不能装作有数据。"""
+        p1, p2 = self._fetch_from_fixture(None)
+        with p1, p2:
+            cal = self.holidays.load_calendar(2026)
+        from datetime import date
+
+        self.assertFalse(cal.authoritative, "取不到数据必须标记为非权威")
+        self.assertEqual(cal.source, "weekend-only")
+        self.assertTrue(cal.note)
+        # 降级后调休补班的周六会被当成休息日 —— 这正是要提醒用户的地方
+        self.assertFalse(cal.is_workday(date(2026, 9, 20)))
+        ok, text = (cal.is_workday(date(2026, 9, 20)), cal.describe(date(2026, 9, 20)))
+        self.assertFalse(ok)
+        self.assertIn("周末", text)
+
+    def test_cache_roundtrip_avoids_refetch(self):
+        p1, p2 = self._fetch_from_fixture(self.HOLIDAY_CN_2026)
+        with p1, p2:
+            self.holidays.load_calendar(2026, force=True)
+        self.holidays.reset_cache()
+        # 第二次不该再取数: 让 fetcher 直接抛异常, 仍应能读到缓存
+        with mock.patch.object(self.holidays, "_fetch_holiday_cn",
+                               side_effect=AssertionError("不该再取数")), \
+                mock.patch.object(self.holidays, "_fetch_timor",
+                                  side_effect=AssertionError("不该再取数")):
+            cal = self.holidays.load_calendar(2026)
+        self.assertTrue(cal.authoritative)
+        self.assertIn("缓存", cal.note)
+
+    def test_no_fetch_mode_is_offline_safe(self):
+        cal = self.holidays.load_calendar(2026, allow_fetch=False)
+        self.assertFalse(cal.authoritative)
+        self.assertTrue(cal.note)
+
+    def test_clear_cache_removes_files(self):
+        p1, p2 = self._fetch_from_fixture(self.HOLIDAY_CN_2026)
+        with p1, p2:
+            self.holidays.load_calendar(2026, force=True)
+        path = os.path.join(self.tmp, "2026.json")
+        self.assertTrue(os.path.exists(path))
+        with mock.patch.object(self.holidays, "_cache_path", return_value=path):
+            self.holidays.clear_cache(2026)
+        self.assertFalse(os.path.exists(path))
+
+    def test_timor_fallback_shape(self):
+        """备源报文形状与主源不同, 解析必须都对。"""
+        payload = {"code": 0, "holiday": {
+            "10-01": {"holiday": True, "name": "国庆节", "date": "2026-10-01"},
+            "09-20": {"holiday": False, "name": "国庆节前补班", "date": "2026-09-20"},
+        }}
+        with mock.patch.object(self.holidays, "_http_json", return_value=payload):
+            parsed = self.holidays._fetch_timor(2026)
+        self.assertEqual(parsed["off_days"]["2026-10-01"], "国庆节")
+        self.assertEqual(parsed["work_days"]["2026-09-20"], "国庆节前补班")
+
+
+class TestReminder(unittest.TestCase):
+    """推送日前一个工作日的「别关机」提醒。"""
+
+    def setUp(self):
+        from telemetry import holidays, reminders
+
+        self.holidays, self.reminders = holidays, reminders
+        holidays.reset_cache()
+        self.cfg = {
+            "schedule": {
+                "weekly": {"enabled": True, "day_of_week": 0, "time": "10:30"},
+                "monthly": {"enabled": True, "day_of_month": 1, "time": "10:30"},
+                "reminder": {"enabled": True, "time": "18:00"},
+            },
+        }
+        # 用真实 2026 日历(国办发明电〔2025〕7 号), 避免依赖外网
+        self.cal2026 = holidays.HolidayCalendar(
+            year=2026,
+            off_days={"2026-10-01": "国庆节", "2026-10-02": "国庆节", "2026-10-05": "国庆节",
+                      "2026-09-25": "中秋节", "2026-09-26": "中秋节", "2026-09-27": "中秋节",
+                      "2026-02-16": "春节", "2026-01-01": "元旦"},
+            work_days={"2026-09-20": "国庆节后补班", "2026-10-10": "国庆节后补班",
+                       "2026-02-28": "春节后补班"},
+            source="holiday-cn", authoritative=True)
+
+    def setUpPatches(self):
+        p = mock.patch.object(self.holidays, "calendar_for", return_value=self.cal2026)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self.holidays.reset_cache()
+
+    def test_next_weekly_is_monday_1030(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        got = self.reminders.next_occurrence(self.cfg, datetime(2026, 9, 9, 8, 0), "weekly")
+        self.assertEqual(got, datetime(2026, 9, 14, 10, 30))
+        # 同一时刻之后(周一当天 11:00) 应顺延到下一周
+        got = self.reminders.next_occurrence(self.cfg, datetime(2026, 9, 14, 11, 0), "weekly")
+        self.assertEqual(got, datetime(2026, 9, 21, 10, 30))
+
+    def test_next_monthly_handles_month_end_option(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        got = self.reminders.next_occurrence(self.cfg, datetime(2026, 9, 9), "monthly")
+        self.assertEqual(got, datetime(2026, 10, 1, 10, 30))
+
+        cfg = {"schedule": {"monthly": {"enabled": True, "day_of_month": -1, "time": "10:30"}}}
+        got = self.reminders.next_occurrence(cfg, datetime(2026, 9, 9), "monthly")
+        self.assertEqual(got, datetime(2026, 9, 30, 10, 30), "月末最后一天")
+
+    def test_disabled_schedule_has_no_occurrence(self):
+        from datetime import datetime
+
+        cfg = {"schedule": {"weekly": {"enabled": False, "day_of_week": 0, "time": "10:30"}}}
+        self.assertIsNone(self.reminders.next_occurrence(cfg, datetime(2026, 9, 9), "weekly"))
+
+    def test_reminder_fires_on_previous_workday_after_configured_time(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        # 09-11(周五) 是 09-14(周一) 的前一个工作日
+        self.assertEqual(
+            [i["kind"] for i in self.reminders.due_reminders(self.cfg, datetime(2026, 9, 11, 18, 0))],
+            ["weekly"])
+        # 到点之前不提醒
+        self.assertEqual(self.reminders.due_reminders(self.cfg, datetime(2026, 9, 11, 17, 59)), [])
+        # 当天更晚(机器晚开机)仍应补上 —— 当晚提醒依然有意义
+        self.assertEqual(
+            [i["kind"] for i in self.reminders.due_reminders(self.cfg, datetime(2026, 9, 11, 22, 30))],
+            ["weekly"])
+        # 非提醒日不提醒
+        self.assertEqual(self.reminders.due_reminders(self.cfg, datetime(2026, 9, 12, 18, 0)), [])
+
+    def test_national_day_merges_weekly_and_monthly_into_one(self):
+        """2026-09-30 同时是"10-01 月报"与"10-05 周报"的前一个工作日 —— 必须合并成一次。"""
+        from datetime import datetime
+
+        self.setUpPatches()
+        due = self.reminders.due_reminders(self.cfg, datetime(2026, 9, 30, 18, 0))
+        self.assertEqual(sorted(i["kind"] for i in due), ["monthly", "weekly"])
+        self.assertEqual(len({self.reminders.reminder_key(i["remind_date"]) for i in due}), 1,
+                         "同一天只能有一个幂等 key, 否则会发两张卡")
+        lines = "\n".join(self.reminders.build_reminder_lines(due))
+        self.assertIn("月报", lines)
+        self.assertIn("周报", lines)
+        self.assertEqual(lines.count("今晚请不要关机"), 1)
+
+    def test_reminder_line_shows_correct_weekday(self):
+        """回归: 星期文案曾差一位(周四显示成"三"、周一显示成"周")。"""
+        from datetime import datetime
+
+        self.setUpPatches()
+        due = self.reminders.due_reminders(self.cfg, datetime(2026, 9, 11, 18, 0))
+        text = "\n".join(self.reminders.build_reminder_lines(due))
+        self.assertIn("2026-09-14（周一）10:30", text)
+
+    def test_disabled_reminder_never_fires(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        cfg = {"schedule": dict(self.cfg["schedule"],
+                                reminder={"enabled": False, "time": "18:00"})}
+        self.assertEqual(self.reminders.due_reminders(cfg, datetime(2026, 9, 11, 18, 0)), [])
+
+    def test_send_due_is_idempotent_per_remind_date(self):
+        """同一天的所有目标共用一个幂等 key —— 守护进程被反复拉起也不会重发。"""
+        from datetime import date
+
+        self.assertEqual(self.reminders.reminder_key(date(2026, 9, 30)),
+                         "reminder:2026-09-30")
+
+    def test_send_due_never_raises(self):
+        """发送通道坏掉不能把守护进程带崩 —— 提醒是锦上添花, 不是主链路。"""
+        from datetime import datetime
+
+        self.setUpPatches()
+        with mock.patch.object(self.reminders, "send_due", wraps=self.reminders.send_due), \
+                mock.patch("telemetry.alerter.send_alert", side_effect=RuntimeError("boom")):
+            ok, msg, key = self.reminders.send_due(self.cfg, datetime(2026, 9, 11, 18, 0))
+        self.assertFalse(ok)
+        self.assertIn("boom", msg)
+        self.assertEqual(key, "reminder:2026-09-11")
+
+    def test_send_due_reports_success_from_alerter(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        with mock.patch("telemetry.alerter.send_alert", return_value=(True, "推送成功")) as sent:
+            ok, msg, key = self.reminders.send_due(self.cfg, datetime(2026, 9, 11, 18, 0))
+        self.assertTrue(ok)
+        self.assertEqual(key, "reminder:2026-09-11")
+        kwargs = sent.call_args.kwargs
+        self.assertEqual(kwargs["key"], "reminder:2026-09-11")
+        # 显式给出设置: 关掉资源告警(alerts.enabled)不该顺带关掉别关机提醒
+        self.assertTrue(kwargs["settings"]["enabled"])
+
+    def test_send_due_returns_none_when_not_due(self):
+        from datetime import datetime
+
+        self.setUpPatches()
+        self.assertIsNone(self.reminders.send_due(self.cfg, datetime(2026, 9, 12, 18, 0)))
+
+    def test_daemon_check_reminder_is_inert_everywhere_except_remind_day(self):
+        """守护进程里这一步不该在任何非提醒时刻做动作, 更要绝不抛异常。"""
+        from datetime import datetime
+
+        from telemetry.daemon import TelemetryDaemon
+
+        self.setUpPatches()
+        daemon = TelemetryDaemon.__new__(TelemetryDaemon)   # 不碰真实 DB / 文件
+        daemon._last_reminder_key = ""
+        daemon._last_msg = ""
+        daemon._repeat = 0
+        messages = []
+        daemon.log = messages.append
+        with mock.patch("telemetry.alerter.send_alert", return_value=(True, "ok")) as sent:
+            daemon._check_reminder(self.cfg, datetime(2026, 9, 12, 18, 0))
+            sent.assert_not_called()
+            daemon._check_reminder(self.cfg, datetime(2026, 9, 11, 18, 0))
+            self.assertEqual(sent.call_count, 1)
+            # 同一天再检查一次: 进程内拦掉, 不再发
+            daemon._check_reminder(self.cfg, datetime(2026, 9, 11, 18, 5))
+            self.assertEqual(sent.call_count, 1)
 
 
 class TestAutoSync(unittest.TestCase):
