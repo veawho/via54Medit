@@ -200,8 +200,15 @@ def main():
     out_lines.append("6. **修 L0/L4 算法** (根治错论文 + 错关键词)\n\n")
 
     out = "\n".join(out_lines)
-    out_path = f"/Users/david/Desktop/developments/via54Medit/docs/multi_project_diff_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    # 原先这里硬编码了本机绝对路径 (/Users/david/.../via54Medit/docs/...), 换机器或 CI 上会
+    # 写到不存在的位置。改为仓库相对路径, 并集中到 docs/multi_project_diff/ 子目录 ——
+    # 该目录已进 .gitignore, 生成物不再随每次运行进入版本库 (此前 docs/ 下已堆积 13 个快照)。
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    reports_dir = os.path.join(repo_root, "docs", "multi_project_diff")
+    os.makedirs(reports_dir, exist_ok=True)
+    out_path = os.path.join(
+        reports_dir, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    )
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(out)
     print(out)

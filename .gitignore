@@ -73,6 +73,9 @@ tests/e2e/screenshots/
 tests/e2e/output/
 tests/stress/logs/
 
+# 生成的对比报告 (multi_project_diff.py 每次运行新增一份) —— 属生成物, 不入库
+docs/multi_project_diff/
+
 # test-data PDFs - too large for git, check Desktop/test/
 references/test-data/pdfs/
 references/test-data/embedded/

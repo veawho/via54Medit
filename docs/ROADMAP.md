@@ -115,12 +115,45 @@
 - [x] `internal/enrich/s2_enrich.go`
 - [x] `internal/enrich/pipeline.go` — 三方并发 (含于 enrich.go)
 
+> ⚠️ 以上是**库实现**的完成状态, 不代表用户能用。这批库当前**没有被 CLI 接线** ——
+> 全仓库没有任何地方 import `internal/enrich` (见 §2.4 的 `enrich` 仍是占位桩)。
+> 库能编译、有单测, 但敲 `medit enrich` 得到的是 "将在 Phase 2 实现"。
+
 ### 2.4 CLI
 - [x] `ask.go` — 4 源并发 + 融合 + LLM 摘要
 - [x] `search.go` — 原始多源 (无 LLM 摘要)
-- [x] `enrich.go` — 三方 enrich 离线工具
-- [x] `index.go` — 入 Qdrant
-- [x] `query.go` — 检索本地
+- [ ] `enrich.go` — 三方 enrich 离线工具 — **仍为占位桩** (`medit enrich` 打印
+      `[Phase 0 stub] … — 将在 Phase 2 实现`)。真实实现在 `internal/enrich`, 未接线。
+- [ ] `index.go` — 入 Qdrant — **仍为占位桩**
+- [ ] `query.go` — 检索本地 — **仍为占位桩**
+- [ ] `cmd/promptctl` — 未纳入 Makefile, 不随构建产出
+
+### 2.4b 已实现、但不在任何构建目标依赖图内 (2026-09-11 扫查)
+
+以下 8 个包对 `bin/medit` / `bin/medit-mcp` 均不可达 (连测试依赖一起算也不可达), 合计约
+3000 行, 且每个都自带单测。性质是「**库已实现, 入口未接线**」, ⚠️ **不是**废弃代码 ——
+不要当作垃圾清理:
+
+| 包 | 行数 | 为何不可达 |
+| --- | --- | --- |
+| `internal/similarity` | 555 | 无任何入口 |
+| `internal/prompt` | 482 | 仅被未构建的 `cmd/promptctl` 使用 |
+| `internal/citation/sync` | 421 | 无入口 (父包 `internal/citation` 可达) |
+| `internal/enrich` | 413 | 入口 `medit enrich` 是占位桩 |
+| `internal/authority` | 386 | 无任何入口 |
+| `internal/consensus` | 371 | 无任何入口 |
+| `internal/lookup` | 320 | 无任何入口 |
+| `cmd/promptctl` | 56 | Makefile 不构建 |
+
+复核方式:
+
+```bash
+go list -deps -test ./cmd/medit ./cmd/medit-mcp | grep '^github.com/veawho/via54Medit' | sort -u > /tmp/reach
+go list ./... | sort > /tmp/all
+comm -13 /tmp/reach /tmp/all     # 输出的即为上表
+```
+
+`docs/ARCHITECTURE.md` 把这些包描述为架构组件; 若要对外宣称可用, 需先补 CLI 接线。
 
 ### 2.5 测试
 - [ ] `tests/unit/router_classify_test.go` — 30 个分类案例
