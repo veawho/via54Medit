@@ -17,7 +17,7 @@ via54_rules.py — 6 步规则校验 (v10.1)
 """
 import os, re, sys, json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 
 # ════════════════════════════════════════════════════════════════
@@ -105,6 +105,58 @@ via54Medit 6 步规则 (2026-08-10 用户版 + AGENTS.md 校准)
 # 规则校验 (按 6 步)
 # ════════════════════════════════════════════════════════════════
 
+#: 单个 Pn-x 的规范形态 (P + 页号 + '-' + 序号)
+_PN_X_RE = re.compile(r'^P\d+-\d+$')
+#: 辅助目录后缀 (不是文献, 是渲染/图片副产物)
+_AUX_SUFFIXES = ("_jpgs", "_images")
+
+
+def _expand_pn_x_name(name: str) -> Set[str]:
+    """把一个目录名/文件名展开成它代表的 Pn-x 集合。
+
+    Step 6 会把同一篇文献的多个 Pn-x 合并进一个目录, 目录名用下划线串联
+    (如 ``P3-2_P4-2``、``P11-2_P12-1_P22-2_P25-8``)。因此"对齐"类校验必须按
+    **文献**而不是按**目录**来比较 —— 否则合并会把 N 个 Pn-x 记成 1 个, 凭空
+    报出"缺 N-1 个"的假阳性(实测 TMA 项目: highlight 90 目录 vs download 106
+    Pn-x, 因为 12 组合并了 28 个 Pn-x, 90 = 106 - 28 + 12)。
+
+    >>> _expand_pn_x_name('P3-2')
+    {'P3-2'}
+    >>> sorted(_expand_pn_x_name('P3-2_P4-2'))
+    ['P3-2', 'P4-2']
+    >>> _expand_pn_x_name('P11-1_main.pdf')
+    {'P11-1'}
+    >>> _expand_pn_x_name('P1-1_jpgs')
+    set()
+    """
+    if not name.startswith('P') or name.endswith(_AUX_SUFFIXES):
+        return set()
+
+    # 合并名: 按 '_' 切开, 每一段都必须是合格 Pn-x
+    parts = name.split('_')
+    if len(parts) > 1 and all(_PN_X_RE.match(p) for p in parts):
+        return set(parts)
+
+    # flat 文件名 (P11-1_main.pdf) 或单个目录名 (P11-1)
+    m = re.match(r'(P\d+-\d+)', name)
+    return {m.group(1)} if m else set()
+
+
+def _count_literatures(dir_path: str) -> int:
+    """统计一个目录代表的**文献数** (合并目录按展开后的 Pn-x 计)。"""
+    total: Set[str] = set()
+    try:
+        entries = os.listdir(dir_path)
+    except OSError:
+        return 0
+    for name in entries:
+        if os.path.isdir(os.path.join(dir_path, name)):
+            total |= _expand_pn_x_name(name)
+        elif name.lower().endswith('.pdf'):
+            total |= _expand_pn_x_name(name)
+    return len(total)
+
+
 def _check_step1_dirs(project_dir: str) -> Dict:
     """
     步骤一: 检查 3 个目录是否存在
@@ -118,11 +170,28 @@ def _check_step1_dirs(project_dir: str) -> Dict:
     candidates = {
         "ppt": ["_ppt", "ppt", "_1_ppt", "PPT", "step1_ppt_目录", "step1_ppt"],
         "download": ["_download", "download", "_pdfs", "_2_pdfs", "pdfs",
-                     "step3_pdf下载_160目录", "step3_pdf", "step3_pdfs"],
+                     "step3_pdf下载_160目录", "step3_pdf", "step3_pdfs",
+                     # TMA 2026-08-14 起的最终结构 (文献数 106)。加在末尾,
+                     # 保证既有项目的选中结果不变。
+                     "step3_pdf下载_106目录"],
         # v10_glm 是最新最完整的 (含合并 Pn1-x1Pn2-x2), 优先选
         "highlight": ["_3_highlight_v10_glm", "step4_highlight_v10_glm",
                       "_highlight", "highlight", "_3_highlight", "hl",
-                      "step4_highlight_96目录_合并DOI", "step4_highlight"],
+                      "step4_highlight_96目录_合并DOI", "step4_highlight",
+                      # 同上: TMA 最终结构, 加在末尾不改变既有优先级
+                      "step4_highlight_106目录_合并DOI"],
+    }
+    # 抗改名兜底: 目录名里的数字随文献数增长 (…_96目录 → …_106目录 → …),
+    # 硬编码清单必然滞后一步。故在上面逐个试完之后, 再按**命名族**正则匹配一次。
+    #
+    # 这里刻意用严格正则而不是宽松前缀: 前缀会把 step4_highlight_notes 这种
+    # 无关目录也当成产物, 从而"校验了错的东西却报告通过"。严格匹配的代价是
+    # 命名族彻底变了就找不到 —— 但那会带着候选清单显式失败, 比静默选错安全。
+    # 多个命中时取字典序最大的一个 (名字里的数字递增, 末位通常是最新产物)。
+    family_patterns = {
+        "ppt": (r'^step1_ppt(_目录)?$',),
+        "download": (r'^step3_pdf(下载)?(_\d+目录)?$',),
+        "highlight": (r'^step4_highlight(_\d+目录)?(_合并DOI)?$',),
     }
     for kind, names in candidates.items():
         for n in names:
@@ -131,8 +200,21 @@ def _check_step1_dirs(project_dir: str) -> Dict:
                 found[kind] = p
                 break
         else:
-            issues.append(f"缺 {kind} 目录 (候选: {names})")
-            found[kind] = None
+            hit = None
+            try:
+                entries = sorted(os.listdir(project_dir))
+            except OSError:
+                entries = []
+            for n in entries:
+                if not os.path.isdir(os.path.join(project_dir, n)):
+                    continue
+                if any(re.match(pat, n) for pat in family_patterns[kind]):
+                    hit = os.path.join(project_dir, n)
+            if hit:
+                found[kind] = hit
+            else:
+                issues.append(f"缺 {kind} 目录 (候选: {names})")
+                found[kind] = None
 
     return {
         "ok": len(issues) == 0,
@@ -369,37 +451,30 @@ def _check_step4_highlight(highlight_dir: Optional[str], download_dir: Optional[
             issues.append("Highlight 目录无图片 (jpg/png)")
 
     # 对齐检查: highlight 数 ≈ download 数 (无论哪种约定)
+    # 按**文献**比较而不是按目录 —— highlight 侧的合并目录 (如 P3-2_P4-2)
+    # 代表多篇文献, 直接数目录会凭空少算, 详见 _expand_pn_x_name。
     if download_dir and os.path.isdir(download_dir):
-        dl_pn_x = _count_pn_x(download_dir)
-        if abs(dl_pn_x - counts["pn_x_dirs"]) > max(2, dl_pn_x * 0.05):
+        dl_n = _count_literatures(download_dir)
+        hl_n = _count_literatures(highlight_dir)
+        counts["literatures"] = hl_n
+        if abs(dl_n - hl_n) > max(2, dl_n * 0.05):
             issues.append(
-                f"Highlight 目录 ({counts['pn_x_dirs']} Pn-x) 与下载目录 "
-                f"({dl_pn_x} Pn-x) 数量不一致 (差异 >5%)"
+                f"Highlight 目录 ({hl_n} 篇文献) 与下载目录 "
+                f"({dl_n} 篇) 数量不一致 (差异 >5%)"
             )
 
     return {"ok": len(issues) == 0, "issues": issues, "warnings": warnings, "counts": counts}
 
 
 def _count_pn_x(dir_path: str) -> int:
-    """统计一个目录下 Pn-x 的数量 (兼容 nested + flat + 辅助 _jpgs/_images)"""
-    # 排除辅助目录 (Pn-x_jpgs/, Pn-x_images/)
-    real_dirs = [d for d in os.listdir(dir_path)
-                 if os.path.isdir(os.path.join(dir_path, d))
-                 and d.startswith('P')
-                 and not (d.endswith('_jpgs') or d.endswith('_images'))]
-    if real_dirs:
-        return len(real_dirs)
-    # flat: 统计顶层 Pn-x_*.pdf 文件
-    files = [f for f in os.listdir(dir_path)
-             if f.startswith('P')
-             and not os.path.isdir(os.path.join(dir_path, f))
-             and (f.lower().endswith('.pdf') or '_' in f)]
-    pns = set()
-    for f in files:
-        m = re.match(r'(P\d+-\d+)', f)
-        if m:
-            pns.add(m.group(1))
-    return len(pns)
+    """统计一个目录下 Pn-x 的数量 (兼容 nested + flat + 辅助 _jpgs/_images)
+
+    .. deprecated:: v5.4.17
+        对齐类校验请改用 :func:`_count_literatures` —— 本函数按"目录"计数,
+        遇到 Step 6 的合并目录 (P3-2_P4-2) 会把 2 篇记成 1 篇, 产生假阳性。
+        保留仅为兼容可能的外部调用。
+    """
+    return _count_literatures(dir_path)
 
 
 def _check_step5_alignment(
@@ -420,24 +495,19 @@ def _check_step5_alignment(
     if not download_dir or not highlight_dir:
         return {"ok": False, "issues": ["下载或 highlight 目录缺失"], "info": {}}
 
-    # 排除辅助目录 (Pn-x_jpgs/, Pn-x_images/)
-    def _real_pn_x(d: str) -> bool:
-        return (d.startswith('P')
-                and not d.endswith('_jpgs')
-                and not d.endswith('_images'))
-
     def _extract_pn_x_set(dir_path: str) -> set:
-        """兼容 nested (Pn-x 目录) + flat (Pn-x_*.pdf)"""
+        """兼容 nested (Pn-x 目录) + flat (Pn-x_*.pdf)。
+
+        合并目录按文献展开: ``P11-2_P12-1_P22-2_P25-8`` 计入 4 个 Pn-x 而不是 1 个,
+        否则 Step 6 的合并动作会被误判成"highlight 缺 28 个 / 多 12 个"。
+        """
         items = set()
         for name in os.listdir(dir_path):
             full = os.path.join(dir_path, name)
             if os.path.isdir(full):
-                if _real_pn_x(name):
-                    items.add(name)
+                items |= _expand_pn_x_name(name)
             elif name.startswith('P') and (name.lower().endswith('.pdf') or '_' in name):
-                m = re.match(r'(P\d+-\d+)', name)
-                if m:
-                    items.add(m.group(1))
+                items |= _expand_pn_x_name(name)
         return items
 
     dl_pn_x = _extract_pn_x_set(download_dir)

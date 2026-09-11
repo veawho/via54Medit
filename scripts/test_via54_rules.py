@@ -29,6 +29,8 @@ from via54_rules import (
     _check_step4_highlight,
     _check_step5_alignment,
     _check_step6_merge,
+    _count_literatures,
+    _expand_pn_x_name,
     RULES_TEXT,
 )
 
@@ -100,6 +102,49 @@ class TestStep1Dirs(unittest.TestCase):
             os.makedirs(os.path.join(tmp, "hl"))
             r = _check_step1_dirs(tmp)
             self.assertTrue(r["ok"])
+
+    def test_tma_final_dir_names(self):
+        """TMA 现用的 …_106目录 形态必须被识别。
+
+        回归: 候选清单里只写死了 step3_pdf下载_160目录 与
+        step4_highlight_96目录_合并DOI, 而 TMA 实际用的是 …_106目录
+        (文献数从 96 涨到 106 后改名)。结果是数据明明是齐的
+        (Step 3 实测 106/106 有 PDF), 整个项目却被报成 2/7。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            for n in ("step1_ppt_目录", "step3_pdf下载_106目录",
+                      "step4_highlight_106目录_合并DOI"):
+                os.makedirs(os.path.join(tmp, n))
+            r = _check_step1_dirs(tmp)
+            self.assertTrue(r["ok"], r["issues"])
+            self.assertTrue(
+                r["found"]["download"].endswith("step3_pdf下载_106目录"))
+            self.assertTrue(
+                r["found"]["highlight"].endswith("step4_highlight_106目录_合并DOI"))
+
+    def test_future_rename_hits_family_fallback(self):
+        """再改名 (…_120目录) 也必须命中命名族兜底, 不能又退化成 2/7。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            for n in ("step1_ppt_目录", "step3_pdf下载_120目录",
+                      "step4_highlight_120目录_合并DOI"):
+                os.makedirs(os.path.join(tmp, n))
+            r = _check_step1_dirs(tmp)
+            self.assertTrue(r["ok"], r["issues"])
+            self.assertTrue(
+                r["found"]["download"].endswith("step3_pdf下载_120目录"))
+            self.assertTrue(
+                r["found"]["highlight"].endswith("step4_highlight_120目录_合并DOI"))
+
+    def test_family_fallback_rejects_unrelated_dir(self):
+        """兜底不能把无关目录当产物 —— 否则会"校验错的东西却报告通过"。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "step1_ppt_目录"))
+            os.makedirs(os.path.join(tmp, "step3_notes_backup"))
+            os.makedirs(os.path.join(tmp, "step4_highlight_notes"))
+            r = _check_step1_dirs(tmp)
+            self.assertIsNone(r["found"]["download"])
+            self.assertIsNone(r["found"]["highlight"])
+            self.assertFalse(r["ok"])
 
 
 class TestStep1bPptExpansion(unittest.TestCase):
@@ -233,6 +278,40 @@ class TestStep4Highlight(unittest.TestCase):
             r = _check_step4_highlight(hl_dir, None)
             self.assertFalse(r["ok"])
 
+    def test_merged_dirs_count_as_literatures(self):
+        """合并目录不能把数量算少 (否则 Step 4 误报"数量不一致")。
+
+        实测 TMA: download 106 篇, highlight 90 个目录 —— 因为 12 组把 28 篇
+        合并成了 12 个目录, 90 = 106 - 28 + 12。按目录计数会报 -16 的假差异。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            hl_dir = os.path.join(tmp, "_highlight")
+            os.makedirs(hl_dir)
+            # 3 个单目录 + 1 个合并目录(含 2 篇) = 4 篇文献
+            for name in ('P1-1', 'P2-1', 'P3-1'):
+                d = os.path.join(hl_dir, name)
+                os.makedirs(d)
+                with open(os.path.join(d, "main.pdf"), 'w') as f:
+                    f.write("x")
+                with open(os.path.join(d, "p1_highlight.jpg"), 'w') as f:
+                    f.write("x")
+            merged = os.path.join(hl_dir, 'P4-1_P5-1')
+            os.makedirs(merged)
+            with open(os.path.join(merged, "main.pdf"), 'w') as f:
+                f.write("x")
+            with open(os.path.join(merged, "p1_highlight.jpg"), 'w') as f:
+                f.write("x")
+
+            dl_dir = os.path.join(tmp, "_download")
+            os.makedirs(dl_dir)
+            for pn in ['P1-1', 'P2-1', 'P3-1', 'P4-1', 'P5-1']:
+                os.makedirs(os.path.join(dl_dir, pn))
+
+            r = _check_step4_highlight(hl_dir, dl_dir)
+            self.assertEqual(r["counts"]["pn_x_dirs"], 4)      # 4 个目录
+            self.assertEqual(r["counts"]["literatures"], 5)    # 但 5 篇文献
+            self.assertTrue(r["ok"], r["issues"])
+
 
 class TestStep5Alignment(unittest.TestCase):
     """Step 5: 三方对齐"""
@@ -264,6 +343,69 @@ class TestStep5Alignment(unittest.TestCase):
             # 应该有 missing_in_hl (P1-1) 和 extra_in_hl (P3-1)
             self.assertIn("P1-1", r["info"]["missing_in_hl"])
             self.assertIn("P3-1", r["info"]["extra_in_hl"])
+
+    def test_merged_dirs_are_not_reported_missing(self):
+        """合并目录必须按文献展开, 否则 Step 6 的合并动作会被误判成缺失。
+
+        回归: 合并前 highlight 侧是 ``P3-2`` + ``P4-2`` 两个目录, 合并后只剩
+        一个 ``P3-2_P4-2``。按目录比较会同时报出"缺 P3-2、P4-2"和
+        "多 P3-2_P4-2" —— 实测 TMA 就是被这么误报成 缺 28 / 多 12。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            dl_dir = os.path.join(tmp, "_download")
+            hl_dir = os.path.join(tmp, "_highlight")
+            os.makedirs(dl_dir)
+            os.makedirs(hl_dir)
+            for pn in ['P1-1', 'P2-1', 'P3-2', 'P4-2']:
+                os.makedirs(os.path.join(dl_dir, pn))
+            os.makedirs(os.path.join(hl_dir, 'P1-1'))
+            os.makedirs(os.path.join(hl_dir, 'P2-1'))
+            os.makedirs(os.path.join(hl_dir, 'P3-2_P4-2'))   # 已合并
+
+            r = _check_step5_alignment(None, dl_dir, hl_dir, tmp)
+            self.assertTrue(r["ok"], r["issues"])
+            self.assertEqual(r["info"]["dl_count"], 4)
+            self.assertEqual(r["info"]["hl_count"], 4)
+
+
+class TestExpandPnXName(unittest.TestCase):
+    """Pn-x 名字展开 (合并目录的对齐基础)"""
+
+    def test_single(self):
+        self.assertEqual(_expand_pn_x_name('P3-2'), {'P3-2'})
+
+    def test_merged(self):
+        self.assertEqual(_expand_pn_x_name('P3-2_P4-2'), {'P3-2', 'P4-2'})
+
+    def test_merged_many(self):
+        self.assertEqual(
+            _expand_pn_x_name('P11-2_P12-1_P22-2_P25-8'),
+            {'P11-2', 'P12-1', 'P22-2', 'P25-8'})
+
+    def test_flat_filename(self):
+        self.assertEqual(_expand_pn_x_name('P11-1_main.pdf'), {'P11-1'})
+
+    def test_aux_dir_is_not_a_literature(self):
+        """Pn-x_jpgs / Pn-x_images 是渲染副产物, 不是文献。"""
+        self.assertEqual(_expand_pn_x_name('P1-1_jpgs'), set())
+        self.assertEqual(_expand_pn_x_name('P1-1_images'), set())
+
+    def test_non_pn_x(self):
+        self.assertEqual(_expand_pn_x_name('_download'), set())
+        self.assertEqual(_expand_pn_x_name('README.md'), set())
+
+    def test_count_literatures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ('P1-1', 'P2-1', 'P3-2_P4-2', 'P1-1_jpgs'):
+                os.makedirs(os.path.join(tmp, name))
+            # 1 + 1 + 2 = 4 篇 (辅助目录不计)
+            self.assertEqual(_count_literatures(tmp), 4)
+
+    def test_count_literatures_flat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ('P11-1_main.pdf', 'P11-2_main.pdf', 'notes.txt'):
+                open(os.path.join(tmp, name), 'w').close()
+            self.assertEqual(_count_literatures(tmp), 2)
 
 
 class TestStep6Merge(unittest.TestCase):
