@@ -48,6 +48,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.33] - 2026-09-11 (部署指南本身在教人装错东西 —— 修 DEPLOY.md; 并确认 CI 三平台已全绿)
+
+接着上一条的"能否分发部署"。CI 修好之后顺查部署文档, 发现 **`docs/DEPLOY.md` 的
+"各平台软件接入矩阵"是坏的** —— 而那是部署者在其他设备上唯一会照着做的一份文档。
+
+### Fixed — DEPLOY.md
+
+- **"PPT 真实渲染"那一行**还在写 Windows 用 `PowerPoint/WPS COM`、macOS/Linux 用
+  `LibreOffice soffice (自动探测)` —— WPS 与 LibreOffice 都已删除, 且按规范**禁止使用**。
+- **"PPT 近似渲染(兜底)"那一整行**(python-pptx + 各平台 CJK 字体)—— python-pptx 渲染器
+  早已删除, 而且它本身就属于"会重排"的引擎。照这行做会以为存在兜底。
+  两行合并重写为按平台列出 PPT/Word 的**版式**路径, 并明确写"**没有兜底通道** …
+  拿不到微软引擎就直接失败"。
+- 新增 **§2.1 渲染前置条件(部署后必读)**: 三平台渲染路径表 + "部署后先跑真出图自检
+  `python3 scripts/render_doctor.py`" + 为什么不能只看依赖探测(假 OK) + macOS
+  `-1712 / -1708` 的处置办法。原矩阵降级为 §2.2(纯依赖类)。
+- `medit doctor` 那行注释里的 `soffice` 去掉(它已经不探测这个了)。
+- **环境变量表补 5 行**: `RENDER_ENGINE` / `RENDER_RASTERIZER` / `PPT_RENDER_TIMEOUT` /
+  `WORD_RENDER_TIMEOUT` / Graph 凭据 —— 新设备部署要用, 之前一个都没写。
+- **§5 CI 验证**: 测试计数更新(79/25 → 120/36), 补上禁止区校验与渲染链路的 import 探测,
+  并写明"Python 测试刻意不依赖平台"的做法, 以及 v5.4.26~v5.4.31 那次教训。
+
+### 已验证 — CI 三平台全绿
+
+修完上一条后**复查了 GitHub Actions 的真实结论**(不是只看本机):
+
+| job | 结论 |
+| --- | --- |
+| ``go (ubuntu / macos / windows)`` | ✅ ×3 |
+| ``python (ubuntu-latest)`` | ✅ |
+| ``python (macos-latest)`` | ✅ |
+| ``python (windows-latest)`` | ✅ |
+
+**即 v5.4.32 起, Go 侧与 Python 侧在 ubuntu / macOS / Windows 上全部通过** ——
+这是"可以分发到 Win/Mac"的硬证据(在此之前连续六次提交是红的)。
+
 ## [5.4.32] - 2026-09-11 (分发可用性: CI 在 ubuntu / windows 上已经红了六次 —— 修掉 + 补上"本机就能发现"的守卫)
 
 回应"确认当前版本是否可以分发并部署到其他设备(winOS / macOS)"。
