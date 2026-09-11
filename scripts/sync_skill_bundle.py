@@ -31,7 +31,9 @@
 - 目录名映射: A 的 ``examples/`` 对应 B 的 ``hl_pnx_examples/``。两侧目录名各自的引用方
   都还在用 (``docs/6_step_sop.md`` 指 A 的 ``examples/``; 两份 SKILL.md 指 B 的
   ``hl_pnx_examples/``), 故不做重命名, 只在此处声明映射。
-- B 中 A 没有的文件**不动** (属分发包自带的辅助脚本), 仅列出提示。
+- B 中 A 没有的文件: **只有列在 ``BUNDLE_ONLY_OK`` 里的才算有意保留**, 其余视为意外漂移,
+  ``--check`` 直接判失败。这条是从一次真实的困惑里补出来的 —— 原先"不处理"只是打印一句
+  提示, 于是"有意保留的辅助脚本"与"谁手滑放进来的文件"在报告里长得一模一样。
 """
 from __future__ import annotations
 
@@ -47,6 +49,16 @@ DST = os.path.join(REPO, "skills", "via54medit-literature-pipeline", "scripts")
 
 # A 侧目录名 -> B 侧目录名
 DIR_RENAME = {"examples": "hl_pnx_examples"}
+
+#: B 独有、且**有意**保留的文件 (相对 DST 的路径)。它们不参与 A -> B 覆盖。
+#: 新增条目前请确认它是「分发包自带」而不是「本该在 hl_v3_final 里」。
+BUNDLE_ONLY_OK = {
+    "verify_sandbox_interceptor.py": (
+        "sandbox 拦截器 self-check, 被 SKILL.md 引用 (10 项自检 / 5 项必须通过)。"
+        "它验证的 via54_sandbox_forbidden.py 是 hermes 侧运行时模块, 不在本仓库, "
+        "所以不适合塞进 hl_v3_final 高亮工具链。"
+    ),
+}
 
 IGNORE_DIRS = {"__pycache__", ".pytest_cache"}
 
@@ -96,23 +108,33 @@ def main():
         if not os.path.exists(os.path.join(SRC, *parts)):
             dst_only.append(rel)
 
+    allowed = sorted(r for r in dst_only if r in BUNDLE_ONLY_OK)
+    unexpected = sorted(r for r in dst_only if r not in BUNDLE_ONLY_OK)
+
     print(f"源 (权威): {SRC}")
     print(f"目标 (分发): {DST}")
     print(f"  需新增 {len(missing)} 个, 需更新 {len(differing)} 个, "
-          f"目标独有 {len(dst_only)} 个")
+          f"目标独有 {len(dst_only)} 个 "
+          f"(白名单 {len(allowed)} / 意外 {len(unexpected)})")
 
     for rel, _ in missing:
         print(f"    + {rel}")
     for rel, _ in differing:
         print(f"    ~ {rel}")
-    for rel in dst_only:
-        print(f"    ? {rel}  (目标独有, 不处理)")
+    for rel in allowed:
+        print(f"    = {rel}  (分发包自带, 白名单)")
+    for rel in unexpected:
+        print(f"    ! {rel}  (意外独有 —— 请删除, 或确认属分发包后加入 BUNDLE_ONLY_OK)")
 
     if args.check:
-        return 1 if (missing or differing) else 0
-    if not (missing or differing):
+        return 1 if (missing or differing or unexpected) else 0
+    if not (missing or differing or unexpected):
         print("已一致, 无需同步。")
         return 0
+    if unexpected:
+        print(f"\n❌ 有 {len(unexpected)} 个意外独有文件, 同步中止 —— "
+              f"它们不属于 hl_v3_final, 不会被覆盖, 需要人工决定去留。", file=sys.stderr)
+        return 1
 
     for rel, target in missing + differing:
         os.makedirs(os.path.dirname(target), exist_ok=True)
