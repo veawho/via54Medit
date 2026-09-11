@@ -15,7 +15,7 @@ test_tma_pipeline.py — TMA 文献 highlight 流水线单测 (2026-08-20)
   T10: via54.py 子命令     (download/pdf-verify/hl-batch/...)   4 用例
 运行: python3 test_tma_pipeline.py
 """
-import os, sys, tempfile, unittest
+import os, sys, subprocess, tempfile, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -451,6 +451,24 @@ class TestFindImageMatches(unittest.TestCase):
 # ---------- T12: PPT 渲染引擎自动接入 (ppt_render_engine) ----------
 import ppt_render_engine as pre
 from unittest import mock
+from contextlib import contextmanager as _contextmanager
+
+
+@_contextmanager
+def _as_macos():
+    """把运行环境伪装成 macOS。
+
+    为什么要它: 有一批用例测的是 **darwin 分支的逻辑**(预检、超时、hint、AppleScript 里嵌的秒数),
+    跟"本机是不是 macOS"无关。不伪装的话, 在 Linux/Windows 上会先被
+    "本平台没有桌面版 PowerPoint 通道" 那条分支挡掉, 用例于是失败 ——
+    CI 的 ``python (ubuntu-latest)`` 与 ``python (windows-latest)``
+    从 v5.4.26 一路红到 v5.4.31, 而**本机 macOS 全绿把它盖住了**。
+
+    伪装平台比"非 macOS 就跳过"更好: 这样**每个平台都会真的跑一遍这些分支**,
+    而不是在别的平台上被静默跳过。
+    """
+    with mock.patch.object(os, "name", "posix"), mock.patch.object(sys, "platform", "darwin"):
+        yield
 
 
 class TestRenderEngine(unittest.TestCase):
@@ -542,7 +560,8 @@ class TestRenderEngine(unittest.TestCase):
             raise AssertionError("预检失败后不应再执行 open 脚本")
 
         tmp = tempfile.mkdtemp()
-        with mock.patch.object(pre.subprocess, "run", side_effect=fake_run), \
+        with _as_macos(), \
+                mock.patch.object(pre.subprocess, "run", side_effect=fake_run), \
                 mock.patch.object(pre.time, "sleep", return_value=None):
             with self.assertRaises(RuntimeError) as cm:
                 pre.render_via_macos_powerpoint(os.path.join(tmp, "x.pptx"),
@@ -568,7 +587,8 @@ class TestRenderEngine(unittest.TestCase):
             return self._R(1, "", "224:339: execution error: AppleEvent 已超时。 (-1712)")
 
         tmp = tempfile.mkdtemp()
-        with mock.patch.dict(os.environ, {"PPT_RENDER_TIMEOUT": "9"}), \
+        with _as_macos(), \
+                mock.patch.dict(os.environ, {"PPT_RENDER_TIMEOUT": "9"}), \
                 mock.patch.object(pre.subprocess, "run", side_effect=fake_run), \
                 mock.patch.object(pre.time, "sleep", return_value=None):
             with self.assertRaises(RuntimeError) as cm:
@@ -599,6 +619,50 @@ class TestRenderEngine(unittest.TestCase):
             ok, detail = pre.probe_macos_powerpoint(timeout=5)
         self.assertFalse(ok)
         self.assertIn("osascript", detail)
+
+    def test_as_macos_fakes_os_name_too_not_just_platform(self):
+        """伪装平台必须**同时**改 ``os.name`` 与 ``sys.platform``。
+
+        只改 ``sys.platform`` 会在 Windows 上漏掉 ``os.name == "nt"`` 分支 —— 那正是 CI 上
+        ``test_powerpoint_pref_never_falls_back_to_other_channels`` 报 ERROR 的原因。
+        本机没法把 ``os.name`` 伪装成 "nt"(asyncio 会去 import Windows 专属的 ``_overlapped``),
+        也没法靠行为断言(POSIX 宿主上 ``os.name`` 本来就是 posix) —— 所以直接查 helper 的源码,
+        这条在**任何**平台上都成立。
+        """
+        with _as_macos():
+            self.assertEqual(sys.platform, "darwin", "必须伪装 sys.platform")
+        with open(os.path.abspath(__file__), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn('mock.patch.object(os, "name", "posix"', src,
+                      "helper 必须同时改 os.name —— 否则 Windows 上的 nt 分支会漏掉")
+
+    def test_render_engine_suite_passes_on_non_macos(self):
+        """把 ``sys.platform`` 伪装成 linux 再跑一遍本类 —— 防止再出现"本机绿、CI 红"。
+
+        这是**流程补丁**: CI 的 ubuntu/windows job 从 v5.4.26 红到 v5.4.31, 而我在 macOS 上
+        每次都是绿的, 于是连着六次提交都没发现。光把那几个用例改对不够 ——
+        得让"非 macOS 跑不过"这件事在**本机**立刻暴露。
+        (Windows 那一侧的 ``os.name`` 无法在本机伪装, 见上一条用例的说明。)
+        """
+        if os.environ.get("VIA54_PLATFORM_SIM"):
+            self.skipTest("模拟子进程里不再递归")
+        script = (
+            "import sys; sys.platform = 'linux'\n"
+            "import unittest\n"
+            "sys.path.insert(0, '.')\n"
+            "import test_tma_pipeline as t\n"
+            "suite = unittest.TestLoader().loadTestsFromTestCase(t.TestRenderEngine)\n"
+            "r = unittest.TextTestRunner(verbosity=0).run(suite)\n"
+            "sys.exit(0 if r.wasSuccessful() else 1)\n"
+        )
+        env = dict(os.environ, VIA54_PLATFORM_SIM="1")
+        here = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run([sys.executable, "-c", script], cwd=here, env=env,
+                           capture_output=True, text=True, timeout=300)
+        self.assertEqual(
+            r.returncode, 0,
+            "把平台伪装成 linux 后本类跑不过 —— CI 的 ubuntu job 也会红:\n"
+            + ((r.stderr or "") + (r.stdout or ""))[-1500:])
 
     def test_failure_hint_reaches_the_log(self):
         """可操作建议必须真的出现在 render_ppt_slides_auto 的日志里。
@@ -636,15 +700,13 @@ class TestRenderEngine(unittest.TestCase):
         pptx = os.path.join(tmp, "x.pptx")
 
         # 有 PowerPoint → 单通道
-        with mock.patch.dict(os.environ, clean, clear=True), \
-                mock.patch.object(pre.sys, "platform", "darwin"), \
+        with mock.patch.dict(os.environ, clean, clear=True), _as_macos(), \
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=True):
             engines = pre._build_engine_list()
         self.assertEqual([k for _, k, _ in engines], ["macos_ppt"])
 
         # 没 PowerPoint → 抛错, 且明确说明不降级
-        with mock.patch.dict(os.environ, clean, clear=True), \
-                mock.patch.object(pre.sys, "platform", "darwin"), \
+        with mock.patch.dict(os.environ, clean, clear=True), _as_macos(), \
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=False):
             with self.assertRaises(RuntimeError) as cm:
                 pre._build_engine_list()
@@ -652,8 +714,7 @@ class TestRenderEngine(unittest.TestCase):
         self.assertIn("不降级", str(cm.exception))
 
         # 渲染入口返回 0; 别的通道**在代码里已不存在**, 不可能被调用
-        with mock.patch.dict(os.environ, clean, clear=True), \
-                mock.patch.object(pre.sys, "platform", "darwin"), \
+        with mock.patch.dict(os.environ, clean, clear=True), _as_macos(), \
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=False), \
                 mock.patch("builtins.print"):
             n, engine = pre.render_ppt_slides_auto(pptx, os.path.join(tmp, "o"))

@@ -210,4 +210,11 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # Windows 上把输出重定向到文件/管道时, 默认按 cp936 编码 —— 本脚本打的中文与
+    # ✓ ✗ • 有相当一部分不在 GBK 里, 会直接 UnicodeEncodeError。统一改成 utf-8。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                       # noqa: BLE001  (老解释器/被替换过的流)
+        pass
     sys.exit(main(sys.argv[1:]))

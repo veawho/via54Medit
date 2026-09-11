@@ -356,6 +356,13 @@ def _check():
 
 if __name__ == "__main__":
     import sys
+    # Windows 上把输出重定向到文件/管道时默认按 cp936 编码, 本模块打的中文与 ✓ ✗ 有相当
+    # 一部分不在 GBK 里, 会直接 UnicodeEncodeError —— 统一改成 utf-8。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                       # noqa: BLE001
+        pass
     if len(sys.argv) >= 2 and sys.argv[1] == "--check":
         sys.exit(_check())
     if len(sys.argv) < 3:

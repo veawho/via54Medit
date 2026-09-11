@@ -68,4 +68,10 @@ jobs:
       - name: Toolchain imports (cross-platform surface)
         working-directory: scripts
         run: |
-          python -c "import sys; sys.path.insert(0, '.'); import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final; print('imports OK')"
+          # 渲染链路相关的模块必须一并探测到 —— 它们以前不在这个清单里, 于是
+          # 渲染侧的平台问题在 Windows/Linux 上要到跑测试才暴露(甚至不暴露)。
+          python -c "import sys; sys.path[:0] = ['.', 'hl_v3_final']; import deps_auto, ppt_render_engine, tma_verify_highlights, via54_auto, via54_highlight_v3_final, unified_render_engine, render_doctor, graph_render, bootstrap_device; print('imports OK')"
+
+      # 注: 渲染通道的"真出图"探针 (scripts/render_doctor.py) **故意不放进 CI** ——
+      # 跑者的镜像里没有(也不该有)桌面版 PowerPoint/Word, 它必然报不可用。
+      # 那一步在真机上跑: python3 scripts/render_doctor.py

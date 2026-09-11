@@ -307,6 +307,12 @@ def render_source_file(source_path: str, out_dir: str, dpi: int = 150) -> Dict[s
 
 
 if __name__ == "__main__":
+    # Windows 上输出重定向时默认按 cp936 编码 —— 渲染过程会打中文与符号, 统一改成 utf-8。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                       # noqa: BLE001
+        pass
     if len(sys.argv) < 3:
         print("Usage: python3 unified_render_engine.py <source_file> <out_dir>")
         sys.exit(1)
