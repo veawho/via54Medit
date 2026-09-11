@@ -48,6 +48,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.28] - 2026-09-11 (接入 Microsoft Graph 通道: 微软自己的在线渲染引擎)
+
+用户指示: "接入 Microsoft Graph 通道"。它由**微软服务端(Office 在线)**渲染, 与桌面版同属微软,
+因此在"版式必须来自微软引擎"的标准下**合格** —— 但**与桌面版有已知差异**, 所以做成
+**显式选项** `RENDER_ENGINE=graph`: 既不是默认, 也不是降级目标。
+
+### Added
+
+- **`scripts/hl_v3_final/graph_render.py`** —— Graph 客户端(纯标准库; HTTP 收在单点接缝上便于测试):
+  `acquire_token()`(客户端凭据 / 现成令牌) → `upload_item()`(PUT 上传到 OneDrive/SharePoint)
+  → `download_as_pdf()`(`?format=pdf` 转换 + 跟随 302 预认证 URL) → `delete_item()`(清理临时件)。
+- **`RENDER_ENGINE=graph`** —— `ppt_render_engine` 与 `hl_v3_final/ppt_to_pdf.py` 都支持;
+  **复用**同一套本地栅格化与字体内嵌保真检查, 不另造一套出图路径。
+- **`graph_render.py --check`** —— 自检: 凭据 → 取令牌 → drive 可达; 缺什么直接列出来。
+- `docs/ppt-render-fidelity.md` 增 §3.1 记录 Graph 的流程、官方限制与踩过的坑(附来源)。
+
+### 设计取舍 (每条都有官方依据)
+
+| 决策 | 原因 |
+| --- | --- |
+| 走 `?format=pdf`, **不用** `format=jpg` | 官方 API 页未说明, 社区实测 pptx→jpg **只返回第一张幻灯片**; 整份只有 pdf 走得通 |
+| 先上传再转换 | 该 API 只作用于 `driveItem`, 不能直接对本地文件转换 |
+| 跟随 302 时**不带** `Authorization` | 官方明确: 预认证 URL 在有效期内无需鉴权(带了反而可能被拒) |
+| 用完 `DELETE` 清理中转件 | 上传只是中转; `GRAPH_KEEP_UPLOAD=1` 可保留用于排查 |
+| >250 MB 直接报错 | 官方单次上传上限 250 MB, 超过需 upload session(未实现, 就不假装支持) |
+| 429/503 按 `Retry-After` 退避重试 | Graph 通用节流要求 |
+| **不自动切换** | 连"桌面版失败就自动切 Graph"也不做 —— 必须显式指定, 宁可报错 |
+
+### 与桌面版的已知差异 (写进文档, 不假装等价)
+
+Office 在线引擎: 字体可能被替换、符号在缺字体时显示为占位符、部分对象行为与桌面版不同。
+所以**桌面版可用时优先桌面版**; 报错提示里也把 Graph 标成"另一条微软引擎的路", 而不是"绕过它"。
+
+### 测试 (全部 mock HTTP, 不联网)
+
+- `test_tma_pipeline` **95 → 109 项**, 新增 `TestGraphChannel` 14 项: token 请求形态 / 现成令牌短路 /
+  完整链路(上传→转换→302→下载→清理) / 预认证请求**不带** Authorization / 保留上传件 /
+  缺凭据的可操作说明 / 自动解析 drive / app-only 无 `/me` 的提示 / 非 PDF 载荷被拒 /
+  429 退避重试 / 超限提示 upload session / **未显式选择时绝不触碰 Graph** /
+  Graph 失败不退回桌面版 / graph 路径复用本地栅格化。
+- **负向对照两次抓到自己的漏洞(如实记录)**: ① 第一版把 mock 打在 `_request` 上, 而那正是重试
+  逻辑所在层 —— 429 重试压根没被测到, 改打到 `_open`; ② "不自动切换"那条起初只验了
+  `render_ppt_slides_auto`, 它被 `_build_engine_list` 提前挡下、走不到 `export_ppt_to_pdf`,
+  且源文件都没建 —— 负向对照两次都溜过去, 补成两级断言后注入"默认也走 graph"当场红。
+- 另修一条历史 lint: `test_no_advice_to_switch_render_channels` 拓宽禁用名单后误伤了
+  CHANGELOG 里的历史记录 —— 已让该 lint 跳过 `CHANGELOG.md`(历史存档不改写, 与 v5.4.16 同处理)。
+- `make test-py`(71 + 24) / `test_pipeline_ha`(7 过 3 跳过) / `gofmt` / `go vet` / `go test ./...`
+  全过; 镜像 `--check` 退出码 0(`graph_render.py` 已同步进技能分发包)。
+
+### 功能探针 (实跑过)
+
+- 无凭据跑 `--check` → 退出码 1, 并列出 (a) 现成令牌 / (b) 客户端凭据两条路与所需权限;
+- `RENDER_ENGINE=graph` 且凭据不全 → 渲染返回 0 张并说明原因, **不**退回桌面版;
+- 技能分发包里的 `graph_render.py --check` 输出与仓库内一致(自包含)。
+
+### 需要你提供 / 待确认
+
+- **凭据**: 走 app-only 需要在 Microsoft Entra 注册应用(应用权限 `Files.ReadWrite.All` + 管理员同意)
+  并给出 `GRAPH_DRIVE_ID`; 或者直接给 `GRAPH_ACCESS_TOKEN`(委派令牌也行 —— 那种情况可自动取
+  `/me/drive`)。个人版 OneDrive **不支持** app-only。
+- Word 那条仍按 PPT 范围处理(`unified_render_engine.render_docx_to_images()` 继续用 LibreOffice),
+  理由见 v5.4.27。**要收口就说一声。**
+
 ## [5.4.27] - 2026-09-11 (勘误: "禁用其它通道"我禁过头了 —— 判定标准是**保真**, 不是程序名)
 
 用户澄清(原话):
