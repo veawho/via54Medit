@@ -48,6 +48,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.11] - 2026-09-11 (修复: 消除 fitz 弃用警告 + 补齐文档覆盖)
+
+承接 v5.4.10 的收尾核查。上次列出三项残留, 本轮处理前两项; 第三项 `bin/annas-cli` (13 MB、7 月 20 日、未被 git 跟踪、全仓库零引用的遗留产物) 待确认是否废弃后再动。
+
+### Fixed
+- **PyMuPDF 弃用警告**: `watcher.py` 与 `pdf_utils.py` 原先写 `import fitz`, PyMuPDF 会因此往 stderr 打一行 `The \`fitz\` API is deprecated and will be removed in future. Use \`import pymupdf\` instead.` —— 这行警告会顺着导入链污染守护进程启动日志, 以及任何 `from telemetry import WorkspaceScanner` 的场景。改用 `pymupdf` (1.24+ 的正式导入名), 旧版本回退 `import fitz`。两处均加了"为什么不能写 `import fitz`"的注释, 免得后人改回去。
+
+### Docs
+- **补齐告警通道与定时同步的文档覆盖** —— 这是一次真实疏漏: v5.4.7 ~ v5.4.9 上线了外部告警通道、`alert` 子命令、auto_sync 退出码契约与日志迁址, 但根 `README.md`、`README.zh-CN.md`、`docs/TELEMETRY_GUIDE.md` 三处**全部漏更新**, 只有 `telemetry/README.md` 跟上了, 而且连它也没写退出码。现已补:
+  - 指南新增「### D. 关键事件外部告警与定时同步」小节 (命令速查 + 告警触发点与级别表 + 不会上报的情况 + 退出码表); 「核心功能特性」补第 6/7 条, 含各项设计理由; 「本地持久化」补 `autosync.log`、`alerts_state.json`、日志轮转与描述符观测。
+  - 两份根 README 补告警与定时同步条目, 均给出**实际命令名**而非仅描述能力。
+  - 模块 README 补退出码契约与文件描述符观测说明。
+
+### 验证
+- **test_telemetry 60/60 passed**, 新增 2 项:
+  - `test_pdf_stack_import_carries_no_deprecation_warning`: 导入 `WorkspaceScanner` / `pdf_utils` 时 stderr 不得出现 `deprecated`。
+  - `test_docs_cover_alert_channel_and_sync_exit_codes`: 四份用户可见文档都必须提到告警通道与退出码。**这条防护写完后立刻抓到一次真实疏漏** —— 我给中文 README 只写了「外部告警」的能力描述, 却没给出 `alert` 命令名, 测试直接失败; 补上命令后才通过。
+- 实测 `get_pdf_page_count` 对真实 PDF 仍返回正确页数 (样本 26 页), 功能未受影响。
+- 守护进程重启后启动日志只剩「服务启动就绪」一行, 不再有警告行。
+
 ## [5.4.10] - 2026-09-11 (优化: 包级导入改惰性, 消除无谓依赖与输出污染)
 
 承接对 `telemetry` 包 eager import 的核查 —— 确认问题真实存在, 并量化了代价。
