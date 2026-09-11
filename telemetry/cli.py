@@ -28,21 +28,14 @@ from .config import (
     WEEKDAY_NAMES,
     CONFIG_FILE_PATH,
 )
-from .daemon import (
-    start_daemon_process,
-    stop_daemon_process,
-    get_daemon_status,
-    install_windows_startup_task,
-    install_startup_vbs,
-    uninstall_startup_vbs,
-    install_traework_companion_launcher,
-    install_launchd_agent,
-    uninstall_launchd_agent,
-)
 from .db import TelemetryDB
 from .feishu_sync import FeishuSyncClient
 from .platform_paths import desktop_dir, trae_work_dir
-from .watcher import WorkspaceScanner
+
+# 刻意**不**在此处导入 ``.daemon`` / ``.watcher``:
+# 两者会经 watcher -> pdf_utils -> fitz 拉起 PyMuPDF, 于是连 ``--help``、``--env-check``、
+# ``alert`` 这些与 PDF 毫无关系的子命令也要付这份开销, 输出还会被 fitz 的弃用警告污染。
+# 改用它们的函数各自在函数体内导入 (见 _install_autostart / cmd_daemon / cmd_scan 等)。
 
 
 def cmd_status(args):
@@ -189,6 +182,8 @@ def cmd_bitable(args):
 
 
 def cmd_scan(args):
+    from .watcher import WorkspaceScanner
+
     db = TelemetryDB()
     scanner = WorkspaceScanner(db)
     res = scanner.scan_project(args.path, args.name)
@@ -199,6 +194,8 @@ def cmd_scan(args):
 
 
 def cmd_backfill(args):
+    from .watcher import WorkspaceScanner
+
     db = TelemetryDB()
     scanner = WorkspaceScanner(db)
     targets = [
@@ -314,6 +311,8 @@ def cmd_config(args):
 
 def _install_autostart():
     """跨平台注册开机自启: macOS -> LaunchAgent; 其余 -> Windows Startup VBS。"""
+    from .daemon import install_launchd_agent, install_startup_vbs
+
     if sys.platform == "darwin":
         install_launchd_agent()
     else:
@@ -322,6 +321,8 @@ def _install_autostart():
 
 def _uninstall_autostart():
     """跨平台移除开机自启。"""
+    from .daemon import uninstall_launchd_agent, uninstall_startup_vbs
+
     if sys.platform == "darwin":
         uninstall_launchd_agent()
     else:
@@ -330,6 +331,14 @@ def _uninstall_autostart():
 
 def cmd_daemon(args):
     """后台主动监控与调度守护进程管理。"""
+    from .daemon import (
+        get_daemon_status,
+        install_traework_companion_launcher,
+        install_windows_startup_task,
+        start_daemon_process,
+        stop_daemon_process,
+    )
+
     if args.start:
         start_daemon_process(foreground=False)
     elif args.foreground:

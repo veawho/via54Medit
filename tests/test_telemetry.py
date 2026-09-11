@@ -1593,5 +1593,85 @@ class TestAutoSync(unittest.TestCase):
                 self.assertEqual(code, want, f"{result} 的退出码应为 {want}")
 
 
+class TestPackageImportStrategy(unittest.TestCase):
+    """telemetry 包的导入策略: 轻量子模块不应连带拉起重依赖。
+
+    此前 ``__init__.py`` 是 eager 导入, 于是 ``import telemetry.envcheck`` 也会经
+    watcher -> pdf_utils 拉起 PyMuPDF (实测连带 26 个模块), 既多付开销, 又让 fitz 的
+    弃用警告污染 ``--env-check`` / ``--help`` 这些与 PDF 无关的命令输出。
+    """
+
+    REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _run(self, code):
+        import subprocess
+
+        return subprocess.run([sys.executable, "-c", code], cwd=self.REPO,
+                              capture_output=True, text=True, timeout=60)
+
+    def test_light_submodule_does_not_drag_pdf_stack(self):
+        """envcheck / db 这类子模块不得连带拉起 PDF 相关模块, 也不该打出弃用警告。"""
+        code = (
+            "import sys\n"
+            "import telemetry.envcheck\n"
+            "import telemetry.db\n"
+            "heavy = sorted(m for m in sys.modules if m.startswith(\n"
+            "    ('fitz', 'pymupdf', 'telemetry.watcher', 'telemetry.pdf_utils')))\n"
+            "print('HEAVY=' + ','.join(heavy))\n"
+        )
+        r = self._run(code)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("HEAVY=", r.stdout)
+        self.assertEqual(r.stdout.strip(), "HEAVY=",
+                         "轻量子模块不该连带 PDF 依赖 (经 watcher -> pdf_utils -> fitz)")
+        self.assertNotIn("deprecated", r.stderr, "不该出现 fitz 的弃用警告")
+
+    def test_lazy_exports_still_resolve(self):
+        """惰性化不能破坏既有的 from telemetry import X 写法。"""
+        code = (
+            "import telemetry\n"
+            "from telemetry import (TelemetryDB, TelemetryTracker, TelemetryAggregator,\n"
+            "                       FeishuSyncClient, WorkspaceScanner, AggregateReport,\n"
+            "                       TaskType, record_llm_usage)\n"
+            "print('V=' + telemetry.__version__)\n"
+            "print('DIR=' + str(all(n in dir(telemetry) for n in\n"
+            "    ['TelemetryDB', 'WorkspaceScanner', 'FeishuSyncClient', 'AggregateReport'])))\n"
+        )
+        r = self._run(code)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"V={self._version()}", r.stdout)
+        self.assertIn("DIR=True", r.stdout)
+
+    def test_unknown_attribute_still_raises(self):
+        """未知属性仍应是 AttributeError, 而不是静默返回 None。"""
+        code = (
+            "import telemetry\n"
+            "try:\n"
+            "    telemetry.definitely_not_here\n"
+            "except AttributeError:\n"
+            "    print('OK')\n"
+        )
+        r = self._run(code)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("OK", r.stdout)
+
+    def test_cli_light_commands_carry_no_pdf_noise(self):
+        """--env-check / --help 的输出不得出现 PDF 库的弃用警告。"""
+        import subprocess
+
+        for argv in (["--env-check"], ["--help"]):
+            with self.subTest(argv=argv):
+                r = subprocess.run([sys.executable, "-m", "telemetry.cli", *argv],
+                                   cwd=self.REPO, capture_output=True, text=True, timeout=60)
+                combined = r.stdout + r.stderr
+                self.assertNotIn("deprecated", combined,
+                                 f"{argv} 的输出不该带 PDF 库警告")
+
+    @staticmethod
+    def _version():
+        import telemetry
+        return telemetry.__version__
+
+
 if __name__ == "__main__":
     unittest.main()
