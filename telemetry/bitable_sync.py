@@ -1,6 +1,6 @@
 """
 Feishu Bitable (多维表格 / Base) integration module.
-Manages automatic Base creation, table schema setup (15 fields), multi-user weekly record syncing (with upsert idempotency),
+Manages automatic Base creation, table schema setup (见 TABLE_SCHEMA_FIELDS), multi-user weekly record syncing (with upsert idempotency),
 and data retrieval for automated chart reports.
 """
 
@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import CONFIG_FILE_PATH, load_config, save_config
+from .csv_migrate import migrate_header
 from .models import AggregateReport
 
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
@@ -31,6 +32,11 @@ TABLE_SCHEMA_FIELDS = [
     {"field_name": "Highlight标注篇数", "type": 2},
     {"field_name": "高亮节约工时(h)", "type": 2},
     {"field_name": "总节约工时(h)", "type": 2},
+    # ↓ 其他类目: 与三类一样统计**实际工时**与 **Token 消耗**;
+    #   不产出"节约工时" —— 该类目没有人工基准, 不编造。
+    {"field_name": "其他任务数", "type": 2},
+    {"field_name": "其他工作时长(h)", "type": 2},
+    {"field_name": "其他Token消耗", "type": 2},
     {"field_name": "真实Token消耗", "type": 2},
     {"field_name": "API调用次数", "type": 2},
     {"field_name": "上报状态", "type": 3, "property": {
@@ -375,7 +381,7 @@ class FeishuBitableManager:
         return self._field_map().get("备注说明", "")
 
     def build_standard_payload(self, report: AggregateReport, nick: str, oid: str) -> Dict[str, Any]:
-        """按本模块自建标准表 (15 字段) 构造 payload。"""
+        """按本模块自建标准表构造 payload (字段见 TABLE_SCHEMA_FIELDS)。"""
         r = report.to_dict()
         now_ts = int(datetime.now().timestamp() * 1000)
         return {
@@ -391,6 +397,9 @@ class FeishuBitableManager:
             "Highlight标注篇数": r["highlight"]["count"],
             "高亮节约工时(h)": float(r["highlight"]["saved_hours"]),
             "总节约工时(h)": float(r["overall"]["total_saved_hours"]),
+            "其他任务数": int(r["other"]["count"]),
+            "其他工作时长(h)": float(r["other"]["duration_hours"]),
+            "其他Token消耗": int(r["other"]["total_tokens"]),
             "真实Token消耗": int(r["tokens"]["total_tokens"]),
             "API调用次数": int(r["tokens"].get("llm_call_count", 0)),
             "上报状态": STANDARD_STATUS_VALUE,
@@ -440,6 +449,10 @@ class FeishuBitableManager:
             "备注说明": (
                 f"自动同步：检索 {r['retrieval']['count']} 篇 / 下载 {r['download']['count']} 篇 / "
                 f"高亮 {r['highlight']['count']} 篇（{r['highlight']['pages']} 页），节约 {total_hours}h"
+                # 公司表没有「其他」专列, 但它是团队实际投入的一部分 —— 放进备注,
+                # 否则这类工作在这张表里完全不可见。
+                f"；其他 {r['other']['count']} 项 / {r['other']['duration_seconds']}s"
+                f" / {r['other']['total_tokens']} tokens"
             ),
         }
         field_map = self._field_map()
@@ -613,16 +626,27 @@ class FeishuBitableManager:
     def _record_local_csv(self, fields: Dict[str, Any], schema: str = SCHEMA_STANDARD):
         """本地零丢失企业双备份。
 
-        无论目标表是哪种 schema, 备份一律以「标准字段名」落盘且固定 15 列:
-        否则同一份 CSV 会混入两种列语义, 表头与实际列错位后无法回读。
+        无论目标表是哪种 schema, 备份一律以「标准字段名」落盘并以 ``BACKUP_FIELDS``
+        为固定列序: 否则同一份 CSV 会混入两种列语义, 表头与实际列错位后无法回读。
+
+        追加前会先把表头对齐到当前 ``BACKUP_FIELDS`` (见 ``csv_migrate``) —— 新增类目
+        就是新增列; 新列一律**追加在末尾**, 表头没对齐就写入更宽的行, 回读时会因列数
+        不符被当作脏行**静默丢弃** (备份看着还在长, 数据却在丢)。清理逻辑与公共统计表
+        共用同一实现, 避免两处规则慢慢分叉。
         """
         std = self.normalize_record_fields(fields, schema)
         row = [std.get(name, "") for name in BACKUP_FIELDS]
         csv_path = self._backup_csv_path()
-        file_exists = os.path.exists(csv_path)
         try:
             import csv
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            may_append = True
+            if os.path.exists(csv_path):
+                may_append, _note = migrate_header(csv_path, BACKUP_FIELDS)
+            if not may_append:
+                # 表头没对齐就继续追加, 正是这个备份开始丢数据的时刻 —— 宁可不写。
+                return
+            file_exists = os.path.exists(csv_path)
             with open(csv_path, "a", encoding="utf-8-sig", newline="") as f:
                 writer = csv.writer(f)
                 if not file_exists:
@@ -634,9 +658,9 @@ class FeishuBitableManager:
     def _load_local_csv_records(self) -> List[Dict[str, Any]]:
         """读取本地备份, 统一返回「标准字段名」的记录。
 
-        历史版本曾把公司表 schema 的 13 列 payload 直接追加进 15 列标准表头的
-        文件, 造成列错位。这里按列宽识别这类遗留行并按其写入列序还原, 而不是
-        整行丢弃; 只有完全无法对齐的行才跳过。
+        历史版本曾把公司表 schema 的 13 列 payload 直接追加进标准表头的文件,
+        造成列错位。这里按列宽识别这类遗留行并按其写入列序还原, 而不是整行丢弃;
+        只有完全无法对齐的行才跳过。
         """
         csv_path = self._backup_csv_path()
         if not os.path.exists(csv_path):

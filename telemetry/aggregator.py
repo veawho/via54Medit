@@ -3,7 +3,12 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple, Any
 
 from .db import TelemetryDB
-from .models import AggregateReport
+from .models import (
+    AggregateReport,
+    CATEGORY_OTHER,
+    category_of_llm_log,
+    classify_task_type,
+)
 from .pdf_utils import get_pdf_page_count
 
 
@@ -121,28 +126,82 @@ class TelemetryAggregator:
         task_rows = self.db.query_tasks(start_iso, end_iso)
         llm_logs = self.db.query_llm_tokens(start_iso, end_iso)
         llm_call_count = len(llm_logs)
+        #: task_id -> 类目。用于把 LLM 调用归口 (见 models.category_of_llm_log)。
+        task_category_index = {str(t["task_id"]): classify_task_type(t["task_type"])
+                               for t in task_rows}
 
-        if token_mode == "exact":
-            # 100% 真实对齐：仅汇总真实 LLM 网关响应的 Token 日志，排除任何文件扫描时的估算
-            prompt_tokens = sum(int(l["prompt_tokens"]) for l in llm_logs)
-            completion_tokens = sum(int(l["completion_tokens"]) for l in llm_logs)
-            total_tokens = sum(int(l["total_tokens"]) for l in llm_logs)
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        # 「其他」的 Token 与总量**同源同口径** —— 两者在同一趟里累加, 因此
+        # other.total_tokens ⊆ tokens.total_tokens 是构造保证的, 不靠两处口径对齐
+        # (这类"两处各算一遍、慢慢走样"的坑本项目已经踩过)。
+        o_prompt = o_completion = o_total = 0
+        o_calls = 0
+        o_unattributed = 0
 
-            # 叠加由 Python 运行时探针 (track_highlight 等) 明确传入真实 usage 的任务
-            for t in task_rows:
-                if not str(t["task_id"]).startswith("scan_"):
-                    prompt_tokens += int(t["prompt_tokens"])
-                    completion_tokens += int(t["completion_tokens"])
-                    total_tokens += int(t["total_tokens"])
-                    if int(t["total_tokens"]) > 0:
+        # (a) 真实网关账单明细。estimated 模式下总量不汇总它, 「其他」同样不汇总 ——
+        #     保持子集关系在两种模式下都成立。
+        for l in llm_logs:
+            lp, lc, lt = (int(l["prompt_tokens"] or 0),
+                          int(l["completion_tokens"] or 0),
+                          int(l["total_tokens"] or 0))
+            if token_mode == "exact":
+                prompt_tokens += lp
+                completion_tokens += lc
+                total_tokens += lt
+            if token_mode == "exact" and \
+                    category_of_llm_log(l["task_id"], task_category_index) == CATEGORY_OTHER:
+                o_prompt += lp
+                o_completion += lc
+                o_total += lt
+                o_calls += 1
+                if not str(l["task_id"] or "").strip():
+                    o_unattributed += lt
+
+        # (b) 任务表自身携带的 Token
+        for t in task_rows:
+            tp = int(t["prompt_tokens"] or 0)
+            tc = int(t["completion_tokens"] or 0)
+            tt = int(t["total_tokens"] or 0)
+            is_scan = str(t["task_id"]).startswith("scan_")
+
+            if token_mode == "exact":
+                # 100% 真实对齐：排除扫描任务的文件估算, 只认明确传入的真实 usage
+                if not is_scan:
+                    prompt_tokens += tp
+                    completion_tokens += tc
+                    total_tokens += tt
+                    if tt > 0:
                         llm_call_count += 1
-        else:
-            # 仅在非默认的 estimated 模式下才汇总历史任务估算
-            prompt_tokens = sum(int(t["prompt_tokens"]) for t in task_rows)
-            completion_tokens = sum(int(t["completion_tokens"]) for t in task_rows)
-            total_tokens = sum(int(t["total_tokens"]) for t in task_rows)
+                    if classify_task_type(t["task_type"]) == CATEGORY_OTHER:
+                        o_prompt += tp
+                        o_completion += tc
+                        o_total += tt
+                        if tt > 0:
+                            o_calls += 1
+            else:
+                # 仅在非默认的 estimated 模式下才汇总历史任务估算
+                prompt_tokens += tp
+                completion_tokens += tc
+                total_tokens += tt
+                if classify_task_type(t["task_type"]) == CATEGORY_OTHER:
+                    o_prompt += tp
+                    o_completion += tc
+                    o_total += tt
+                    if tt > 0:
+                        o_calls += 1
 
-        # 5. 总工时收益
+        # 5. 其他类目 (不属于检索/下载/高亮三类文献工作的一切)
+        #    工时与任务数来自 tasks 表; Token 见上方同源累加。
+        #    **不计算节约工时**: 其他类目没有人工基准, 宁可不给也不编一个出来。
+        other_rows = [t for t in task_rows
+                      if classify_task_type(t["task_type"]) == CATEGORY_OTHER]
+        o_count = len(other_rows)
+        o_duration = sum(float(t["duration_seconds"] or 0.0) for t in other_rows)
+        o_avg = (o_duration / o_count) if o_count > 0 else 0.0
+
+        # 6. 总工时收益
         total_saved_sec = r_saved + d_saved + hl_saved
         total_saved_hrs = total_saved_sec / 3600.0
 
@@ -166,6 +225,14 @@ class TelemetryAggregator:
             correction_duration_seconds=corr_duration,
             correction_avg_seconds=corr_avg,
             highlight_saved_seconds=hl_saved,
+            other_count=o_count,
+            other_duration_seconds=o_duration,
+            other_avg_seconds=o_avg,
+            other_prompt_tokens=o_prompt,
+            other_completion_tokens=o_completion,
+            other_total_tokens=o_total,
+            other_llm_call_count=o_calls,
+            other_unattributed_tokens=o_unattributed,
             total_saved_seconds=total_saved_sec,
             total_saved_hours=total_saved_hrs,
             total_prompt_tokens=prompt_tokens,

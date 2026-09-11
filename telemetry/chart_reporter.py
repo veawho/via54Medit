@@ -11,6 +11,18 @@ from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
 
+def _num(value: Any) -> float:
+    """宽松取数: 缺列 / 空串 / 脏值一律按 0 处理。
+
+    「其他」三列在**公司表 schema** 里不存在 (该表没有对应的列, 写入时被丢弃),
+    因此读回来的记录缺这三列是正常的 —— 不能因此让整条记录被判为脏数据。
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     """汇总团队所有成员的数据，计算总和、均值与个人排名。"""
     member_summary: Dict[str, Dict[str, float]] = defaultdict(lambda: {
@@ -20,6 +32,10 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "highlight_pages": 0,
         "highlight_count": 0,
         "total_tokens": 0,
+        # 其他类目: 工时与 Token 都汇总, 但没有"节约" (无人工基准)
+        "other_hours": 0.0,
+        "other_tokens": 0,
+        "other_count": 0,
         "report_count": 0
     })
 
@@ -35,6 +51,9 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_pages = 0
     total_highlights = 0
     total_tokens = 0
+    total_other_hours = 0.0
+    total_other_tokens = 0
+    total_other_count = 0
 
     for r in records:
         nick = str(r.get("成员花名", "未知成员"))
@@ -49,6 +68,11 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         except (ValueError, TypeError):
             continue
 
+        # 其他类目: 公司表 schema 没有这三列, 缺列按 0 处理, 不影响上面主口径的解析
+        o_count = int(_num(r.get("其他任务数", 0)))
+        o_hours = _num(r.get("其他工作时长(h)", 0))
+        o_tokens = int(_num(r.get("其他Token消耗", 0)))
+
         # 累计个人
         m = member_summary[nick]
         m["saved_hours"] += saved_h
@@ -57,6 +81,9 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         m["highlight_pages"] += pages
         m["highlight_count"] += hl_cnt
         m["total_tokens"] += tokens
+        m["other_hours"] += o_hours
+        m["other_tokens"] += o_tokens
+        m["other_count"] += o_count
         m["report_count"] += 1
 
         # 累计周期趋势
@@ -72,6 +99,9 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         total_pages += pages
         total_highlights += hl_cnt
         total_tokens += tokens
+        total_other_hours += o_hours
+        total_other_tokens += o_tokens
+        total_other_count += o_count
 
     # 生成排名列表 (按节约工时降序)
     leaderboard = []
@@ -84,6 +114,9 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             "download_count": data["download_count"],
             "highlight_count": data["highlight_count"],
             "total_tokens": data["total_tokens"],
+            "other_hours": round(data["other_hours"], 2),
+            "other_tokens": data["other_tokens"],
+            "other_count": data["other_count"],
             "report_count": data["report_count"]
         })
     leaderboard.sort(key=lambda x: x["saved_hours"], reverse=True)
@@ -95,6 +128,9 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_pages": total_pages,
         "total_highlights": total_highlights,
         "total_tokens": total_tokens,
+        "total_other_hours": round(total_other_hours, 2),
+        "total_other_tokens": total_other_tokens,
+        "total_other_count": total_other_count,
         "team_size": len(member_summary),
         "leaderboard": leaderboard,
         "weekly_trend": dict(weekly_trend)
@@ -145,7 +181,10 @@ def build_team_weekly_card(records: List[Dict[str, Any]], period_name: str, bita
                                f"• **文献成功下载**：{summary['total_downloads']:,} 篇\n"
                                f"• **Highlight 阅读总页数**：{summary['total_pages']:,} 页\n"
                                f"• **Highlight 标注总数**：{summary['total_highlights']:,} 篇文献\n"
-                               f"• **真实大模型 Token**：{summary['total_tokens']:,} tokens (100% 控制台对齐)"
+                               f"• **真实大模型 Token**：{summary['total_tokens']:,} tokens (100% 控制台对齐)\n"
+                               f"• **其他工作**：{summary['total_other_count']:,} 项 / "
+                               f"{summary['total_other_hours']:,} 小时 / "
+                               f"{summary['total_other_tokens']:,} tokens (无人工基准, 不计节约)"
                 }
             },
             {"tag": "hr"},
@@ -288,6 +327,11 @@ def render_html_dashboard(records: List[Dict[str, Any]], output_file: str = "") 
                 <div class="title">💎 真实 LLM Token 账单</div>
                 <div class="val">{summary['total_tokens']:,} <span style="font-size:16px;">tokens</span></div>
                 <div class="sub">🟢 100% 服务商控制台严格对齐</div>
+            </div>
+            <div class="card">
+                <div class="title">🧩 其他工作 (无人工基准)</div>
+                <div class="val">{summary['total_other_hours']:,} <span style="font-size:16px;">小时</span></div>
+                <div class="sub">{summary['total_other_count']:,} 项 · {summary['total_other_tokens']:,} tokens · 不计节约</div>
             </div>
         </div>
 

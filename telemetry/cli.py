@@ -49,6 +49,7 @@ def cmd_status(args):
     print(f"• 文献检索完成数: {d['retrieval']['count']} 篇 | 耗时: {d['retrieval']['duration_seconds']}s | 节约: {d['retrieval']['saved_hours']}h")
     print(f"• 文献成功下载数: {d['download']['count']} 篇 | 耗时: {d['download']['duration_seconds']}s | 节约: {d['download']['saved_hours']}h")
     print(f"• Highlight完成数: {d['highlight']['count']} 篇 | 阅读页数: {d['highlight']['pages']} 页 | 节约: {d['highlight']['saved_hours']}h")
+    print(f"• 其他工作时长: {d['other']['duration_seconds']}s ({d['other']['duration_hours']}h) | 任务数: {d['other']['count']} | Token: {d['other']['total_tokens']:,} (无人工基准, 不计节约)")
     print(f"• 累计节约总工时: 🚀 {d['overall']['total_saved_hours']} 小时 ({d['overall']['total_saved_minutes']} 分钟)")
     mode_tag = "🟢 100% 控制台对齐" if d["tokens"].get("token_mode") == "exact" else "🟡 估算模式"
     call_cnt = d["tokens"].get("llm_call_count", 0)
@@ -74,8 +75,9 @@ def cmd_report(args):
         print(f"1. 检索: {d['retrieval']['count']} 篇, 均耗 {d['retrieval']['avg_seconds']}s, 节约工时 {d['retrieval']['saved_hours']}h (人工 7min/篇)")
         print(f"2. 下载: {d['download']['count']} 篇, 均耗 {d['download']['avg_seconds']}s, 节约工时 {d['download']['saved_hours']}h (人工 2min/篇)")
         print(f"3. 高亮: {d['highlight']['count']} 篇, 阅读 {d['highlight']['pages']} 页, 均耗 {d['highlight']['avg_seconds']}s, 修正均耗 {d['highlight']['correction_avg_seconds']}s, 节约工时 {d['highlight']['saved_hours']}h (人工 4min/篇)")
-        print(f"4. 总体人效提升: 节约 {d['overall']['total_saved_hours']} 小时")
-        print(f"5. Token 消耗: {d['tokens']['total_tokens']:,}\n")
+        print(f"4. 其他: {d['other']['count']} 项, 工时 {d['other']['duration_seconds']}s, Token {d['other']['total_tokens']:,} (无人工基准, 不计节约工时)")
+        print(f"5. 总体人效提升: 节约 {d['overall']['total_saved_hours']} 小时")
+        print(f"6. Token 消耗: {d['tokens']['total_tokens']:,}\n")
 
 
 def cmd_push(args):

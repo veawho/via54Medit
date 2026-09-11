@@ -945,7 +945,7 @@ class TestTelemetry(unittest.TestCase):
         self.assertIsNone(mgr._find_existing_record(rep, "Sarah", SCHEMA_COMPANY))
 
     def test_bitable_local_backup_is_schema_agnostic(self):
-        """测试：本地备份固定 15 列标准字段名，兼容并修复历史错位行。"""
+        """测试：本地备份固定为当前标准字段列序，兼容并修复历史错位行。"""
         import csv as _csv
         from telemetry.bitable_sync import (
             FeishuBitableManager, BACKUP_FIELDS, COMPANY_PAYLOAD_ORDER,
@@ -969,13 +969,15 @@ class TestTelemetry(unittest.TestCase):
             mgr = FeishuBitableManager(config=cfg)
             mgr._backup_csv_path = lambda: path
 
-            # 1) 公司 schema 落盘后仍是 15 列标准表头，不再产生 13 列错位行
+            # 1) 公司 schema 落盘后仍是标准表头, 不再产生错位行。
+            #    列数断言跟着 BACKUP_FIELDS 走 —— 写死 15 会随每次加字段而假红。
+            ncols = len(BACKUP_FIELDS)
             mgr._record_local_csv(mgr.build_company_payload(rep, "Devin"), SCHEMA_COMPANY)
             with open(path, encoding="utf-8-sig", newline="") as f:
                 rows = list(_csv.reader(f))
             self.assertEqual(rows[0], BACKUP_FIELDS)
-            self.assertEqual(len(rows[0]), 15)
-            self.assertEqual(len(rows[1]), 15)
+            self.assertEqual(len(rows[0]), ncols)
+            self.assertEqual(len(rows[1]), ncols)
             self.assertEqual(
                 rows[0][:4], ["汇报周期", "成员花名", "成员OpenID", "上报时间"])
 
@@ -984,7 +986,7 @@ class TestTelemetry(unittest.TestCase):
                 mgr.build_standard_payload(rep, "Devin", "ou_x"), SCHEMA_STANDARD)
             with open(path, encoding="utf-8-sig", newline="") as f:
                 rows = list(_csv.reader(f))
-            self.assertTrue(all(len(r) == 15 for r in rows), "所有行必须与表头等宽")
+            self.assertTrue(all(len(r) == ncols for r in rows), "所有行必须与表头等宽")
 
             # 3) 回读：两种 schema 的记录都归一化为标准字段名
             recs = mgr._load_local_csv_records()
@@ -1399,6 +1401,256 @@ class TestTelemetry(unittest.TestCase):
             self.assertTrue(pp.is_on_path(first_on_path))
         self.assertFalse(pp.is_on_path(
             os.path.join(tempfile.gettempdir(), "medit-definitely-not-on-path")))
+
+
+class TestOtherCategory(unittest.TestCase):
+    """「其他」类目: 与三类一样统计**工作时长**与 **Token 消耗**。
+
+    口径(见 telemetry/models.py 的类目归类与 aggregator 的累加处):
+      * 类目归属唯一事实来源是 ``classify_task_type``; **未知 task_type 一律兜底到 other**,
+        免得将来多出一种任务类型就从战报里消失;
+      * Token 与总量**同源同口径**算出, 因此 ``other.total_tokens ⊆ tokens.total_tokens``;
+      * 其他类目**没有人工基准, 不产出"节约工时"** —— 宁可不给也不编。
+    """
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.test_dir, "t.db")
+        self.db = TelemetryDB(self.db_path)
+        self.tracker = TelemetryTracker(self.db)
+        self.aggregator = TelemetryAggregator(self.db)
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    # ---- 归类 ----
+
+    def test_unknown_task_type_falls_back_to_other(self):
+        from telemetry.models import classify_task_type, CATEGORY_OTHER
+        for raw in ("scan", "ppt_render", "whatever_new", "", None):
+            self.assertEqual(classify_task_type(raw), CATEGORY_OTHER,
+                             "%r 应兜底到 other, 不该从战报里消失" % (raw,))
+
+    def test_known_task_types_keep_their_category(self):
+        from telemetry.models import classify_task_type
+        self.assertEqual(classify_task_type("retrieval"), "retrieval")
+        self.assertEqual(classify_task_type("download"), "download")
+        self.assertEqual(classify_task_type("highlight"), "highlight")
+        self.assertEqual(classify_task_type(TaskType.RETRIEVAL), "retrieval")
+        # 修正属于高亮质检环节
+        self.assertEqual(classify_task_type("correction"), "highlight")
+
+    # ---- 工时 ----
+
+    def test_track_other_records_duration_and_tokens(self):
+        with self.tracker.track_other(project_name="RSV", label="ppt_render") as col:
+            col.add_tokens(prompt_tokens=1200, completion_tokens=300)
+
+        tasks = [t for t in self.db.query_tasks() if str(t["task_id"]).startswith("other_")]
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["task_type"], "other")
+        self.assertGreater(tasks[0]["duration_seconds"], 0)
+        self.assertEqual(tasks[0]["total_tokens"], 1500)
+
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.other_count, 1)
+        self.assertGreater(rep.other_duration_seconds, 0)
+        self.assertEqual(rep.other_total_tokens, 1500)
+
+    def test_other_is_kept_out_of_the_three_business_categories(self):
+        """其他工作不得漏进检索/下载/高亮 —— 归错类会让三类数字虚高。"""
+        with self.tracker.track_other(project_name="X") as col:
+            col.add_tokens(prompt_tokens=100, completion_tokens=100)
+
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual((rep.retrieval_count, rep.download_count, rep.highlight_count), (0, 0, 0))
+        self.assertEqual(rep.total_saved_seconds, 0.0, "其他类目不产生节约工时")
+
+    def test_track_other_marks_failure_and_still_records(self):
+        with self.assertRaises(RuntimeError):
+            with self.tracker.track_other(project_name="X"):
+                raise RuntimeError("boom")
+        rows = [t for t in self.db.query_tasks() if str(t["task_id"]).startswith("other_")]
+        self.assertEqual(rows[0]["status"], "failed")
+
+    # ---- Token 归口 ----
+
+    def test_unattributed_llm_call_lands_in_other(self):
+        """没有 task_id 归属的调用归入「其他」, 并单独计数 —— 否则这个数字没法解读。"""
+        from telemetry.token_tracker import record_llm_usage
+
+        record_llm_usage(response={"usage": {"prompt_tokens": 30, "completion_tokens": 10,
+                                            "total_tokens": 40}},
+                         provider="deepseek", db=self.db)
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.total_tokens, 40, "总量口径不变")
+        self.assertEqual(rep.other_total_tokens, 40)
+        self.assertEqual(rep.other_unattributed_tokens, 40)
+
+    def test_llm_call_linked_to_a_highlight_task_is_not_other(self):
+        """能按 task_id 归到三类工作的调用, 不算"其他"。"""
+        from telemetry.token_tracker import record_llm_usage
+
+        with self.tracker.track_highlight(project_name="RSV") as col:
+            col.add_item("P1", page_count=5, highlight_duration_seconds=10.0)
+        task_id = self.db.query_tasks()[0]["task_id"]
+
+        record_llm_usage(response={"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                                            "total_tokens": 15}},
+                         provider="deepseek", task_id=task_id, db=self.db)
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.total_tokens, 15)
+        self.assertEqual(rep.other_total_tokens, 0, "已归属高亮的调用不该算进其他")
+        self.assertEqual(rep.other_unattributed_tokens, 0)
+
+    def test_other_tokens_are_a_subset_of_total(self):
+        """子集关系由构造保证 —— 这条不变量一旦破了, 报表口径就自相矛盾。"""
+        from telemetry.token_tracker import record_llm_usage
+
+        with self.tracker.track_highlight(project_name="RSV") as col:
+            col.add_item("P1", page_count=5, highlight_duration_seconds=1.0)
+            col.add_tokens(prompt_tokens=200, completion_tokens=100)
+        with self.tracker.track_other(project_name="RSV") as col:
+            col.add_tokens(prompt_tokens=50, completion_tokens=50)
+        record_llm_usage(response={"usage": {"total_tokens": 999}}, provider="zhipu", db=self.db)
+
+        rep = self.aggregator.get_all_time_report()
+        self.assertLessEqual(rep.other_total_tokens, rep.total_tokens,
+                             "其他 Token 必须是总量的子集")
+        self.assertLessEqual(rep.other_prompt_tokens, rep.total_prompt_tokens)
+        self.assertLessEqual(rep.other_completion_tokens, rep.total_completion_tokens)
+
+    def test_scan_task_tokens_stay_out_of_other_in_exact_mode(self):
+        """scan_ 任务的估算不进总量, 也就不能进「其他」—— 否则子集关系被破坏。"""
+        self.db.record_task(TaskRecord(
+            task_id="scan_proj_123", task_type=TaskType.OTHER, project_name="proj",
+            start_time="2026-09-01T00:00:00", end_time="2026-09-01T00:01:00",
+            duration_seconds=60.0, total_tokens=777))
+        rep = self.aggregator.get_all_time_report()
+        self.assertEqual(rep.token_mode, "exact")
+        self.assertEqual(rep.total_tokens, 0)
+        self.assertEqual(rep.other_total_tokens, 0, "scan_ 任务不该把其他 Token 顶到总量之上")
+        self.assertEqual(rep.other_count, 1, "工时仍要计入其他")
+
+    # ---- 展示与推送 ----
+
+    def test_to_dict_exposes_other_block(self):
+        rep = self.aggregator.get_all_time_report()
+        d = rep.to_dict()["other"]
+        self.assertIn("duration_seconds", d)
+        self.assertIn("total_tokens", d)
+        self.assertIs(d["has_saved_baseline"], False,
+                      "其他类目必须明确声明没有节约基准, 免得调用方自己补一个")
+
+    def test_feishu_card_has_a_fourth_block(self):
+        with self.tracker.track_other(project_name="RSV") as col:
+            col.add_tokens(prompt_tokens=500, completion_tokens=100)
+        rep = self.aggregator.get_all_time_report()
+        card = FeishuSyncClient().build_card(rep)
+        blob = json.dumps(card, ensure_ascii=False)
+        self.assertIn("4. 其他工作", blob)
+        self.assertIn("600", blob, "卡片应带上其他类目的 Token 数")
+
+    def test_public_sheet_row_matches_column_definition(self):
+        from telemetry.feishu_sync import PUBLIC_SHEET_COLUMNS, build_public_sheet_row
+
+        with self.tracker.track_other(project_name="RSV") as col:
+            col.add_tokens(prompt_tokens=700, completion_tokens=300)
+        rep = self.aggregator.get_all_time_report()
+        row = build_public_sheet_row(rep, "wtg", "ou_x")
+
+        self.assertEqual(len(row), len(PUBLIC_SHEET_COLUMNS),
+                         "数据行必须与列定义等宽, 否则云端追加会错位")
+        self.assertEqual(PUBLIC_SHEET_COLUMNS[-3:], ["其他任务数", "其他工作时长(秒)", "其他Token消耗"])
+        # 与 to_dict 的舍入口径对齐 (行数据取自 to_dict)
+        self.assertEqual(row[-3:], [1, rep.to_dict()["other"]["duration_seconds"], 1000])
+
+    def test_public_csv_header_is_migrated_and_history_preserved(self):
+        """升级到含「其他」的列定义时, 历史行按列名搬迁, 新列留空。"""
+        import csv as _csv
+        from telemetry.feishu_sync import migrate_public_csv_columns, PUBLIC_SHEET_COLUMNS
+
+        legacy_cols = PUBLIC_SHEET_COLUMNS[:-3]      # 加「其他」之前的 18 列
+        path = os.path.join(self.test_dir, "public.csv")
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = _csv.writer(f)
+            w.writerow(legacy_cols)
+            w.writerow([f"v{i}" for i in range(len(legacy_cols))])
+
+        ok, note = migrate_public_csv_columns(path)
+        self.assertTrue(ok, note)
+        self.assertIn("新增列", note)
+
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            rows = list(_csv.reader(f))
+        self.assertEqual(rows[0], PUBLIC_SHEET_COLUMNS)
+        body = dict(zip(rows[0], rows[1]))
+        self.assertEqual(body["上报时间"], "v0")
+        # 未被新列挤位的旧列必须原样保留 (按列名搬迁, 不是按位置)
+        self.assertEqual(body["Token总消耗"], "v16")
+        self.assertEqual(body["状态"], "v17")
+        self.assertEqual(body["其他任务数"], "")
+        self.assertEqual(body["其他Token消耗"], "")
+
+    def test_public_csv_migration_is_idempotent(self):
+        from telemetry.feishu_sync import migrate_public_csv_columns, PUBLIC_SHEET_COLUMNS
+        import csv as _csv
+
+        path = os.path.join(self.test_dir, "public.csv")
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            _csv.writer(f).writerow(PUBLIC_SHEET_COLUMNS)
+        ok, note = migrate_public_csv_columns(path)
+        self.assertTrue(ok)
+        self.assertEqual(note, "", "已是当前列定义时不该有任何迁移动作")
+
+    def test_bitable_standard_payload_carries_other_fields(self):
+        from telemetry.bitable_sync import FeishuBitableManager
+
+        with self.tracker.track_other(project_name="RSV") as col:
+            col.add_tokens(prompt_tokens=600, completion_tokens=200)
+        rep = self.aggregator.get_all_time_report()
+        payload = FeishuBitableManager(config={"feishu": {}}).build_standard_payload(
+            rep, "Devin", "ou_x")
+        self.assertEqual(payload["其他任务数"], 1)
+        self.assertEqual(payload["其他Token消耗"], 800)
+        self.assertIn("其他工作时长(h)", payload)
+
+    def test_company_payload_mentions_other_in_note(self):
+        """公司表没有「其他」专列 —— 放进备注, 否则这类工作在那张表里完全不可见。"""
+        from telemetry.bitable_sync import FeishuBitableManager, COMPANY_TABLE_FIELDS
+
+        with self.tracker.track_other(project_name="RSV") as col:
+            col.add_tokens(prompt_tokens=600, completion_tokens=200)
+        rep = self.aggregator.get_all_time_report()
+        payload = FeishuBitableManager(config={"feishu": {}}).build_company_payload(rep, "Devin")
+
+        note = payload["备注说明"]
+        self.assertIn("其他", note)
+        self.assertIn("800", note)
+        for key in payload:
+            self.assertIn(key, COMPANY_TABLE_FIELDS,
+                          "公司表 payload 不得写入它没有的列 (%s)" % key)
+        self.assertNotIn("其他任务数", payload, "公司表没有该列, 应被映射丢弃")
+
+    def test_team_chart_aggregation_tolerates_missing_other_columns(self):
+        """公司表 schema 读回来的记录没有「其他」三列, 不能因此被判成脏数据。"""
+        from telemetry.chart_reporter import aggregate_team_metrics
+
+        records = [
+            {"成员花名": "A", "汇报周期": "2026-W37", "总节约工时(h)": "3.5",
+             "文献检索篇数": "10", "文献下载篇数": "2",
+             "Highlight阅读页数": "30", "Highlight标注篇数": "3", "真实Token消耗": "1000",
+             "其他任务数": "4", "其他工作时长(h)": "1.5", "其他Token消耗": "250"},
+            {"成员花名": "B", "汇报周期": "2026-W37", "总节约工时(h)": "1.0",
+             "文献检索篇数": "5", "文献下载篇数": "1",
+             "Highlight阅读页数": "10", "Highlight标注篇数": "1", "真实Token消耗": "500"},
+        ]
+        summary = aggregate_team_metrics(records)
+        self.assertEqual(summary["team_size"], 2, "缺列不该让整条记录被丢弃")
+        self.assertEqual(summary["total_other_count"], 4)
+        self.assertAlmostEqual(summary["total_other_hours"], 1.5)
+        self.assertEqual(summary["total_other_tokens"], 250)
+        self.assertEqual(summary["total_saved_hours"], 4.5, "主口径不受影响")
 
 
 class TestAutoSync(unittest.TestCase):

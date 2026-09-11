@@ -217,3 +217,56 @@ class TelemetryTracker:
             self.db.record_task(task_rec)
             for it in items:
                 self.db.record_highlight_item(task_id, it)
+
+    @contextmanager
+    def track_other(self, project_name: str = "default", label: str = "",
+                    extra: Optional[Dict[str, Any]] = None):
+        """登记一段**不属于**检索 / 下载 / 高亮的其他工作。
+
+        其他类目与三类一样统计 **实际工时** 与 **Token 消耗**, 但**不产出"节约工时"** ——
+        没有人工基准, 宁可不给也不编一个出来。
+
+        典型用途: PPT/Word 渲染、PDF 解析、多维表格同步、环境巡检、外部脚本。
+
+            with tracker.track_other(project_name="RSV", label="ppt_render") as col:
+                col.add_tokens(prompt_tokens=1200, completion_tokens=300)
+
+        工时取上下文管理器的真实挂钟耗时 —— 与三类一致, 不在这里塞估值。
+        """
+        task_id = f"other_{uuid.uuid4().hex[:12]}"
+        start_ts = time.time()
+        start_iso = datetime.now().isoformat()
+        token_info = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        class OtherCollector:
+            def add_tokens(self, prompt_tokens: int = 0, completion_tokens: int = 0):
+                token_info["prompt_tokens"] += prompt_tokens
+                token_info["completion_tokens"] += completion_tokens
+                token_info["total_tokens"] += (prompt_tokens + completion_tokens)
+
+        collector = OtherCollector()
+        status = "success"
+        try:
+            yield collector
+        except Exception:
+            status = "failed"
+            raise
+        finally:
+            end_ts = time.time()
+            end_iso = datetime.now().isoformat()
+            duration = max(0.001, end_ts - start_ts)
+
+            task_rec = TaskRecord(
+                task_id=task_id,
+                task_type=TaskType.OTHER,
+                project_name=project_name,
+                start_time=start_iso,
+                end_time=end_iso,
+                duration_seconds=duration,
+                prompt_tokens=token_info["prompt_tokens"],
+                completion_tokens=token_info["completion_tokens"],
+                total_tokens=token_info["total_tokens"],
+                status=status,
+                extra={"label": label or "other", **(extra or {})},
+            )
+            self.db.record_task(task_rec)

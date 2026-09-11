@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 from .models import AggregateReport
+from .csv_migrate import migrate_header as _migrate_header, range_end as _range_end
 from .platform_paths import trae_work_config_path
 
 
@@ -15,6 +16,91 @@ TRAE_CONFIG_PATH = trae_work_config_path()
 from .config import load_config
 
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
+
+# --------------------------------------------------------------------------- #
+# 公司公共统计表的列定义 —— **唯一事实来源**
+#
+# 表头、数据行、追加区间都由它派生, 免得三处各写一份、慢慢走样。
+#
+# ⚠️ 新类目只能**追加在末尾**, 不能插在中间: 飞书电子表格的 values_append 只能往
+# 表格尾部追加, 无法插列。若把「其他」插到「总节约工时」前面, 历史行与新行的列语义
+# 就会整体错位 —— 旧行的「总节约工时」会落在新行的「其他任务数」位置上。
+# 追加在末尾时, 历史行的新列留空, 语义不受影响。
+# --------------------------------------------------------------------------- #
+PUBLIC_SHEET_COLUMNS = [
+    "上报时间", "统计周期", "用户昵称", "用户OpenID",
+    "检索篇数", "检索耗时(秒)", "检索节约(小时)",
+    "下载成功数", "下载耗时(秒)", "下载节约(小时)",
+    "阅读页数", "高亮完成数", "高亮耗时(秒)", "修正耗时(秒)", "高亮节约(小时)",
+    "总节约工时(小时)", "Token总消耗", "状态",
+    # ↓ 其他类目(追加在末尾, 见上方说明)
+    "其他任务数", "其他工作时长(秒)", "其他Token消耗",
+]
+
+
+def sheet_range_end() -> str:
+    """追加区间的右端列名 (如 21 列 -> "U")。"""
+    return _range_end(PUBLIC_SHEET_COLUMNS)
+
+
+def build_public_sheet_row(report: AggregateReport, nickname: str, open_id: str) -> list:
+    """构造一行公共统计表数据 —— 顺序与 ``PUBLIC_SHEET_COLUMNS`` 严格一致。"""
+    r = report.to_dict()
+    return [
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        report.period_name,
+        nickname,
+        open_id,
+        r["retrieval"]["count"],
+        r["retrieval"]["duration_seconds"],
+        r["retrieval"]["saved_hours"],
+        r["download"]["count"],
+        r["download"]["duration_seconds"],
+        r["download"]["saved_hours"],
+        r["highlight"]["pages"],
+        r["highlight"]["count"],
+        r["highlight"]["duration_seconds"],
+        r["highlight"]["correction_duration_seconds"],
+        r["highlight"]["saved_hours"],
+        r["overall"]["total_saved_hours"],
+        r["tokens"]["total_tokens"],
+        "已上报",
+        r["other"]["count"],
+        r["other"]["duration_seconds"],
+        r["other"]["total_tokens"],
+    ]
+
+
+def _tokens_share(r: Dict[str, Any]) -> str:
+    """「其他 Token 占总量多少」的说明串 —— 便于一眼看出这是零头还是大头。
+
+    顺带点出其中"没有 task_id 归属"的部分: 那部分是调用方没标归属、而非真的其他工作,
+    不说清楚的话这个数字就没法解读。
+    """
+    total = int(r["tokens"]["total_tokens"] or 0)
+    other = int(r["other"]["total_tokens"] or 0)
+    if total <= 0 or other <= 0:
+        return ""
+    text = f"（占总量 {other * 100.0 / total:.1f}%）"
+    unattr = int(r["other"].get("unattributed_tokens") or 0)
+    if unattr > 0:
+        text += f"，其中 {unattr:,} 无 task_id 归属"
+    return text
+
+
+def migrate_public_csv_columns(csv_path: str):
+    """把本地公共统计表的表头升级到当前列定义。返回 ``(可安全追加, 提示)``。
+
+    实现在 ``csv_migrate.migrate_header`` —— 多维表格的本地备份 CSV 用的是同一套
+    规则(按列名整表重写、新列补空), 故不在这里再写一份。理由见该模块的说明:
+    **新列只能追加在末尾**, 中间插列会让历史行整体错位。
+
+    第一个返回值为 False 时, 调用方**不应**再往这个文件追加数据。
+    """
+    ok, note = _migrate_header(csv_path, PUBLIC_SHEET_COLUMNS)
+    if note:
+        note = "本地统计表" + note
+    return ok, note
 
 
 class FeishuSyncClient:
@@ -26,6 +112,8 @@ class FeishuSyncClient:
         self.bot_name = ""
         self.nickname = "wtg"
         self.sheet_token = sheet_token
+        #: 云端表表头是否已在本进程内对齐过 (见 _ensure_sheet_header)
+        self._header_synced = False
         self._load_config()
 
     def _load_config(self):
@@ -132,6 +220,19 @@ class FeishuSyncClient:
                                        f"• 高亮均耗：**{r['highlight']['avg_seconds']}s** / 篇 | 修正均耗：**{r['highlight']['correction_avg_seconds']}s** / 篇\n"
                                        f"• 节约工时：**{r['highlight']['saved_hours']} 小时** ({r['highlight']['saved_minutes']} 分钟)"
                         }
+                    },
+                    {
+                        "is_short": False,
+                        "text": {
+                            "tag": "lark_md",
+                            "content": f"🧩 **4. 其他工作 (无人工基准)**\n"
+                                       f"• 任务数：**{r['other']['count']} 项**\n"
+                                       f"• 工作时长：**{r['other']['duration_seconds']} 秒**"
+                                       f"（{r['other']['duration_hours']} 小时，均耗 {r['other']['avg_seconds']}s）\n"
+                                       f"• Token 消耗：**{r['other']['total_tokens']:,}**"
+                                       f"{_tokens_share(r)}"
+                                       f"\n• 说明：不计节约工时 —— 该类目没有人工基准"
+                        }
                     }
                 ]
             },
@@ -207,44 +308,28 @@ class FeishuSyncClient:
     def sync_to_public_sheet(self, report: AggregateReport) -> Tuple[bool, str]:
         """同步用户昵称与成绩至公司公共统计表。若云端表无权限，自动落盘本地企业公共统计表。"""
         r = report.to_dict()
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row_values = [
-            now_str,
-            report.period_name,
-            self.nickname,
-            self.user_open_id,
-            r["retrieval"]["count"],
-            r["retrieval"]["duration_seconds"],
-            r["retrieval"]["saved_hours"],
-            r["download"]["count"],
-            r["download"]["duration_seconds"],
-            r["download"]["saved_hours"],
-            r["highlight"]["pages"],
-            r["highlight"]["count"],
-            r["highlight"]["duration_seconds"],
-            r["highlight"]["correction_duration_seconds"],
-            r["highlight"]["saved_hours"],
-            r["overall"]["total_saved_hours"],
-            r["tokens"]["total_tokens"],
-            "已上报"
-        ]
+        # 列序由 PUBLIC_SHEET_COLUMNS 单一来源派生, 不在这里手写第二份。
+        row_values = build_public_sheet_row(report, self.nickname, self.user_open_id)
 
         # 1. 始终在本地落盘企业公共统计基线 CSV (zero-loss fallback)
         csv_path = os.path.expanduser(r"~/.medit/company_public_stats.csv")
-        file_exists = os.path.exists(csv_path)
         try:
             import csv
-            with open(csv_path, "a", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                if not file_exists:
-                    writer.writerow([
-                        "上报时间", "统计周期", "用户昵称", "用户OpenID",
-                        "检索篇数", "检索耗时(秒)", "检索节约(小时)",
-                        "下载成功数", "下载耗时(秒)", "下载节约(小时)",
-                        "阅读页数", "高亮完成数", "高亮耗时(秒)", "修正耗时(秒)", "高亮节约(小时)",
-                        "总节约工时(小时)", "Token总消耗", "状态"
-                    ])
-                writer.writerow(row_values)
+            # 追加之前先对齐表头: 本版新增了「其他」三列, 历史文件仍是旧表头。
+            # 表头没对齐就追加, 新行会比表头宽, 列语义从此错位 —— 于是这个文件
+            # 会在"看起来正常"的状态下开始说假话。迁移不成功就不追加。
+            may_append, note = (True, "")
+            if os.path.exists(csv_path):
+                may_append, note = migrate_public_csv_columns(csv_path)
+            if note:
+                print(f"[FeishuSync] {note}")
+            if may_append:
+                file_exists = os.path.exists(csv_path)
+                with open(csv_path, "a", encoding="utf-8-sig", newline="") as f:
+                    writer = csv.writer(f)
+                    if not file_exists:
+                        writer.writerow(PUBLIC_SHEET_COLUMNS)
+                    writer.writerow(row_values)
         except Exception as e:
             print(f"[FeishuSync] 写入本地统计表警告: {e}")
 
@@ -253,11 +338,14 @@ class FeishuSyncClient:
             tok = self.get_tenant_token()
             if not self.sheet_token:
                 self.sheet_token = self._ensure_default_sheet(tok)
+            header_note = self._ensure_sheet_header(tok)
+            if header_note:
+                print(f"[FeishuSync] {header_note}")
 
             url = f"{FEISHU_API_BASE}/sheets/v2/spreadsheets/{self.sheet_token}/values_append"
             body = json.dumps({
                 "valueRange": {
-                    "range": "Sheet1!A:R",
+                    "range": f"Sheet1!A:{sheet_range_end()}",
                     "values": [row_values]
                 }
             }).encode("utf-8")
@@ -285,6 +373,38 @@ class FeishuSyncClient:
         except Exception as e:
             return True, f"已落盘本地公共表 ({csv_path})。云端同步异常: {str(e)}"
 
+    def _ensure_sheet_header(self, tok: str) -> str:
+        """把云端表的表头行对齐到当前列定义 (best-effort, 每进程只做一次)。
+
+        历史云端表是在写入「其他」三列之前建的, 因此第 19 列往后没有表头 —— 追加进去
+        的数据会落在没有标题的列里, 看着像野数据。这里把整行表头重写一遍: 前 18 列
+        名字未变, 重写是幂等的, 不动任何数据行。
+
+        失败不影响数据追加 (表头没对齐只是"不好看", 数据本身没错列)。
+        """
+        if self._header_synced or not self.sheet_token:
+            return ""
+        self._header_synced = True
+        try:
+            url = f"{FEISHU_API_BASE}/sheets/v2/spreadsheets/{self.sheet_token}/values"
+            body = json.dumps({
+                "valueRange": {
+                    "range": f"Sheet1!A1:{sheet_range_end()}1",
+                    "values": [PUBLIC_SHEET_COLUMNS],
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                url, data=body,
+                headers={"Authorization": f"Bearer {tok}",
+                         "Content-Type": "application/json; charset=utf-8"},
+                method="PUT",
+            )
+            with urllib.request.urlopen(req, timeout=10) as _:
+                pass
+            return "云端表表头已对齐到当前列定义"
+        except Exception as e:
+            return f"云端表表头对齐失败 (不影响数据追加): {e}"
+
     def _ensure_default_sheet(self, tok: str) -> str:
         """若无公共表，自动为企业创建一份《TraeWork文献整理AI人效公共统计表》并初始化表头。"""
         url = f"{FEISHU_API_BASE}/sheets/v3/spreadsheets"
@@ -300,19 +420,12 @@ class FeishuSyncClient:
             if not st:
                 raise RuntimeError("创建默认公共统计表失败")
             
-            # 初始化表头
-            headers = [
-                "上报时间", "统计周期", "用户昵称", "用户OpenID",
-                "检索篇数", "检索耗时(秒)", "检索节约(小时)",
-                "下载成功数", "下载耗时(秒)", "下载节约(小时)",
-                "阅读页数", "高亮完成数", "高亮耗时(秒)", "修正耗时(秒)", "高亮节约(小时)",
-                "总节约工时(小时)", "Token总消耗", "状态"
-            ]
+            # 初始化表头 —— 与 PUBLIC_SHEET_COLUMNS 同源, 不另写一份
             init_url = f"{FEISHU_API_BASE}/sheets/v2/spreadsheets/{st}/values"
             init_body = json.dumps({
                 "valueRange": {
-                    "range": "Sheet1!A1:R1",
-                    "values": [headers]
+                    "range": f"Sheet1!A1:{sheet_range_end()}1",
+                    "values": [PUBLIC_SHEET_COLUMNS]
                 }
             }).encode("utf-8")
             init_req = urllib.request.Request(
