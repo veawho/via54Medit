@@ -128,10 +128,9 @@ func registerAll() {
 	rootCmd.AddCommand(NewCiteCommand()) // cite extract|verify|list <file>
 
 	// --- Phase 3 additions (pico_grade.go) ---
-	rootCmd.AddCommand(picoCmd)       // pico <query>
-	rootCmd.AddCommand(systematicCmd) // systematic <query>
-	rootCmd.AddCommand(gradeCmd)      // grade <conv_id>
-	rootCmd.AddCommand(listCmd)       // list (saved conversations)
+	// pico / systematic / grade 已在上面 «Retrieval» 段注册过, 此处不再重复 ——
+	// 重复 AddCommand 会让 `medit --help` 把同名命令列两遍。
+	rootCmd.AddCommand(listCmd) // list (saved conversations)
 
 	// --- pptx sub-subcommands ---
 	pptxCmd.AddCommand(pptxVerifyCmd)  // pptx verify <file.pptx>

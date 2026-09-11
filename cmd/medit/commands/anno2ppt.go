@@ -351,5 +351,6 @@ func init() {
 	anno2pptCmd.AddCommand(anno2pptL0VerifyCmd)
 	anno2pptCmd.AddCommand(anno2pptClassifyCmd)
 	anno2pptCmd.AddCommand(anno2pptDualSourceCmd)
-	rootCmd.AddCommand(anno2pptCmd)
+	// 注意: 这里刻意不再 rootCmd.AddCommand(anno2pptCmd) —— 该命令由 root.go 的
+	// registerAll() 统一挂载; 两处都挂会让 `medit --help` 把 anno2ppt 列两遍。
 }

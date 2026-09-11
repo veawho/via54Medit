@@ -38,9 +38,3 @@ var queryCmd = stubCmd(
 	"检索本地知识库",
 	"Phase 2",
 )
-
-var anno2pptCmdStub = stubCmd(
-	"anno2ppt-old-stub <package>",
-	"Phase 3 placeholder (已被 anno2ppt.go 真实实现取代)",
-	"Phase 3",
-)
