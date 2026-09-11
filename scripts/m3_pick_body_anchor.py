@@ -9,7 +9,7 @@ m3_pick_body_anchor.py — 不信 plan.target_text, 直接从 PDF 抽 body 段 a
 4. 全角英文转半角 (中文 PDF 常见)
 5. 直接调 m3_vision_highlight 内部函数 (不 subprocess, 避免 timeout)
 """
-import json, os, sys, re, fitz, shutil, time
+import json, os, sys, re, pymupdf as fitz, shutil, time
 from collections import defaultdict
 
 sys.path.insert(0, '/Users/david/Desktop/developments/via54Medit/scripts')

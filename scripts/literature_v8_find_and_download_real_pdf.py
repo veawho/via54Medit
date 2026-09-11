@@ -40,7 +40,7 @@ def md5_of(p):
 def verify_real_literature_pdf(pdf_path, expected_doi=None, expected_author_keyword=None):
     """验证 PDF 是真文献而非网页截图"""
     try:
-        import fitz
+        import pymupdf as fitz
     except ImportError:
         return False, "fitz not available"
     doc = fitz.open(pdf_path)

@@ -12,7 +12,7 @@ import sys
 import json
 import re
 from pathlib import Path
-import fitz
+import pymupdf as fitz
 
 
 def is_placeholder(s):

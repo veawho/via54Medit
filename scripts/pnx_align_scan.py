@@ -15,7 +15,7 @@ import re
 import json
 import time
 from pathlib import Path
-import fitz
+import pymupdf as fitz
 
 # ========== 1. 解析 CSV ==========
 

@@ -25,7 +25,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 try:
-    import fitz
+    import pymupdf as fitz
     fitz.TOOLS.mupdf_display_warnings(False)
     HAS_PYMUPDF = True
 except ImportError:

@@ -5,7 +5,7 @@ m3_vision_batch.py — 批量用 m3_vision_highlight 跑 103 个 Pn-x (phrase �
 User 选 M3 vision 自动选 mode, 但 103 个太多
 折中: 先用 phrase 模式批量 + plan.target_text 抽 anchor, 失败的单独处理
 """
-import json, os, sys, re, fitz, shutil, subprocess
+import json, os, sys, re, pymupdf as fitz, shutil, subprocess
 
 TMA = '/Users/david/Desktop/TMA_文献整理'
 PLANS = f'{TMA}/_3_highlight_vision/_highlight_plans.json'

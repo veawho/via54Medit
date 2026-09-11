@@ -69,7 +69,7 @@ def check_jpg_light_yellow(jpg_path, expected_y0_jpg, expected_y1_jpg, expected_
 
 def check_pdf_has_underline(pdf_path):
     """检查 PDF 有 underline (用 rect 维度推断, **不读 a.type 避免 segfault**)"""
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open(pdf_path)
     total = 0
     underline_rects = {}

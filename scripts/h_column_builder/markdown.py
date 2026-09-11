@@ -433,7 +433,7 @@ def build_h_md(
         light_hits = []
         if _os.path.isfile(main_pdf_path):
             try:
-                import fitz as _fitz
+                import pymupdf as _fitz
                 doc = _fitz.open(main_pdf_path)
                 search_terms = manifest.get("ppt_data_points", [])
                 if not search_terms and info_c.get("data_alignment"):
@@ -979,7 +979,7 @@ def build_h_md_v6(
         light_hits = []  # [(dp, page, ctx), ...]
         if _os.path.isfile(main_pdf_path):
             try:
-                import fitz as _fitz
+                import pymupdf as _fitz
                 doc = _fitz.open(main_pdf_path)
                 # 从 C 列 + D 列提取搜索目标
                 search_terms = []

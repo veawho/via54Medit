@@ -301,7 +301,7 @@ def _assoc_full(full_cit, context, pdf_path):
     if not terms:
         return True
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(pdf_path)
         txt = " ".join(doc[i].get_text() for i in range(min(3, len(doc)))).lower()
         doc.close()

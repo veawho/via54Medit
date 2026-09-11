@@ -187,7 +187,7 @@ def detect_main_pdf_content_mismatch(pn_x: str, info_d: Dict, scan: Dict, d_raw:
         return None
 
     # 读取 main PDF page 1
-    import fitz as _fitz_c
+    import pymupdf as _fitz_c
     try:
         doc = _fitz_c.open(scan.get("main_pdf_path", ""))
         if len(doc) == 0:

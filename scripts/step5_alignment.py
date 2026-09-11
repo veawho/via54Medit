@@ -35,7 +35,7 @@ except ImportError:
 
 # PyMuPDF 用于抽 highlight 文字
 try:
-    import fitz
+    import pymupdf as fitz
     HAS_PYMUPDF = True
 except ImportError:
     HAS_PYMUPDF = False

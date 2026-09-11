@@ -9,7 +9,7 @@ rerun_keep_pn_x.py — 校准重跑 KEEP 19 + m3 目录非冲突 Pn-x.
   3. 在 DEL 列表 → 跳过 (已被 clean_hash_dup_strict.py 删)
 输出: m3_vision_highlight.py 5 类难 case filter + phrase 模式
 """
-import json, os, sys, re, fitz, shutil, subprocess, time
+import json, os, sys, re, pymupdf as fitz, shutil, subprocess, time
 from collections import defaultdict
 
 TMA = '/Users/david/Desktop/TMA_文献整理'

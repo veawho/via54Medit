@@ -6,7 +6,7 @@
   3) highlight_pages/ 完整 (与 PDF 页数一致)
 输出 _highlight_verify_report.json + 问题清单
 """
-import json, os, re, io, sys, fitz
+import json, os, re, io, sys, pymupdf as fitz
 
 T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
 HL_BASE = os.path.join(T, '_highlight_nested')

@@ -18,7 +18,7 @@ import os
 import sys
 import traceback
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 def render_page_to_image(pdf_path: str, page_num: int, dpi: int = 200) -> str:

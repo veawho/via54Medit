@@ -8,7 +8,7 @@ batch_scihub_download_oa.py — 批量从 PubMed OA candidates 下载 PDF
 import os, sys, json, time, re
 import urllib.request
 import urllib.parse
-import fitz
+import pymupdf as fitz
 
 TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
 PDF_REPLACE_DIR = os.path.join(TMA_ROOT, "_2_pdfs_replaced")

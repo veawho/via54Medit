@@ -16,7 +16,7 @@ import time
 import urllib.request
 import urllib.error
 from pathlib import Path
-import fitz
+import pymupdf as fitz
 
 
 def is_placeholder(s):

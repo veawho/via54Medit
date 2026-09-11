@@ -21,7 +21,7 @@ import os, re, sys, json, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hl_v3_final"))
 
-import fitz
+import pymupdf as fitz
 from hl_lib import highlight_sentences
 from via54_ppt_visual_to_pdf import find_pdf_visual_match
 from ppt_render_engine import render_ppt_slides_auto

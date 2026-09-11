@@ -365,7 +365,7 @@ def run_light_step2(pn_x: str, lit_base: str, ppt_data_points: list) -> Dict:
     main_pdf_path = f"{p}/{main_pdfs[0]}"
 
     try:
-        import fitz as _fitz_lite
+        import pymupdf as _fitz_lite
         doc = _fitz_lite.open(main_pdf_path)
 
         # 数值等价: 14.4 == 14.40 == 14.4%

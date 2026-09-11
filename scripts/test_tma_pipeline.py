@@ -236,7 +236,7 @@ class TestDownloadValidation(unittest.TestCase):
 # ---------- T8: verify_pdf ----------
 class TestVerifyPdf(unittest.TestCase):
     def test_real_pdf(self):
-        import fitz
+        import pymupdf as fitz
         tmp = tempfile.mkdtemp()
         p = os.path.join(tmp, 't.pdf')
         doc = fitz.open()
@@ -373,7 +373,7 @@ class TestBySlideTerms(unittest.TestCase):
 
 class TestFindTableMatches(unittest.TestCase):
     def setUp(self):
-        import fitz
+        import pymupdf as fitz
         self.tmp = tempfile.mkdtemp()
         self.pdf = os.path.join(self.tmp, "t.pdf")
         doc = fitz.open()
@@ -391,7 +391,7 @@ class TestFindTableMatches(unittest.TestCase):
         self.bs = bs2
 
     def test_table_match_hits(self):
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(self.pdf)
         page = doc[0]
         matches = self.bs.find_table_matches(page, set(["tma", "transplant", "complement", "endothelial"]), [])
@@ -399,7 +399,7 @@ class TestFindTableMatches(unittest.TestCase):
         self.assertGreaterEqual(len(matches), 1)
 
     def test_table_no_match(self):
-        import fitz
+        import pymupdf as fitz
         p2 = os.path.join(self.tmp, "n.pdf")
         doc = fitz.open()
         page = doc.new_page()
@@ -418,7 +418,7 @@ class TestFindTableMatches(unittest.TestCase):
 
 class TestFindImageMatches(unittest.TestCase):
     def setUp(self):
-        import fitz
+        import pymupdf as fitz
         from PIL import Image
         import io as _io
         self.tmp = tempfile.mkdtemp()
@@ -434,14 +434,14 @@ class TestFindImageMatches(unittest.TestCase):
         self.bs = bs2
 
     def test_image_match_with_page_hit(self):
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(self.pdf)
         matches = self.bs.find_image_matches(doc[0], set(["tma"]), [], page_has_hit=True)
         doc.close()
         self.assertGreaterEqual(len(matches), 1)
 
     def test_image_no_hit_no_match(self):
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(self.pdf)
         matches = self.bs.find_image_matches(doc[0], set(["tma"]), [], page_has_hit=False)
         doc.close()
@@ -546,7 +546,7 @@ class TestAutoPipeline(unittest.TestCase):
 
 # ---------- T14: 9 铁律扩展 (非正文内容过滤) ----------
 import via54_highlight_v3_final as vr
-import fitz as _fitz
+import pymupdf as _fitz
 
 
 class TestRulesExtended(unittest.TestCase):

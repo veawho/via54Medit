@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """tma_final_report.py — 生成 TMA 交付报告 markdown"""
-import json, os, re, io, sys, csv, fitz
+import json, os, re, io, sys, csv, pymupdf as fitz
 
 T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
 REF_JSON = os.path.join(T, '_references_FINAL.json')

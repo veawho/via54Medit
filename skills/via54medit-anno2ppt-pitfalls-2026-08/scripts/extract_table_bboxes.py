@@ -18,7 +18,7 @@ import os
 import re
 import sys
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 # 27 种癌肿 (P3-3 Fig.2 实际顺序, 中英文映射)

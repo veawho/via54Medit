@@ -26,7 +26,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(_HERE, "hl_v3_final"))
 
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 # 集成 v3 FINAL + 9 条铁律

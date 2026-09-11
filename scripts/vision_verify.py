@@ -131,7 +131,7 @@ def call_minimax(image_path: str, prompt: str, timeout: int = DEFAULT_TIMEOUT) -
 def call_local(image_path: str, prompt: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
     """本地 PyMuPDF 兜底 (无 API 调用, 只检查图片尺寸和 metadata)."""
     try:
-        import fitz
+        import pymupdf as fitz
         # 图片文件用 PIL 检查尺寸
         import io
         with open(image_path, "rb") as f:

@@ -18,7 +18,7 @@ via54_highlight_render.py — v9.7 升级: bbox 精确 highlight 算法
 - {output_prefix}_N.jpg: 每页一张精确 highlight 图
 - manifest 更新: highlight_summary.bbox_data_points
 """
-import sys, os, json, fitz
+import sys, os, json, pymupdf as fitz
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 from PIL import Image, ImageDraw

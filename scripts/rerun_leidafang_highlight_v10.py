@@ -29,7 +29,7 @@ from via54_highlight_fix_v10 import (
 )
 from PIL import Image
 import numpy as np
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 

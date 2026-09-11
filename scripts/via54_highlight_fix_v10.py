@@ -35,7 +35,7 @@ import os, re, sys, json
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 # ════════════════════════════════════════════════════════════════

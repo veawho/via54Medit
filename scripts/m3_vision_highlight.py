@@ -14,7 +14,7 @@ v4 新增禁高亮 filter (核心 - 之前缺失):
   - line:    整行宽度 (page margin 内) - 适合占整行的 abstract
   - sentence: anchor + end_phrase, 标完整句子
 """
-import os, sys, json, fitz, re
+import os, sys, json, pymupdf as fitz, re
 from typing import List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

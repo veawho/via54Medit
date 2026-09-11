@@ -23,7 +23,7 @@ highlight_vision_runner.py — vision 真视觉配对 highlight (用户硬规则
     highlight_vision_pnx('P3-2')  # 视觉配对 + 画 + 验证
 """
 import os, shutil, sys, csv
-import fitz
+import pymupdf as fitz
 from PIL import Image, ImageDraw
 import numpy as np
 

@@ -205,7 +205,7 @@ def process_project(name: str, cfg: dict, use_glm: bool = True) -> Dict:
         ]:
             if os.path.isfile(cand):
                 try:
-                    import fitz
+                    import pymupdf as fitz
                     doc = fitz.open(cand)
                     if len(doc) > 0:
                         t = doc[0].get_text()

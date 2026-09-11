@@ -121,7 +121,7 @@ def verify_paper_match_with_glm(
 
     # 抽 PDF 文本
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(pdf_path)
         text = ""
         for i in range(min(3, len(doc))):
@@ -286,7 +286,7 @@ def extract_evidence_for_highlight(
 
     # 抽 PDF 文本
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(pdf_path)
         pages_text = []
         for i in range(min(max_pages, len(doc))):
@@ -346,7 +346,7 @@ def find_text_in_pdf_page(
     用 PyMuPDF search_for + fuzzy 匹配
     """
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(pdf_path)
         if page_num > len(doc):
             doc.close()

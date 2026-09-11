@@ -68,7 +68,7 @@ def parse_pdf_with_docling(pdf_path: str, force: bool = False) -> Dict:
     )
     if result.returncode != 0:
         # 2026-08-02: Docling segfault 时 fallback 到 PyMuPDF 文本抽取
-        import fitz
+        import pymupdf as fitz
         pymupdf_doc = fitz.open(pdf_path)
         text = ""
         for page in pymupdf_doc:
@@ -352,7 +352,7 @@ def render_highlight_bbox(
     基于 docling bbox 精确高亮 (不是全页黄色)
     matches 是 find_data_point_in_doc 的输出
     """
-    import fitz
+    import pymupdf as fitz
     from PIL import Image, ImageDraw
     import io
 

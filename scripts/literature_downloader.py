@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple, Optional, Any
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
-import fitz
+import pymupdf as fitz
 
 _UA = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'

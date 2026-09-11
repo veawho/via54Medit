@@ -96,7 +96,7 @@ import sys, json, warnings
 warnings.filterwarnings('ignore')
 import logging
 logging.disable(logging.CRITICAL)
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 fitz.TOOLS.mupdf_display_errors(False)
 doc = fitz.open(sys.argv[1])
@@ -232,7 +232,7 @@ def process_pn_x(pnx, csv_text, debug=False):
         cls_inline = subprocess.run([PYTHON, "-c", f"""
 import sys, json, warnings
 warnings.filterwarnings('ignore')
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 fitz.TOOLS.mupdf_display_errors(False)
 doc = fitz.open(sys.argv[1])

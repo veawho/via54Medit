@@ -274,7 +274,7 @@ def render_pptx_images(input_path: str, out_dir: str, dpi: int = DEFAULT_DPI) ->
             return []
 
         # PDF → jpg
-        import fitz
+        import pymupdf as fitz
         import io
         from PIL import Image
         doc = fitz.open(pdf_path)

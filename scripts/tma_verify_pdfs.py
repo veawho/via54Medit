@@ -6,7 +6,7 @@
   - 作者姓氏是否出现
 输出 _pdf_verify_report.json: 每 ref 的 score + 判定 (ok / suspicious / mismatch)
 """
-import json, os, re, io, sys, fitz
+import json, os, re, io, sys, pymupdf as fitz
 
 T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
 REF_JSON = os.path.join(T, '_references_FINAL.json')

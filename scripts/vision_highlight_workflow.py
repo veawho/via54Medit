@@ -358,7 +358,7 @@ def stage2_pdf_search(plan: Dict, max_pages: int = 3, vision_timeout: int = 12) 
         return []
 
     # 渲染 PDF 前 N 页
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open(pdf_path)
     n_pages = min(max_pages, doc.page_count)
     matches = []
@@ -514,7 +514,7 @@ def stage4_verify(plan: Dict, highlight_pdf_path: str, ppt_render_path: str) -> 
     """
     渲染 highlight 后的 PDF 页 + PPT slide, sensenova 对比
     """
-    import fitz
+    import pymupdf as fitz
 
     if not os.path.isfile(highlight_pdf_path) or not os.path.isfile(ppt_render_path):
         return {"aligned": False, "reason": "missing_file"}

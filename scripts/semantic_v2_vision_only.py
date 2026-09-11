@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 # 复用 v1.4 的 stage3 + filter

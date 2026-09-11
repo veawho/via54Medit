@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from l4_keyword_extract import extract_keywords_v2
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"

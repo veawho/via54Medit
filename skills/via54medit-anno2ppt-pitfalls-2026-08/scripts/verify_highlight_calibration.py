@@ -30,7 +30,7 @@ LIT_BASE = "/Users/david/Desktop/雷管方案_文献整理/_literature_citation_
 CSV_PATH = "/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv"
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz  # PyMuPDF
 except ImportError:
     print("ERROR: PyMuPDF not installed. pip install pymupdf")
     sys.exit(1)

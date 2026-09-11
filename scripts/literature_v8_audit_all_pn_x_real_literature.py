@@ -18,7 +18,7 @@ CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 def verify_real_literature(pdf_path, expected_doi=None):
     """验证 PDF 是真文献"""
     try:
-        import fitz
+        import pymupdf as fitz
     except ImportError:
         return False, "no fitz", {}
     if not os.path.exists(pdf_path):

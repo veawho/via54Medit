@@ -21,7 +21,7 @@ from typing import Dict, List, Tuple, Optional, Any
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
-import fitz
+import pymupdf as fitz
 from PIL import Image
 from ppt_render_engine import render_ppt_slides_auto
 

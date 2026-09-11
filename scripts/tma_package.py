@@ -3,7 +3,7 @@
 列: A:PPT页 B:第几条 C:引用语义 D:PPT引文完整字段 E:DOI F:类型 G:对应PDF文件 H:来源链接
 输出: _citations_89_8col.csv + _tma_delivery_report.json
 """
-import json, os, re, io, sys, csv, fitz
+import json, os, re, io, sys, csv, pymupdf as fitz
 
 T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
 REF_JSON = os.path.join(T, '_references_FINAL.json')

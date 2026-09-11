@@ -16,7 +16,7 @@ P4-2 / 全 89 目录 高亮算法 v2.0 (视觉驱动精确标注 + 工作目录�
 调用: python3 process_pn_x.py [Pn-x|all]
 """
 
-import os, sys, csv, re, json, fitz, subprocess, shutil, time, tempfile
+import os, sys, csv, re, json, pymupdf as fitz, subprocess, shutil, time, tempfile
 from collections import defaultdict
 
 BASE = '/Users/david/Desktop/雷管方案_文献整理'
@@ -479,7 +479,7 @@ def make_worker_script():
     """生成 worker 脚本 (写到 tmp, 避免 -c escape 问题)"""
     import textwrap
     WORKER_HIGHLIGHT = textwrap.dedent('''\
-        import sys, fitz, os, re, json
+        import sys, pymupdf as fitz, os, re, json
         from collections import defaultdict
 
         pdf_path = sys.argv[1]

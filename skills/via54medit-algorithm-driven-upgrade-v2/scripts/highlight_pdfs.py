@@ -30,7 +30,7 @@ Pitfall:
 """
 import os, csv, re, shutil
 from pathlib import Path
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 ROOT = '/Users/david/Desktop/雷管方案_文献整理'
 CSV_8COL = f'{ROOT}/PPT_citations_8col.csv'

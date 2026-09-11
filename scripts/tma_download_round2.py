@@ -6,7 +6,7 @@
   3) 下载后核验: 首页必须含引用期刊关键词 + 年份 (期刊不符即放弃)
 输出 _download_round2_report.json; 成功的写入 _2_pdfs
 """
-import json, os, re, io, sys, time, urllib.request, urllib.parse, fitz
+import json, os, re, io, sys, time, urllib.request, urllib.parse, pymupdf as fitz
 import sys as _sys; _sys.path.insert(0, r'G:genti\projects\deepseek-harness-desktop')
 from tma_scihub import scihub_pdf
 

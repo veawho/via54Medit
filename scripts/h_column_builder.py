@@ -601,7 +601,7 @@ def build_h_md(
         light_hits = []
         if _os.path.isfile(main_pdf_path):
             try:
-                import fitz as _fitz
+                import pymupdf as _fitz
                 doc = _fitz.open(main_pdf_path)
                 search_terms = manifest.get("ppt_data_points", [])
                 if not search_terms and info_c.get("data_alignment"):
@@ -1164,7 +1164,7 @@ def run_light_step2(pn_x: str, lit_base: str, ppt_data_points: list) -> Dict:
     main_pdf_path = f"{p}/{main_pdfs[0]}"
 
     try:
-        import fitz as _fitz_lite
+        import pymupdf as _fitz_lite
         doc = _fitz_lite.open(main_pdf_path)
 
         # 数值等价: 14.4 == 14.40 == 14.4%
@@ -1281,7 +1281,7 @@ def detect_main_pdf_content_mismatch(pn_x: str, info_d: Dict, scan: Dict, d_raw:
         return None
 
     # 读取 main PDF page 1
-    import fitz as _fitz_c
+    import pymupdf as _fitz_c
     try:
         doc = _fitz_c.open(scan.get("main_pdf_path", ""))
         if len(doc) == 0:
@@ -2213,7 +2213,7 @@ def build_h_md_v6(
         light_hits = []  # [(dp, page, ctx), ...]
         if _os.path.isfile(main_pdf_path):
             try:
-                import fitz as _fitz
+                import pymupdf as _fitz
                 doc = _fitz.open(main_pdf_path)
                 # 从 C 列 + D 列提取搜索目标
                 search_terms = []

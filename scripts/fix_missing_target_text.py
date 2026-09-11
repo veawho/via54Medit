@@ -24,7 +24,7 @@ TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
 
 def get_page_body_text(pdf_path: str, page_idx: int, top_skip: float = 0.15, max_chars: int = 800) -> str:
     """读 PDF 第 page_idx 页 body text (跳过 top 15% header)"""
-    import fitz
+    import pymupdf as fitz
     fitz.TOOLS.mupdf_display_warnings(False)
     doc = fitz.open(pdf_path)
     if page_idx >= doc.page_count:

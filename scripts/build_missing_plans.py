@@ -51,7 +51,7 @@ def find_ppt_render(project_root: str, slide_num: int) -> Optional[str]:
 
 
 def read_pdf_abstract(pdf_path: str, max_pages: int = 2, max_chars: int = 3000) -> str:
-    import fitz
+    import pymupdf as fitz
     fitz.TOOLS.mupdf_display_warnings(False)
     doc = fitz.open(pdf_path)
     text = ""

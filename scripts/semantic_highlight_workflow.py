@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 from provider_vision import vision_analyze, get_api_key, encode_image, get_image_mime

@@ -126,7 +126,7 @@ def download_pdf(url, out_path, timeout=90, referer=None):
 
 def verify_pdf(path):
     try:
-        import fitz
+        import pymupdf as fitz
         doc = fitz.open(path)
         n = len(doc)
         head = doc[0].get_text()[:150].replace('\n', ' ') if n else ''

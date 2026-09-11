@@ -11,7 +11,7 @@ Used by: medit anno2ppt l0verify
 """
 import sys
 import json
-import fitz
+import pymupdf as fitz
 
 
 def main():

@@ -17,7 +17,7 @@ test_via54_highlight_fix_v10.py — v10 修复版高亮单测
 import os, sys, tempfile, unittest
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 # 让 import 找得到
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

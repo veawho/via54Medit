@@ -55,7 +55,7 @@ def render_ppt_libreoffice(pptx_path, output_dir):
 
 def pdf_to_jpgs(pdf_path, output_dir):
     """fitz PDF → JPG (150 DPI)"""
-    import fitz
+    import pymupdf as fitz
     doc = fitz.open(pdf_path)
     slides = []
     for i, page in enumerate(doc):

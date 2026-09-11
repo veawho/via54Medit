@@ -132,7 +132,7 @@ def detect_engines():
 def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
     """macOS 下通过 AppleScript 控制原生 Microsoft PowerPoint 导出 PDF，再由 PyMuPDF 导出高清 PNG"""
     import tempfile
-    import fitz
+    import pymupdf as fitz
     abs_pptx = os.path.abspath(pptx_path)
     os.makedirs(out_dir, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
@@ -217,7 +217,7 @@ def render_via_soffice(soffice, pptx_path, out_dir, dpi=120):
     """soffice --headless 转 PDF → PyMuPDF 渲染 PNG (真实排版, 含矢量/图表)"""
     os.makedirs(out_dir, exist_ok=True)
     import tempfile
-    import fitz
+    import pymupdf as fitz
     tmp = tempfile.mkdtemp(prefix="ppt_soffice_")
     pdf_path = os.path.join(tmp, "slides.pdf")
     try:

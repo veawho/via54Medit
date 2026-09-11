@@ -12,7 +12,7 @@ spot_check_semantic_highlights.py — 实际检查每个高亮 PDF
 """
 import os, sys, json, argparse
 from pathlib import Path
-import fitz
+import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"

@@ -5,7 +5,7 @@ from collections import defaultdict
 
 sys.path.insert(0, '/Users/david/Desktop/developments/via54Medit/scripts')
 import m3_vision_highlight as mv3
-import fitz
+import pymupdf as fitz
 
 TMA = '/Users/david/Desktop/TMA_文献整理'
 OUT = f'{TMA}/step4_highlight_106目录_合并DOI'
@@ -70,7 +70,7 @@ def main():
     # P25-2 P30-2 是单页扫描大图 (page_h > 1000), 用 line mode + skip forbidden
     for pn, (anchor, pi) in ANCHORS.items():
         pdf = f'{TMA}/step3_pdf下载_106目录/{pn}_main.pdf'
-        import fitz
+        import pymupdf as fitz
         page_h = fitz.open(pdf)[0].rect.height
         mode = 'line' if page_h > 1000 else 'phrase'
         skip = page_h > 1000  # 单页扫描件无法分 title/body, 跳过禁高亮检查

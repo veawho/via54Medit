@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 from datetime import datetime
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 
 def fetch_nct_data(nct_id: str) -> dict:
