@@ -129,8 +129,91 @@ def detect_engines():
 
 
 # ============ macOS 原生 PowerPoint 真实渲染 ============
+#: macOS PowerPoint 自动化的 open/save 超时(秒), 可用 PPT_RENDER_TIMEOUT 覆盖。
+#: 默认 60 (原为写死的 300): 实测 open 被模态对话框挡住时会一直挂住, 300s 只是让用户白等 5 分钟。
+_DEFAULT_MACOS_TIMEOUT = 60.0
+#: 预检超时(秒), 可用 PPT_RENDER_PREFLIGHT_TIMEOUT 覆盖。
+#: 只做 launch + get version —— 实测暖机 0.4s 返回, 20s 足够覆盖冷启动。
+_DEFAULT_MACOS_PREFLIGHT_TIMEOUT = 20.0
+
+#: PowerPoint 自动化被模态对话框挡住时给出的可操作提示
+_MACOS_BLOCKED_HINT = (
+    "PowerPoint 多半是弹了模态对话框(登录 / 激活 / 文件访问权限)挡住了 Apple 事件。"
+    "可手动打开一次 PowerPoint 关掉该对话框后重试; "
+    "或改用 RENDER_ENGINE=libreoffice / RENDER_ENGINE=python_pptx; "
+    "自动化超时可用 PPT_RENDER_TIMEOUT(秒) 调整。"
+)
+
+
+def _env_seconds(name, default):
+    """读环境变量为秒数; 缺失/不可解析/非正数一律回落到 default。"""
+    try:
+        v = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return float(default)
+    return v if v > 0 else float(default)
+
+
+def _macos_render_timeout():
+    return _env_seconds("PPT_RENDER_TIMEOUT", _DEFAULT_MACOS_TIMEOUT)
+
+
+def _macos_preflight_timeout():
+    return _env_seconds("PPT_RENDER_PREFLIGHT_TIMEOUT", _DEFAULT_MACOS_PREFLIGHT_TIMEOUT)
+
+
+def probe_macos_powerpoint(timeout=None):
+    """预检 macOS PowerPoint 是否响应 Apple 事件。返回 (ok, 详情)。
+
+    只做 ``launch`` + ``get version`` —— 实测暖机 0.4s 返回。
+    存在的意义是**快速失败**: 2026-09-11 实测 ``open`` 这一步会被模态对话框挡住,
+    而 PowerPoint 进程本身是活的(``get version`` 紧接着仍 0.1s 应答),
+    所以"能不能应答 Apple 事件"无法区分二者, 但至少能在**通道完全不通**时立刻报错,
+    不必在 open 上白等几分钟。
+    """
+    tmo = timeout if timeout is not None else _macos_preflight_timeout()
+    script = (
+        "with timeout of %d seconds\n"
+        'tell application "Microsoft PowerPoint"\n'
+        "launch\n"
+        "get version\n"
+        "end tell\n"
+        "end timeout\n" % int(tmo)
+    )
+    try:
+        r = subprocess.run(["osascript", "-e", script],
+                           capture_output=True, text=True, timeout=tmo + 10)
+    except subprocess.TimeoutExpired:
+        return False, "预检超时(%ds): PowerPoint 未在超时内应答 Apple 事件" % int(tmo)
+    except OSError as e:
+        return False, "预检无法执行 osascript: %s" % e
+    if r.returncode != 0:
+        return False, "预检失败: %s" % (r.stderr or r.stdout).strip()[-200:]
+    return True, "PowerPoint %s" % (r.stdout or "").strip()
+
+
+def _is_apple_event_timeout(err):
+    return "-1712" in err or "超时" in err or "timed out" in err.lower()
+
+
+class RenderEngineError(RuntimeError):
+    """渲染引擎失败。``hint`` 是可选的**可操作建议**, 空字符串表示没有额外建议。
+
+    为什么不把建议拼进消息里: 调用方打印消息时会截断(``render_ppt_slides_auto`` 用
+    ``str(e)[:160]``), 建议拼在**末尾**会被整段切掉 —— 2026-09-11 就踩过这一次;
+    拼在**最前面**又把原始错误挤没了, 还留下"｜ 原"这种半截断口。故单独用属性承载。
+    """
+    def __init__(self, message, hint=""):
+        super().__init__(message)
+        self.hint = hint
+
+
 def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
-    """macOS 下通过 AppleScript 控制原生 Microsoft PowerPoint 导出 PDF，再由 PyMuPDF 导出高清 PNG"""
+    """macOS 下通过 AppleScript 控制原生 Microsoft PowerPoint 导出 PDF，再由 PyMuPDF 导出高清 PNG
+
+    先做一次快速预检(``probe_macos_powerpoint``), 不通过就**立刻报错**并给出可操作提示,
+    不再像以前那样在 open 上白等 300 秒。
+    """
     import tempfile
     import pymupdf as fitz
     abs_pptx = os.path.abspath(pptx_path)
@@ -140,8 +223,16 @@ def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
     # 清理可能残留的卡死实例(模态对话框会阻塞 Apple 事件, 表现为 -9074/超时)
     subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)
     time.sleep(2.0)
-    script = f'''
-    with timeout of 300 seconds
+    try:
+        # (a) 快速预检: 先确认 Apple 事件通道通不通, 通了再花时间 open
+        ok, detail = probe_macos_powerpoint()
+        if not ok:
+            raise RenderEngineError(detail, _MACOS_BLOCKED_HINT)
+
+        # (b) 超时可用 PPT_RENDER_TIMEOUT 覆盖 (默认由 300 降到 60)
+        tmo = _macos_render_timeout()
+        script = f'''
+    with timeout of {int(tmo)} seconds
     tell application "Microsoft PowerPoint"
         launch
         delay 3
@@ -152,10 +243,14 @@ def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
     end tell
     end timeout
     '''
-    try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+        # subprocess 超时比 AppleScript 多 15s, 让 AppleScript 自己的 -1712 先报出来(信息更具体)
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
+                             timeout=tmo + 15)
         if res.returncode != 0 or not os.path.exists(tmp_pdf):
-            raise RuntimeError("PowerPoint AppleScript error: %s" % (res.stderr or res.stdout)[-200:])
+            err = (res.stderr or res.stdout).strip()[-200:]
+            raise RenderEngineError(
+                "PowerPoint AppleScript error: %s" % err,
+                _MACOS_BLOCKED_HINT if _is_apple_event_timeout(err) else "")
         doc = fitz.open(tmp_pdf)
         n = 0
         for i, page in enumerate(doc, start=1):
@@ -377,7 +472,8 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
         print("  [render] %s" % str(e), flush=True)
         print("  [render] 提示: 引擎偏好由 RENDER_ENGINE 控制 (默认 powerpoint)", flush=True)
         return 0, "none"
-    for name, kind, progid in engines:
+    for idx, (name, kind, progid) in enumerate(engines):
+        is_last = idx == len(engines) - 1
         try:
             if kind == "com":
                 print("  [render] 引擎=%s (COM %s)" % (name, progid), flush=True)
@@ -400,7 +496,13 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
                 if n > 0:
                     return n, name
         except Exception as e:
-            print("  [render] %s 失败: %s (尝试下一引擎)" % (name, str(e)[:100]), flush=True)
+            # 消息截断到 160; **可操作建议单独成行**打印 —— 拼在消息里会被截断切掉。
+            tail = "" if is_last else " (尝试下一引擎)"
+            print("  [render] %s 失败: %s%s" % (name, str(e)[:160], tail), flush=True)
+            hint = getattr(e, "hint", "")
+            if hint:
+                print("  [render] 处理建议: %s" % hint, flush=True)
+    print("  [render] 所有引擎均失败, 返回 0 张幻灯片", flush=True)
     return 0, "none"
 
 

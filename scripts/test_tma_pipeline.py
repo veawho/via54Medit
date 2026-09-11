@@ -565,6 +565,148 @@ class TestRenderEngine(unittest.TestCase):
             self.assertEqual(pre._engine_pref(), "powerpoint")
             self.assertEqual(pre.render_ppt_slides_auto.__name__, "render_ppt_slides_auto")
 
+    # ---------- macOS PowerPoint 自动化: 快速预检 (a) + 超时可配 (b) ----------
+    #
+    # 背景 (2026-09-11 实测): open 这一步会被模态对话框挡住, 表现为 AppleEvent -1712;
+    # 而 PowerPoint 进程本身是活的(紧接着 get version 仍 0.1s 应答)。原先写死 300s 超时,
+    # 于是默认偏好下会**静默白等 5 分钟**再返回 0 张。以下三条把它们钉住。
+
+    class _R:
+        """subprocess.run 的最小替身 (避免测试模块再 import subprocess)。"""
+        def __init__(self, rc, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def test_macos_timeout_env_override(self):
+        """(b) open/save 超时可配, 默认 60s(原为写死 300s); 非法值回落默认。"""
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("PPT_RENDER_TIMEOUT", "PPT_RENDER_PREFLIGHT_TIMEOUT")}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            self.assertEqual(pre._macos_render_timeout(), 60.0)
+            self.assertEqual(pre._macos_preflight_timeout(), 20.0)
+        with mock.patch.dict(os.environ, {"PPT_RENDER_TIMEOUT": "7.5"}):
+            self.assertEqual(pre._macos_render_timeout(), 7.5)
+        for bad in ("abc", "0", "-3", ""):
+            with mock.patch.dict(os.environ, {"PPT_RENDER_TIMEOUT": bad}):
+                self.assertEqual(pre._macos_render_timeout(), 60.0,
+                                 "非法值 %r 应回落到默认" % bad)
+
+    def test_preflight_failure_fails_fast_with_hint(self):
+        """(a) 预检不通过 → 立刻报错并给可操作提示, **不再跑到 open 上白等**。"""
+        seen = []
+
+        def fake_run(cmd, **kw):
+            joined = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+            seen.append(joined)
+            if "killall" in joined:
+                return self._R(0)
+            if "get version" in joined:
+                return self._R(1, "", "execution error: not authorized to send Apple events (-1743)")
+            raise AssertionError("预检失败后不应再执行 open 脚本")
+
+        tmp = tempfile.mkdtemp()
+        with mock.patch.object(pre.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(pre.time, "sleep", return_value=None):
+            with self.assertRaises(RuntimeError) as cm:
+                pre.render_via_macos_powerpoint(os.path.join(tmp, "x.pptx"),
+                                                os.path.join(tmp, "o"))
+        msg = str(cm.exception)
+        self.assertIn("预检失败", msg)
+        self.assertIn("模态对话框", cm.exception.hint)      # 建议走 hint 属性(避开截断)
+        self.assertIn("PPT_RENDER_TIMEOUT", cm.exception.hint)
+        self.assertFalse([s for s in seen if "open POSIX file" in s],
+                         "预检没过却仍然去 open 了")
+
+    def test_timeout_error_appends_hint_and_embeds_configurable_timeout(self):
+        """(b)+(a): open 超时(-1712) 时报错带提示, 且 AppleScript 里嵌的确实是可配超时。"""
+        scripts = []
+
+        def fake_run(cmd, **kw):
+            joined = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+            if "killall" in joined:
+                return self._R(0)
+            scripts.append(joined)
+            if "get version" in joined:
+                return self._R(0, "16.112.1\n")            # 预检通过
+            return self._R(1, "", "224:339: execution error: AppleEvent 已超时。 (-1712)")
+
+        tmp = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {"PPT_RENDER_TIMEOUT": "9"}), \
+                mock.patch.object(pre.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(pre.time, "sleep", return_value=None):
+            with self.assertRaises(RuntimeError) as cm:
+                pre.render_via_macos_powerpoint(os.path.join(tmp, "x.pptx"),
+                                                os.path.join(tmp, "o"))
+        msg = str(cm.exception)
+        self.assertIn("-1712", msg)
+        self.assertIn("模态对话框", cm.exception.hint, "AppleEvent 超时应附带可操作建议")
+
+        open_scripts = [s for s in scripts if "open POSIX file" in s]
+        self.assertEqual(len(open_scripts), 1, "应恰好执行一次 open 脚本")
+        self.assertIn("timeout of 9 seconds", open_scripts[0],
+                      "AppleScript 里嵌的超时应来自 PPT_RENDER_TIMEOUT")
+        self.assertIn("open POSIX file", open_scripts[0])
+
+    def test_probe_ok_reports_version(self):
+        """预检通过时返回 (True, 'PowerPoint <版本>')。"""
+        def fake_run(cmd, **kw):
+            return self._R(0, "16.112.1\n")
+        with mock.patch.object(pre.subprocess, "run", side_effect=fake_run):
+            ok, detail = pre.probe_macos_powerpoint(timeout=5)
+        self.assertTrue(ok)
+        self.assertIn("16.112.1", detail)
+
+    def test_probe_oserror_is_reported_not_raised(self):
+        """osascript 拉不起来时应返回 (False, 说明) 而不是抛异常。"""
+        with mock.patch.object(pre.subprocess, "run", side_effect=OSError("no osascript")):
+            ok, detail = pre.probe_macos_powerpoint(timeout=5)
+        self.assertFalse(ok)
+        self.assertIn("osascript", detail)
+
+    def test_failure_hint_reaches_the_log(self):
+        """可操作建议必须真的出现在 render_ppt_slides_auto 的日志里。
+
+        这条是从一次真实疏漏里补出来的: 建议原先拼在异常消息里, 而调用方打印时截断,
+        于是**异常里有建议、用户却看不到**(末尾被整段切掉; 挪到最前面又留下"｜ 原"这种
+        半截断口)。现在建议走 ``RenderEngineError.hint`` 属性, 由调用方**单独成行**打印。
+        """
+        tmp = tempfile.mkdtemp()
+        err = pre.RenderEngineError(
+            "PowerPoint AppleScript error: execution error: AppleEvent 已超时。 (-1712)",
+            pre._MACOS_BLOCKED_HINT)
+        with mock.patch.object(pre, "_build_engine_list",
+                               return_value=[("PowerPoint (macOS)", "macos_ppt", "x")]), \
+                mock.patch.object(pre, "render_via_macos_powerpoint",
+                                  side_effect=err), \
+                mock.patch("builtins.print") as mp:
+            n, engine = pre.render_ppt_slides_auto(os.path.join(tmp, "x.pptx"),
+                                                   os.path.join(tmp, "o"))
+        self.assertEqual((n, engine), (0, "none"))
+        logged = "\n".join(" ".join(str(a) for a in c.args) for c in mp.call_args_list)
+        self.assertIn("模态对话框", logged, "可操作建议没出现在日志里(多半又被截断了)")
+        self.assertIn("PPT_RENDER_TIMEOUT", logged)
+        self.assertIn("所有引擎均失败", logged)
+
+    def test_hint_line_is_separate_from_truncated_message(self):
+        """建议必须**单独成行且完整**, 不能被消息的截断波及。"""
+        long_err = "x" * 500
+        e = pre.RenderEngineError(long_err, pre._MACOS_BLOCKED_HINT)
+        self.assertEqual(str(e), long_err)          # 消息本体不被改写
+        self.assertIn("PPT_RENDER_TIMEOUT", e.hint)  # 建议完整保留在属性里
+
+        tmp = tempfile.mkdtemp()
+        with mock.patch.object(pre, "_build_engine_list",
+                               return_value=[("PowerPoint (macOS)", "macos_ppt", "x")]), \
+                mock.patch.object(pre, "render_via_macos_powerpoint", side_effect=e), \
+                mock.patch("builtins.print") as mp:
+            pre.render_ppt_slides_auto(os.path.join(tmp, "x.pptx"), os.path.join(tmp, "o"))
+        lines = [" ".join(str(a) for a in c.args) for c in mp.call_args_list]
+        hint_lines = [l for l in lines if "处理建议" in l]
+        self.assertEqual(len(hint_lines), 1, "建议应恰好单独打印一行")
+        self.assertIn("PPT_RENDER_TIMEOUT", hint_lines[0])
+        fail_lines = [l for l in lines if "失败:" in l]
+        self.assertTrue(fail_lines and len(fail_lines[0]) < 400,
+                        "失败行本身应保持简短(被截断)")
+
 
 # ---------- T13: 自然语言一键全自动管线 (via54_auto) ----------
 import via54_auto as va
