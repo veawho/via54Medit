@@ -376,8 +376,13 @@ python3 scripts/via54.py diff                                       # 双项目�
 | Step 4 GLM 应证 | `glm_integration.py` | ✓ TMA 5#3 0%→17.6% |
 | Step 5 三方对齐 | `step5_alignment.py` | ✓ 雷管 100/100/99.4%, TMA 98/98/0% (GLM 后 17.6%) |
 | Step 6 目录合并 | `literature_v8_fix_merge_dirs.py` | ✓ 雷管 1 个 (P4-1P36-1) |
-| 6 步规则校验 | `via54_rules.py check` | ✓ 雷管 6/7, TMA 5/7 |
-| CI gate | `.github/workflows/rules_check.yml` | ✓ PR 自动跑 |
+| 6 步规则校验 | `via54_rules.py check` | ✓ 雷管 6/7, TMA 5/7 (v10.2 后 TMA 7/7; 见 `AGENTS.md` 快照说明) |
+| CI gate | `.github/workflows/ci.yml` (Go build/vet/race + Python 单测) | ✓ push/PR 自动跑 |
+
+> 注: 上表为 **2026-08-10 项目数据齐全时的快照**。原 `.github/workflows/rules_check.yml`
+> 已在 `bc96e45` ("tmp: remove workflow for push test") 中删除且未恢复, `via54.py rules`
+> 现无 CI 集成。两个项目的原始目录已归档, 重跑规则校验无法复现上述通过率
+> (缺 Step 1/3/4/5/6 的输入目录, 非规则回归)。
 
 ---
 

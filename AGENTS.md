@@ -641,10 +641,14 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 6 步规则 vs 8 列 CSV (双项目验证)
 
+> ⚠️ **历史快照 (2026-08-11)**。两个项目的工作目录已不在本机 (`Desktop/雷管*`、`Desktop/TMA_文献整理/_2_pdfs` 均已归档),
+> 因此重跑 `via54_rules.py check <project>` 无法复现下面这条 7/7 —— 现在对残留的 TMA 目录只报 2/7,
+> 原因是 Step 1/3/4/5/6 的输入目录缺失, **不是规则回归**。数字仅在数据齐全时成立。
+
 - **雷管方案**: 7/7 步过 ✅, 99.4% 三方对齐, 160 Pn-x
 - **TMA**: 7/7 步过 ✅, 85.8% GLM highlight, 106 Pn-x
-- 测试: 69/69 通过 (`test_via54_highlight_fix_v10.py` 40 + `test_via54_rules.py` 29)
-- CI: `.github/workflows/rules_check.yml` 自动跑 `via54.py rules <project>`
+- 测试 (可复现): `test_via54_rules.py` 28/28 ✓ + `test_via54_highlight_fix_v10.py` 41/41 ✓ (后者 4 个真实 TMA 用例因 `_2_pdfs/` 归档自动 skip); 合计 69 项无失败
+- CI: 仅 `.github/workflows/ci.yml` (Go build/vet/race + Python 单测)。`via54.py rules <project>` **无 CI 集成**, 需本地手动跑
 - v10.2 增强 (2026-08-10): TMA 5/7 → 7/7 (修了 via54_rules.py 兼容 TMA nested 结构和 _jpgs/ 辅助目录)
 
 ### 已知错论文 (GLM 已识别, 需手工从 Google Patents / 替代源补)
