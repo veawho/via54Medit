@@ -66,17 +66,17 @@ type SciHubSource struct {
 	// latencyEWMA 全局响应时间 EWMA 跟踪
 	// 算法: 用过去 N 次响应时间推导 p95, 然后 timeout = p95 * 2 + buffer
 	// → 替代硬编码 60s timeout
-	latencyEWMA float64
+	latencyEWMA  float64
 	latencyCount int
 }
 
 // mirrorStat 是单个 mirror 的健康度统计
 type mirrorStat struct {
-	mu              sync.Mutex
-	successCount    int
-	failCount       int
-	latencyMS       int64 // EWMA
-	lastSeen        time.Time
+	mu           sync.Mutex
+	successCount int
+	failCount    int
+	latencyMS    int64 // EWMA
+	lastSeen     time.Time
 }
 
 // healthScore 算法: 0-1, 越高越优先

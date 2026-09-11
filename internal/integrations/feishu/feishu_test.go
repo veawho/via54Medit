@@ -107,6 +107,7 @@ func TestBuildHCell(t *testing.T) {
 // Cases:
 //  8. nil config → error
 //  9. missing Token → error
+//
 // 10. missing SheetID → error
 // 11. missing CSVPath → error
 // 12. missing BaseDir → error

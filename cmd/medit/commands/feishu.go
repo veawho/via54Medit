@@ -1,10 +1,11 @@
 // feishu.go — CSV ↔ Feishu spreadsheet sync CLI subcommand (Phase 6)
 //
 // 用法:
-//   medit feishu verify [--json] [--column G]
-//     只读 verify, 不修改任何数据
-//   medit feishu push [--dry-run] [--fix] [--row N]
-//     Push CSV → 飞书, 自动检测漂移
+//
+//	medit feishu verify [--json] [--column G]
+//	  只读 verify, 不修改任何数据
+//	medit feishu push [--dry-run] [--fix] [--row N]
+//	  Push CSV → 飞书, 自动检测漂移
 //
 // 设计 (2026-07-31):
 //   - 跟 medit-mcp 同源, 复用 internal/integrations/feishu/Client
@@ -12,10 +13,11 @@
 //   - GitHub-ready: 私有项目路径不进入代码
 //
 // 环境变量:
-//   FEISHU_TOKEN     - 飞书 spreadsheet token
-//   SHEET_ID         - sheet ID (e.g. "b03e59")
-//   CSV_PATH         - 本地 citation_table.csv 路径
-//   BASE_DIR         - 项目根目录 (用于 lock 文件)
+//
+//	FEISHU_TOKEN     - 飞书 spreadsheet token
+//	SHEET_ID         - sheet ID (e.g. "b03e59")
+//	CSV_PATH         - 本地 citation_table.csv 路径
+//	BASE_DIR         - 项目根目录 (用于 lock 文件)
 package commands
 
 import (

@@ -1,8 +1,9 @@
 // Package commands wires the 13 medit CLI subcommands.
 //
 // HLO 集成 (Phase 5, 2026-07-28):
-//   新增 4 个 subcommand: medit hlo ask/audit/truth/corr
-//   每个调 hlo_nlu_v2.py (Python) - 0 浏览器注册, 0 密钥
+//
+//	新增 4 个 subcommand: medit hlo ask/audit/truth/corr
+//	每个调 hlo_nlu_v2.py (Python) - 0 浏览器注册, 0 密钥
 package commands
 
 import (

@@ -10,11 +10,11 @@
 //
 // Public API:
 //
-//   client, err := feishu.NewClient(&feishu.Config{...})
-//   if err != nil { ... }
-//   result, err := client.Verify(ctx)
-//   if err != nil { ... }
-//   success, fails, err := client.Push(ctx, feishu.PushOptions{DryRun: false})
+//	client, err := feishu.NewClient(&feishu.Config{...})
+//	if err != nil { ... }
+//	result, err := client.Verify(ctx)
+//	if err != nil { ... }
+//	success, fails, err := client.Push(ctx, feishu.PushOptions{DryRun: false})
 //
 // See integrations/feishu/README.md for design docs.
 package feishu
@@ -112,7 +112,7 @@ type VerifyResult struct {
 	TotalRows        int                 `json:"total_rows"`
 	FeishuRows       int                 `json:"feishu_rows"`
 	ColumnMismatches map[string][]string `json:"column_mismatches"` // column letter → list of "Row N" mismatches
-	FileMissing      []string            `json:"file_missing"`       // G-column paths that don't exist
+	FileMissing      []string            `json:"file_missing"`      // G-column paths that don't exist
 	Consistent       bool                `json:"consistent"`
 }
 
@@ -554,14 +554,15 @@ func readCSV(path string) ([]CSVRow, error) {
 // CSVRow represents one row in citation_table.csv.
 //
 // Column mapping (matches citation_table.csv schema):
-//   PPTPage      → "PPT页" (col A)
-//   CiteIndex    → "第几条" (col B)
-//   Context      → "引用语义（上下文）" (col C)
-//   PPTReference → "PPT中的文献引用 完整字段" (col D)
-//   DOI          → "DOI" (col E)
-//   Type         → "类型" (col F)
-//   PDFFile      → "对应PDF文件" (col G)
-//   SourceURL    → "来源链接 → 阅读全文" (col H)
+//
+//	PPTPage      → "PPT页" (col A)
+//	CiteIndex    → "第几条" (col B)
+//	Context      → "引用语义（上下文）" (col C)
+//	PPTReference → "PPT中的文献引用 完整字段" (col D)
+//	DOI          → "DOI" (col E)
+//	Type         → "类型" (col F)
+//	PDFFile      → "对应PDF文件" (col G)
+//	SourceURL    → "来源链接 → 阅读全文" (col H)
 type CSVRow struct {
 	PPTPage      string
 	CiteIndex    string

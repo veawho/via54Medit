@@ -794,4 +794,3 @@ var medplanMarketingAnalysisCmd = &cobra.Command{
 		return nil
 	},
 }
-

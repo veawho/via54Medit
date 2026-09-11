@@ -11,30 +11,30 @@ import (
 type PDFType string
 
 const (
-	PDFTypeRealPDF          PDFType = "real_pdf"            // Veeva Vault / Adobe InDesign / Arbortext
+	PDFTypeRealPDF          PDFType = "real_pdf"             // Veeva Vault / Adobe InDesign / Arbortext
 	PDFTypeReportLabWrap    PDFType = "reportlab_screenshot" // liangyihui.net 截图包壳
 	PDFTypeChromeScreenshot PDFType = "chrome_screenshot"    // Skia/PDF mXXX
-	PDFTypeMeetingAbstract  PDFType = "meeting_abstract"    // pdfmake
+	PDFTypeMeetingAbstract  PDFType = "meeting_abstract"     // pdfmake
 	PDFTypeOAAMAvailable    PDFType = "oa_am_available"      // UCL Discovery / PubMed Central
 	PDFTypeUnknown          PDFType = "unknown"
 )
 
 // ProducerBlacklist 黑名单 (判定为截图包壳)
 var ProducerBlacklist = []string{
-	"ReportLab PDF Library",  // ReportLab 截图包壳
-	"WeasyPrint",             // HTML→PDF 包装
-	"Skia/PDF",               // Chrome 截屏 (with Mozilla creator)
+	"ReportLab PDF Library", // ReportLab 截图包壳
+	"WeasyPrint",            // HTML→PDF 包装
+	"Skia/PDF",              // Chrome 截屏 (with Mozilla creator)
 }
 
 // ProducerWhitelist 白名单 (判定为真 PDF)
 var ProducerWhitelist = []string{
-	"Veeva Vault",            // ASCO/JCO 会议摘要标准
-	"Adobe InDesign",         // 期刊标准排版
-	"Adobe PDF Library",      // 期刊标准
-	"Arbortext",              // 期刊生成工具
-	"Acrobat Distiller",      // 期刊生成工具
-	"XPP",                    // Elsevier 工具
-	"pdfmake",                // GI Cancer Symp 摘要
+	"Veeva Vault",       // ASCO/JCO 会议摘要标准
+	"Adobe InDesign",    // 期刊标准排版
+	"Adobe PDF Library", // 期刊标准
+	"Arbortext",         // 期刊生成工具
+	"Acrobat Distiller", // 期刊生成工具
+	"XPP",               // Elsevier 工具
+	"pdfmake",           // GI Cancer Symp 摘要
 }
 
 // ClassifyPDF 根据 producer + creator + 文字层分类 PDF 类型
@@ -91,11 +91,11 @@ func ClassifyPDF(producer, creator, firstPageText string) PDFType {
 type RepairStrategy string
 
 const (
-	StrategyReplaceWithRealPDF  RepairStrategy = "replace_with_real_pdf"   // 找真原文 PDF (ReportLab)
-	StrategyFindOAAm           RepairStrategy = "find_oa_am"              // 找 OA 仓库 (Chrome)
-	StrategyUseAbstractAsMain   RepairStrategy = "abstract_as_main"       // 用 abstract (双源架构)
-	StrategyKeepAsIs            RepairStrategy = "keep_as_is"             // 真 PDF 无需修
-	StrategyInspectManually     RepairStrategy = "inspect_manually"        // 人工判断
+	StrategyReplaceWithRealPDF RepairStrategy = "replace_with_real_pdf" // 找真原文 PDF (ReportLab)
+	StrategyFindOAAm           RepairStrategy = "find_oa_am"            // 找 OA 仓库 (Chrome)
+	StrategyUseAbstractAsMain  RepairStrategy = "abstract_as_main"      // 用 abstract (双源架构)
+	StrategyKeepAsIs           RepairStrategy = "keep_as_is"            // 真 PDF 无需修
+	StrategyInspectManually    RepairStrategy = "inspect_manually"      // 人工判断
 )
 
 // RecommendStrategy 根据 PDF 类型推荐修复策略
@@ -134,10 +134,10 @@ func isPaywallDOI(doi string) bool {
 	}
 	lower := strings.ToLower(doi)
 	paywallPrefixes := []string{
-		"10.1016/",  // Elsevier 通用
-		"10.1056/",  // NEJM
-		"10.1002/",  // Wiley
-		"10.1159/",  // Karger
+		"10.1016/", // Elsevier 通用
+		"10.1056/", // NEJM
+		"10.1002/", // Wiley
+		"10.1159/", // Karger
 	}
 	for _, p := range paywallPrefixes {
 		if strings.HasPrefix(lower, p) {

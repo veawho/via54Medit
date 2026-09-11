@@ -10,54 +10,54 @@ import (
 type SourceType string
 
 const (
-	SourceTypeSDAbstract    SourceType = "sd_abstract"      // ScienceDirect abstract 页面
-	SourceTypeNCTRegistry   SourceType = "nct_registry"      // ClinicalTrials.gov
-	SourceTypeUCLDiscovery  SourceType = "ucl_discovery"     // UCL Discovery AAM
-	SourceTypeESMO          SourceType = "esmo"              // ESMO 会议摘要
-	SourceTypeAME           SourceType = "ame"               // AME Publishing
-	SourceTypeKarger        SourceType = "karger"            // Karger
-	SourceTypeCleanAbstract SourceType = "clean_abstract"    // PubMed clean abstract
-	SourceTypeRealPDF       SourceType = "real_pdf"          // 真原文 PDF
+	SourceTypeSDAbstract    SourceType = "sd_abstract"    // ScienceDirect abstract 页面
+	SourceTypeNCTRegistry   SourceType = "nct_registry"   // ClinicalTrials.gov
+	SourceTypeUCLDiscovery  SourceType = "ucl_discovery"  // UCL Discovery AAM
+	SourceTypeESMO          SourceType = "esmo"           // ESMO 会议摘要
+	SourceTypeAME           SourceType = "ame"            // AME Publishing
+	SourceTypeKarger        SourceType = "karger"         // Karger
+	SourceTypeCleanAbstract SourceType = "clean_abstract" // PubMed clean abstract
+	SourceTypeRealPDF       SourceType = "real_pdf"       // 真原文 PDF
 )
 
 // EvidenceSource 一条证据来源
 type EvidenceSource struct {
 	Type         SourceType `json:"type"`
 	DOI          string     `json:"doi"`
-	Layout       string     `json:"layout"`         // "main" or "fallback"
-	Citation     string     `json:"citation"`        // 引用文字
-	Available    bool       `json:"available"`       // 是否获取成功
-	Limit        string     `json:"limit"`           // 限制说明
-	DataProvided []string   `json:"data_provided"`   // 提供的关键数据点
+	Layout       string     `json:"layout"`        // "main" or "fallback"
+	Citation     string     `json:"citation"`      // 引用文字
+	Available    bool       `json:"available"`     // 是否获取成功
+	Limit        string     `json:"limit"`         // 限制说明
+	DataProvided []string   `json:"data_provided"` // 提供的关键数据点
 }
 
 // DualSourceManifest 双源 manifest schema
 //
 // 用户 2026-08-01 硬规则: 不合成 1 个 PDF, 用 main + fallback 互补
 type DualSourceManifest struct {
-	PNx                 string           `json:"pn_x"`
-	MainPDF             string           `json:"main_pdf"`
-	FallbackPDFs        []string         `json:"fallback_pdfs"`
-	FallbackTriggered   bool             `json:"fallback_triggered"`
-	FallbackTriggerReason string         `json:"fallback_trigger_reason"`
-	EvidenceSources     []EvidenceSource `json:"evidence_sources"`
-	HighlightSummary    HighlightSummary `json:"highlight_summary"`
+	PNx                   string           `json:"pn_x"`
+	MainPDF               string           `json:"main_pdf"`
+	FallbackPDFs          []string         `json:"fallback_pdfs"`
+	FallbackTriggered     bool             `json:"fallback_triggered"`
+	FallbackTriggerReason string           `json:"fallback_trigger_reason"`
+	EvidenceSources       []EvidenceSource `json:"evidence_sources"`
+	HighlightSummary      HighlightSummary `json:"highlight_summary"`
 }
 
 // HighlightSummary 高亮统计
 type HighlightSummary struct {
-	MainPDFHits             int      `json:"main_pdf_hits"`
-	FallbackPDFHits         int      `json:"fallback_pdf_hits"`
-	FallbackPagesHighlighted []int   `json:"fallback_pages_highlighted"`
-	Total                   int      `json:"total"`
+	MainPDFHits              int   `json:"main_pdf_hits"`
+	FallbackPDFHits          int   `json:"fallback_pdf_hits"`
+	FallbackPagesHighlighted []int `json:"fallback_pages_highlighted"`
+	Total                    int   `json:"total"`
 }
 
 // NewDualSourceManifest 创建双源 manifest
 func NewDualSourceManifest(pnx, mainPDF string) *DualSourceManifest {
 	return &DualSourceManifest{
-		PNx:           pnx,
-		MainPDF:       mainPDF,
-		FallbackPDFs:  []string{},
+		PNx:             pnx,
+		MainPDF:         mainPDF,
+		FallbackPDFs:    []string{},
 		EvidenceSources: []EvidenceSource{},
 	}
 }
@@ -95,7 +95,7 @@ func FindNCTRegistry(doi string) string {
 	knownMap := map[string]string{
 		"10.1016/S2468-1253(21)00109-6": "NCT02329860", // AHELP
 		"10.1016/S1470-2045(23)00469-2": "NCT03713593", // LEAP-002 (Llovet)
-		"10.1056/NEJMoa2024020":        "NCT03298451", // HIMALAYA
+		"10.1056/NEJMoa2024020":         "NCT03298451", // HIMALAYA
 	}
 	return knownMap[doi]
 }

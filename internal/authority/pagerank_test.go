@@ -66,8 +66,10 @@ func TestPageRank_Cycle(t *testing.T) {
 // TestPageRank_HubAuthority 算法测试: Hub 和 Authority (经典 PageRank 用例)
 //
 // 拓扑:
-//   T1 (权威) ← T2 ← T3 ← T4 (4 个 hub 都引 T1)
-//   T1 ← T5
+//
+//	T1 (权威) ← T2 ← T3 ← T4 (4 个 hub 都引 T1)
+//	T1 ← T5
+//
 // 期望: T1 是顶, T2-T5 在中 (high in-degree)
 func TestPageRank_HubAuthority(t *testing.T) {
 	pr := NewPageRank()

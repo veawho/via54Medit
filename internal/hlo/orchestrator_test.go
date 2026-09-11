@@ -89,12 +89,12 @@ func TestOrchestrator_AddPattern(t *testing.T) {
 	orch := NewOrchestrator(nil)
 
 	// 添加自定义 pattern
-		orch.AddPattern(Pattern{
-			Regex:    regexp.MustCompile(`^测试自定义意图\s+(\S+)$`),
-			Intent:   "custom_intent",
-			Priority: 80,
-			Weight:   0.9,
-		})
+	orch.AddPattern(Pattern{
+		Regex:    regexp.MustCompile(`^测试自定义意图\s+(\S+)$`),
+		Intent:   "custom_intent",
+		Priority: 80,
+		Weight:   0.9,
+	})
 
 	parsed := orch.Parse("测试自定义意图 hello")
 	// 注意: Intent 类型是 enum, "custom_intent" 是字符串, 需要 cast

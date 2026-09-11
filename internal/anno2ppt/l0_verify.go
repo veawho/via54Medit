@@ -17,6 +17,7 @@ import (
 //	score = 0.45*TitleSim + 0.30*AuthorSim + 0.15*PubDateMatch + 0.10*MetadataCompleteness
 //
 // 阈值:
+//
 //	score >= 0.70 → verified=true (完全可信)
 //	0.45 <= score < 0.70 → verified=false, warning (部分可信, 需 LLM 复核)
 //	score < 0.45 → verified=false, reject (不可信, 走 fallback)
@@ -30,7 +31,7 @@ type L0VerifyResult struct {
 	AuthorSim   float64 `json:"author_similarity"`
 	DateMatch   float64 `json:"date_match"`
 	MetaCompl   float64 `json:"metadata_completeness"`
-	Issue       string  `json:"issue,omitempty"`         // 不通过原因
+	Issue       string  `json:"issue,omitempty"`           // 不通过原因
 	RefTitle    string  `json:"reference_title,omitempty"` // Crossref 期望标题
 	PDFTitle    string  `json:"pdf_title,omitempty"`       // PDF 实际标题
 	CrossrefRaw string  `json:"crossref_raw,omitempty"`    // Crossref 原始 JSON (debug)
@@ -38,8 +39,8 @@ type L0VerifyResult struct {
 
 // CrossrefRecord Crossref API 返回的论文元数据
 type CrossrefRecord struct {
-	Title    []string `json:"title"`
-	Authors  []struct {
+	Title   []string `json:"title"`
+	Authors []struct {
 		Family string `json:"family"`
 		Given  string `json:"given"`
 	} `json:"author"`
@@ -260,9 +261,10 @@ func isRealMetadata(s string) bool {
 // L0Verify PDF 真实性验证主入口
 //
 // 参数:
-//   pdfTitle, pdfAuthor, pdfSubject, pdfCreator: PDF metadata
-//   pdfCreation: PDF metadata CreationDate (time.Time)
-//   doi: 引文中的 DOI (用于 Crossref 反查)
+//
+//	pdfTitle, pdfAuthor, pdfSubject, pdfCreator: PDF metadata
+//	pdfCreation: PDF metadata CreationDate (time.Time)
+//	doi: 引文中的 DOI (用于 Crossref 反查)
 //
 // 返回: L0VerifyResult
 //

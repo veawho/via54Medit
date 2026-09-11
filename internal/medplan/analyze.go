@@ -195,7 +195,7 @@ func (a *Analyzer) analyzeWithLLM(ctx context.Context, brief *Brief, d *Research
 func (a *Analyzer) AnalyzeMarket(ctx context.Context, brief *Brief, d *ResearchDossier) (string, error) {
 	if a.LLM != nil {
 		sys := "你是一位医药行业市场分析专家，擅长使用 PESTEL 模型（政治、经济、社会、技术、环境、法律）评估临床未满足需求与全球/国内市场竞争格局。"
-		user := fmt.Sprintf("对产品 %s (%s) 进行市场分析。要求：分析国内竞争对手数据、最新集采与医保政策（PESTEL中的Politics/Economics/Legal维度）以及患者未满足需求。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+		user := fmt.Sprintf("对产品 %s (%s) 进行市场分析。要求：分析国内竞争对手数据、最新集采与医保政策（PESTEL中的Politics/Economics/Legal维度）以及患者未满足需求。指令：%s\n\n=== 循证文献与证据 ===\n%s",
 			brief.Product.Name, strings.Join(brief.Product.Indications, "、"), brief.Instruction, dossierDigest(d, 8))
 		return a.LLM.Complete(ctx, sys, user)
 	}
@@ -206,7 +206,7 @@ func (a *Analyzer) AnalyzeMarket(ctx context.Context, brief *Brief, d *ResearchD
 func (a *Analyzer) AnalyzeStrategy(ctx context.Context, brief *Brief, d *ResearchDossier) (string, error) {
 	if a.LLM != nil {
 		sys := "你是一位资深的医药市场准入与推广策略专家，擅长使用 SWOT 分析模型制定差异化竞争策略。"
-		user := fmt.Sprintf("为产品 %s 制定市场及学术准入策略。要求：应用 SWOT 模型评估该产品的核心竞争优势与外部威胁（如集采压力、竞品证据），输出差异化定位。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+		user := fmt.Sprintf("为产品 %s 制定市场及学术准入策略。要求：应用 SWOT 模型评估该产品的核心竞争优势与外部威胁（如集采压力、竞品证据），输出差异化定位。指令：%s\n\n=== 循证文献与证据 ===\n%s",
 			brief.Product.Name, brief.Instruction, dossierDigest(d, 8))
 		return a.LLM.Complete(ctx, sys, user)
 	}
@@ -217,7 +217,7 @@ func (a *Analyzer) AnalyzeStrategy(ctx context.Context, brief *Brief, d *Researc
 func (a *Analyzer) AnalyzeMarketing(ctx context.Context, brief *Brief, d *ResearchDossier, casesDBPath string) (string, error) {
 	if a.LLM != nil {
 		sys := "你是一位资深的医药 brand 与学术营销策划专家，擅长利用 4P 营销理论和经典学术营销案例策划活动。"
-		user := fmt.Sprintf("为产品 %s 策划医学学术营销活动，参考案例库：%s。要求：运用 4P 理论，提出明确的学术传播内容与推广组合方案。指令：%s\n\n=== 循证文献与证据 ===\n%s", 
+		user := fmt.Sprintf("为产品 %s 策划医学学术营销活动，参考案例库：%s。要求：运用 4P 理论，提出明确的学术传播内容与推广组合方案。指令：%s\n\n=== 循证文献与证据 ===\n%s",
 			brief.Product.Name, casesDBPath, brief.Instruction, dossierDigest(d, 8))
 		return a.LLM.Complete(ctx, sys, user)
 	}
@@ -251,5 +251,3 @@ func PushSummaryToChannels(summary string, channels []string) error {
 	}
 	return nil
 }
-
-

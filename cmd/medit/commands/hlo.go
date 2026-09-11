@@ -1,12 +1,13 @@
 // hlo.go — HLO (Hermes Literature Orchestrator) CLI 集成 (Phase 5.2)
 //
 // 用法 (算法驱动版, 2026-07-29 v1.5.0 重构):
-//   medit hlo ask "处理 P5-7"                   # 算法 NLU 路由
-//   medit hlo ask "找 Qin S 2025 HCC"            # search_papers
-//   medit hlo audit                              # 32 Producer 白名单审计
-//   medit hlo truth P5-7                         # 字段真值表
-//   medit hlo corr 5-7 d "Qin S" "Meyer T"     # NL 修正自升级
-//   medit hlo dedup                              # 3 层去重
+//
+//	medit hlo ask "处理 P5-7"                   # 算法 NLU 路由
+//	medit hlo ask "找 Qin S 2025 HCC"            # search_papers
+//	medit hlo audit                              # 32 Producer 白名单审计
+//	medit hlo truth P5-7                         # 字段真值表
+//	medit hlo corr 5-7 d "Qin S" "Meyer T"     # NL 修正自升级
+//	medit hlo dedup                              # 3 层去重
 //
 // 设计 (算法驱动 Phase 1.2):
 //   - 之前: 188 行 exec.Command 调 Python (95% rule-driven)
@@ -66,8 +67,8 @@ var hloAskCmd = &cobra.Command{
   medit hlo ask "sci-hub 10.1200/JCO.2012.44.5643"  # v1.5.0
   medit hlo ask "我下载好了"                       # v1.5.0
   medit hlo ask "这个 PDF 是不是错配"               # v1.5.0`,
-	Args:              cobra.MinimumNArgs(1),
-	RunE:              runHloAsk,
+	Args:               cobra.MinimumNArgs(1),
+	RunE:               runHloAsk,
 	DisableFlagParsing: true,
 }
 

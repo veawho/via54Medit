@@ -125,9 +125,9 @@ func avgConf(answer string, votes []Vote) float64 {
 
 // MultipleResults 算法: 不一致时返回多条候选
 type Result struct {
-	Answer     string
-	Count      int
-	AvgConf    float64
+	Answer  string
+	Count   int
+	AvgConf float64
 }
 
 func (sc *SelfConsistency) MultipleResults(query string) []Result {
@@ -176,9 +176,9 @@ func (sc *SelfConsistency) MultipleResults(query string) []Result {
 
 // Stats 是 SelfConsistency 配置
 type Stats struct {
-	N     int     `json:"n"`
-	Min   float64 `json:"min_agreement"`
-	Tie   string  `json:"tie_break"`
+	N   int     `json:"n"`
+	Min float64 `json:"min_agreement"`
+	Tie string  `json:"tie_break"`
 }
 
 func (sc *SelfConsistency) Stats() Stats {

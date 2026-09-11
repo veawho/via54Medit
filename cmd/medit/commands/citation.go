@@ -1,14 +1,15 @@
 // citation.go — Citation algorithm CLI subcommand (Phase 6)
 //
 // 用法:
-//   medit citation match <reference> <pdf-text>
-//     Match a D-column reference against a PDF's text content.
-//     Returns score + matched/missing fields.
-//   medit citation test-extract <reference>
-//     Extract key fields from a reference text and print as JSON.
-//   medit citation replayer [--generate] [--seed <json>]
-//     Run the experience loop: list pending corrections, optionally generate
-//     Go test file, optionally seed from a JSON file.
+//
+//	medit citation match <reference> <pdf-text>
+//	  Match a D-column reference against a PDF's text content.
+//	  Returns score + matched/missing fields.
+//	medit citation test-extract <reference>
+//	  Extract key fields from a reference text and print as JSON.
+//	medit citation replayer [--generate] [--seed <json>]
+//	  Run the experience loop: list pending corrections, optionally generate
+//	  Go test file, optionally seed from a JSON file.
 package commands
 
 import (

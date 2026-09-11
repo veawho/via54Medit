@@ -19,11 +19,11 @@
 //   - THUDM/CogVLM2 ★2,435
 //
 // 设计原则 (用户 5 大铁律 2026-07-31 + 2026-08-01):
-//   1. 算法驱动 (regex / 概率 / 评分), 不用 if/else 硬编码
-//   2. 算法 + LLM 配合: 置信度 < 0.7 调 LLM 反思
-//   3. 不写死绝对值: 阈值在算法里动态调
-//   4. 经验闭环: 用户修正 → corrections.json → 算法升级 → CI
-//   5. 信息要素推理 (information element reasoning) — 不是关键词匹配
+//  1. 算法驱动 (regex / 概率 / 评分), 不用 if/else 硬编码
+//  2. 算法 + LLM 配合: 置信度 < 0.7 调 LLM 反思
+//  3. 不写死绝对值: 阈值在算法里动态调
+//  4. 经验闭环: 用户修正 → corrections.json → 算法升级 → CI
+//  5. 信息要素推理 (information element reasoning) — 不是关键词匹配
 package anno2ppt
 
 import (
@@ -75,10 +75,10 @@ type BoundingBox struct {
 type AllegationMatch struct {
 	Allegation     AllegationCore
 	Evidences      []EvidenceEvidence
-	ConfirmScore   float64            // 0-1 应证得分
-	ElementScores  [4]float64         // 每维要素对齐分
-	MismatchReport string             // 维度对齐失败原因
-	Decision       HighlightDecision  // 最终决策
+	ConfirmScore   float64           // 0-1 应证得分
+	ElementScores  [4]float64        // 每维要素对齐分
+	MismatchReport string            // 维度对齐失败原因
+	Decision       HighlightDecision // 最终决策
 }
 
 // HighlightDecision 高亮决策
@@ -162,25 +162,25 @@ var indicatorKeywords = map[string]float64{
 // conclusionKeywords 结论词典 (PP 表述 ↔ 论文结论)
 var conclusionKeywords = map[string]string{
 	"远低于其他": "below_all",
-	"远低于": "below",
-	"低于": "below", "显著低于": "significantly_below",
+	"远低于":   "below",
+	"低于":    "below", "显著低于": "significantly_below",
 	"高于": "above", "远高于": "far_above",
 	"显著高于": "significantly_above",
-	"等于": "equal", "相似": "similar",
-	"普遍高于": "mostly_above",
-	"普遍低于": "mostly_below",
-	"大多数": "majority",
+	"等于":   "equal", "相似": "similar",
+	"普遍高于":            "mostly_above",
+	"普遍低于":            "mostly_below",
+	"大多数":             "majority",
 	"far below other": "below_all",
-	"far below": "below",
-	"below other": "below_all",
-	"below all": "below_all",
-	"below": "below",
-	"above all": "above_all",
-	"above other": "above_all",
-	"above": "above",
-	"mostly above": "mostly_above",
-	"mostly below": "mostly_below",
-	"majority": "majority",
+	"far below":       "below",
+	"below other":     "below_all",
+	"below all":       "below_all",
+	"below":           "below",
+	"above all":       "above_all",
+	"above other":     "above_all",
+	"above":           "above",
+	"mostly above":    "mostly_above",
+	"mostly below":    "mostly_below",
+	"majority":        "majority",
 }
 
 // ParseAllegation 从 PPT 文本抽出 AllegationCore
@@ -191,7 +191,7 @@ func ParseAllegation(text string) AllegationCore {
 	a := AllegationCore{RawText: text}
 	a.Elements[0] = extractSubject(text) // subject = {geo, disease}
 	a.Elements[1] = extractTarget(text)  // target  = 比较对象
-	a.Elements[2] = extractValue(text)    // value   = 数值+单位
+	a.Elements[2] = extractValue(text)   // value   = 数值+单位
 	a.Elements[3] = extractConclusion(text)
 	return a
 }
@@ -409,22 +409,23 @@ func conclusionMatch(a, b string) float64 {
 // ====== 集合结论评分 (P3-2 核心) ======
 //
 // 用户原话 (2026-08-01):
-//   "图表中一共有27行对应27种癌症 在中国的5年生存率都高于肝癌的14.4%。
-//    最终推理, PDF图表中27种癌症在中国的5年生存率,
-//    其中25种都高于肝癌的14.4%, 仅有胰腺癌的8.5%低于肝癌的14.4%."
+//
+//	"图表中一共有27行对应27种癌症 在中国的5年生存率都高于肝癌的14.4%。
+//	 最终推理, PDF图表中27种癌症在中国的5年生存率,
+//	 其中25种都高于肝癌的14.4%, 仅有胰腺癌的8.5%低于肝癌的14.4%."
 //
 // 这不是简单 match, 是:
-//   1. 抽出 PDF 表格里所有 (disease, value) 对
-//   2. 跟 subject {disease=肝癌, value=14.4} 比对
-//   3. 计数: N_high + N_low + N_equal = N_total
-//   4. 应证 "远低于其他癌种" 要求: N_high >= N_total - 1 (允许 1 个例外)
+//  1. 抽出 PDF 表格里所有 (disease, value) 对
+//  2. 跟 subject {disease=肝癌, value=14.4} 比对
+//  3. 计数: N_high + N_low + N_equal = N_total
+//  4. 应证 "远低于其他癌种" 要求: N_high >= N_total - 1 (允许 1 个例外)
 type TableRow struct {
-	Disease  string
-	Value    float64
-	Unit     string
+	Disease   string
+	Value     float64
+	Unit      string
 	Geography string
-	BBox     BoundingBox
-	RawText  string
+	BBox      BoundingBox
+	RawText   string
 }
 
 // SetConclusionScore 集合结论评分

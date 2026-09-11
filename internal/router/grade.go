@@ -146,7 +146,7 @@ func scoreToGrade(score int) string {
 func isRCT(c types.Citation) bool {
 	// Combine title + abstract + journal for matching.
 	haystack := strings.ToLower(c.Title + " " + c.Abstract + " " + c.Journal)
-	
+
 	// First check negations: if it specifically mentions non-randomized, it is not an RCT.
 	negations := []string{
 		"non-randomized", "non-randomised", "not randomized", "not randomised",

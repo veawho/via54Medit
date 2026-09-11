@@ -83,11 +83,11 @@ func TestIsPaywallDOI(t *testing.T) {
 		doi  string
 		want bool
 	}{
-		{"10.1016/S2468-1253(21)00109-6", true},  // Elsevier
-		{"10.1056/NEJMoa2034577", true},          // NEJM
-		{"10.1002/hep.32789", true},              // Wiley
-		{"10.1159/000539423", true},              // Karger
-		{"10.21037/hbsn-22-143", false},          // AME (OA)
+		{"10.1016/S2468-1253(21)00109-6", true}, // Elsevier
+		{"10.1056/NEJMoa2034577", true},         // NEJM
+		{"10.1002/hep.32789", true},             // Wiley
+		{"10.1159/000539423", true},             // Karger
+		{"10.21037/hbsn-22-143", false},         // AME (OA)
 		{"", false},
 	}
 	for _, tt := range tests {

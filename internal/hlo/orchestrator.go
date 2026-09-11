@@ -5,9 +5,9 @@
 // 现重写为纯 Go 算法 + 数据结构驱动, 跨设备 deterministic 一致。
 //
 // 设计原则 (用户原话 2026-07-29):
-//   1. "算法比规则靠谱, 所有能力依靠算法驱动"
-//   2. "算法配合 LLM, 去理解概念、理解规则的相对性"
-//   3. "不写死绝对值, 强行塞记忆"
+//  1. "算法比规则靠谱, 所有能力依靠算法驱动"
+//  2. "算法配合 LLM, 去理解概念、理解规则的相对性"
+//  3. "不写死绝对值, 强行塞记忆"
 //
 // 5 大算法武器 (业界验证, 见 /tmp/algorithm_vs_rules_research.md):
 //   - Regex pattern matching (NLU 路由, 替代硬编码 if/else)
@@ -17,31 +17,32 @@
 //   - LLM reflection (置信度低时让 LLM 反思)
 //
 // 架构 (算法驱动, 不是规则驱动):
-//   ┌─────────────────────────────────────────┐
-//   │ Input: "处理 P5-7"                       │
-//   └────────────────┬────────────────────────┘
-//                    ↓
-//   ┌─────────────────────────────────────────┐
-//   │ 1. Tokenize (regex split)               │  ← 算法 (不是 if/else)
-//   └────────────────┬────────────────────────┘
-//                    ↓
-//   ┌─────────────────────────────────────────┐
-//   │ 2. Match patterns (priority list)        │  ← 算法 (14 个 intent pattern)
-//   │    每个 pattern 返回 (intent, score)     │
-//   └────────────────┬────────────────────────┘
-//                    ↓
-//   ┌─────────────────────────────────────────┐
-//   │ 3. Top-K intent 投票 (置信度聚合)        │  ← 算法 (Self-Consistency)
-//   │    score > threshold → 用 LLM 二次确认    │  ← 规则相对性
-//   └────────────────┬────────────────────────┘
-//                    ↓
-//   ┌─────────────────────────────────────────┐
-//   │ 4. Handler dispatch (动态查表)           │  ← 算法 (map[Intent]Handler)
-//   └────────────────┬────────────────────────┘
-//                    ↓
-//   ┌─────────────────────────────────────────┐
-//   │ 5. Output (格式化 + 置信度报告)           │
-//   └─────────────────────────────────────────┘
+//
+//	┌─────────────────────────────────────────┐
+//	│ Input: "处理 P5-7"                       │
+//	└────────────────┬────────────────────────┘
+//	                 ↓
+//	┌─────────────────────────────────────────┐
+//	│ 1. Tokenize (regex split)               │  ← 算法 (不是 if/else)
+//	└────────────────┬────────────────────────┘
+//	                 ↓
+//	┌─────────────────────────────────────────┐
+//	│ 2. Match patterns (priority list)        │  ← 算法 (14 个 intent pattern)
+//	│    每个 pattern 返回 (intent, score)     │
+//	└────────────────┬────────────────────────┘
+//	                 ↓
+//	┌─────────────────────────────────────────┐
+//	│ 3. Top-K intent 投票 (置信度聚合)        │  ← 算法 (Self-Consistency)
+//	│    score > threshold → 用 LLM 二次确认    │  ← 规则相对性
+//	└────────────────┬────────────────────────┘
+//	                 ↓
+//	┌─────────────────────────────────────────┐
+//	│ 4. Handler dispatch (动态查表)           │  ← 算法 (map[Intent]Handler)
+//	└────────────────┬────────────────────────┘
+//	                 ↓
+//	┌─────────────────────────────────────────┐
+//	│ 5. Output (格式化 + 置信度报告)           │
+//	└─────────────────────────────────────────┘
 package hlo
 
 import (
@@ -55,7 +56,7 @@ import (
 type Intent string
 
 const (
-	IntentProcessRow       Intent = "process_row"
+	IntentProcessRow        Intent = "process_row"
 	IntentSearchPapers      Intent = "search_papers"
 	IntentSearchAuthorYear  Intent = "search_author_year"
 	IntentAudit             Intent = "audit"
@@ -81,24 +82,24 @@ const (
 type Pattern struct {
 	Regex    *regexp.Regexp
 	Intent   Intent
-	Priority int    // 短意图优先, 数字越大越先匹配
+	Priority int     // 短意图优先, 数字越大越先匹配
 	Weight   float64 // 命中后加权 (1.0 = 标准, < 1 = 模糊匹配)
 }
 
 // IntentMatch 表示一次匹配结果
 type IntentMatch struct {
-	Intent    Intent
-	Score     float64 // 0-1, 1 = 完全匹配
-	Slots     []string // 捕获组
-	Raw       string  // 原始输入
+	Intent Intent
+	Score  float64  // 0-1, 1 = 完全匹配
+	Slots  []string // 捕获组
+	Raw    string   // 原始输入
 }
 
 // ParseResult 是 NLU 路由结果
 type ParseResult struct {
-	Best  IntentMatch   // 最高分意图
-	All   []IntentMatch // 所有候选 (按 score 降序)
-	Confidence float64   // 整体置信度 (0-1)
-	NeedsLLM   bool      // 是否需要 LLM 二次确认
+	Best       IntentMatch   // 最高分意图
+	All        []IntentMatch // 所有候选 (按 score 降序)
+	Confidence float64       // 整体置信度 (0-1)
+	NeedsLLM   bool          // 是否需要 LLM 二次确认
 }
 
 // 默认 NLU 路由阈值 (相对性: 不是绝对的 0.7, 而是上下文调整)
@@ -191,9 +192,9 @@ func NewOrchestrator(llm LLMClient) *Orchestrator {
 // Parse 算法 1: 输入自然语言, 输出 N 个候选意图 + score (0-1)
 //
 // 不是 if/else 硬编码, 而是:
-//   1. 每个 pattern 跑一次正则匹配
-//   2. 命中 pattern 加 priority + weight 计算 score
-//   3. 返回所有候选, 按 score 降序
+//  1. 每个 pattern 跑一次正则匹配
+//  2. 命中 pattern 加 priority + weight 计算 score
+//  3. 返回所有候选, 按 score 降序
 //
 // 这是 DSPy "声明式 pattern 表 + 算法打分" 的 Go 实现
 func (o *Orchestrator) Parse(text string) ParseResult {

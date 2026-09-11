@@ -7,11 +7,11 @@ import (
 // 9 案例 / 9 PASS - 用户 2026-08-01 双源架构驱动
 func TestShouldTriggerFallback(t *testing.T) {
 	tests := []struct {
-		name        string
-		l0Verified  bool
-		doi         string
-		userHints   bool
-		want        bool
+		name       string
+		l0Verified bool
+		doi        string
+		userHints  bool
+		want       bool
 	}{
 		// 1. 用户明确要求双源
 		{"User hints dual", true, "10.1016/S2468-1253(21)00109-6", true, true},
@@ -47,10 +47,10 @@ func TestFindNCTRegistry(t *testing.T) {
 		doi  string
 		want string
 	}{
-		{"10.1016/S2468-1253(21)00109-6", "NCT02329860"},  // AHELP
-		{"10.1016/S1470-2045(23)00469-2", "NCT03713593"},  // LEAP-002
-		{"10.1056/NEJMoa2024020", "NCT03298451"},          // HIMALAYA
-		{"10.1016/UNKNOWN", ""},                            // 未知
+		{"10.1016/S2468-1253(21)00109-6", "NCT02329860"}, // AHELP
+		{"10.1016/S1470-2045(23)00469-2", "NCT03713593"}, // LEAP-002
+		{"10.1056/NEJMoa2024020", "NCT03298451"},         // HIMALAYA
+		{"10.1016/UNKNOWN", ""},                          // 未知
 	}
 	for _, tt := range tests {
 		t.Run(tt.doi, func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestSortSourcesByPriority(t *testing.T) {
 // 4 案例 / 4 PASS - CombineEvidenceData 合并
 func TestCombineEvidenceData(t *testing.T) {
 	mainData := map[string]string{
-		"OS_8.7_months": "abstract",
+		"OS_8.7_months":   "abstract",
 		"Hypertension_g3": "28%",
 	}
 	fallbackData := map[string]string{
@@ -117,12 +117,12 @@ func TestDualSourceManifestFlow(t *testing.T) {
 
 	// 加入 fallback
 	manifest.AddFallback("P30-1/P30-1_fallback_NCT.pdf", EvidenceSource{
-		Type: SourceTypeNCTRegistry,
-		DOI:  "10.1016/S2468-1253(21)00109-6",
-		Layout: "fallback",
-		Citation: "NCT02329860",
-		Available: true,
-		Limit: "ClinicalTrials.gov aggregation",
+		Type:         SourceTypeNCTRegistry,
+		DOI:          "10.1016/S2468-1253(21)00109-6",
+		Layout:       "fallback",
+		Citation:     "NCT02329860",
+		Available:    true,
+		Limit:        "ClinicalTrials.gov aggregation",
 		DataProvided: []string{"47.9% Hypertension any", "21% Proteinuria any"},
 	})
 
@@ -138,10 +138,10 @@ func TestDualSourceManifestFlow(t *testing.T) {
 
 	// 设置 highlight summary
 	manifest.HighlightSummary = HighlightSummary{
-		MainPDFHits: 4,
-		FallbackPDFHits: 40,
+		MainPDFHits:              4,
+		FallbackPDFHits:          40,
 		FallbackPagesHighlighted: []int{2, 3, 4},
-		Total: 44,
+		Total:                    44,
 	}
 	if manifest.HighlightSummary.Total != 44 {
 		t.Errorf("expected total 44, got %d", manifest.HighlightSummary.Total)

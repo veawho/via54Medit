@@ -30,10 +30,10 @@ type PageRank struct {
 	Tolerance  float64 // 收敛阈值
 
 	// 数据
-	nodes []string         // 节点 ID → 名字
-	idx   map[string]int   // 名字 → 索引
-	edges [][]int          // 出边邻接表
-	score []float64        // PageRank 分数
+	nodes []string       // 节点 ID → 名字
+	idx   map[string]int // 名字 → 索引
+	edges [][]int        // 出边邻接表
+	score []float64      // PageRank 分数
 }
 
 // NewPageRank 创建 PageRank (默认 damping=0.85, iter=50, tol=1e-6)
@@ -77,6 +77,7 @@ func (pr *PageRank) AddEdge(from, to string) {
 //   - d = Damping (0.85)
 //   - N = 总节点数
 //   - L(q) = q 的出度
+//
 // O(Iterations × Edges)
 func (pr *PageRank) Compute() {
 	pr.mu.Lock()

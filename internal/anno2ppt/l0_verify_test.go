@@ -151,7 +151,7 @@ func TestAuthorMatch(t *testing.T) {
 // === 案例 9: Date Match ===
 func TestDateMatch(t *testing.T) {
 	pdfAfter := time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC)  // 发布后
-	refDate := time.Date(2025, 11, 6, 0, 0, 0, 0, time.UTC)   // 发布日
+	refDate := time.Date(2025, 11, 6, 0, 0, 0, 0, time.UTC)    // 发布日
 	refBefore := time.Date(2025, 10, 15, 0, 0, 0, 0, time.UTC) // 发布前
 
 	if got := DateMatch(pdfAfter, refDate); got != 1.0 {

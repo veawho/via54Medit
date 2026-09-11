@@ -18,8 +18,8 @@ import (
 // RadixNode 是 radix tree 节点
 type RadixNode struct {
 	children map[byte]*RadixNode
-	value    string // MD5 关联的元数据 (e.g. PDF path / Row number)
-	leaf     bool   // 是否叶子节点
+	value    string        // MD5 关联的元数据 (e.g. PDF path / Row number)
+	leaf     bool          // 是否叶子节点
 	elem     *list.Element // LRU 指针
 }
 

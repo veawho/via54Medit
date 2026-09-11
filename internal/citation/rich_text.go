@@ -153,7 +153,8 @@ func stringFromDict(d map[string]interface{}, keys ...string) string {
 //  4. Wrap in {rich_text: [...]}
 //
 // Critical: must use {rich_text: [...]} envelope, NOT direct array.
-//           must use type='link', NOT 'url'.
+//
+//	must use type='link', NOT 'url'.
 //
 // Examples:
 //

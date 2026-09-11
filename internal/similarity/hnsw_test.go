@@ -42,7 +42,7 @@ func TestHNSW_Performance(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		vec := make([]float64, 128)
 		for j := range vec {
-			vec[j] = float64((i + j) % 100) / 100.0
+			vec[j] = float64((i+j)%100) / 100.0
 		}
 		h.Insert(i, vec)
 	}

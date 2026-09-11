@@ -174,9 +174,10 @@ func extractDrug(text string) string {
 // extractDOITail returns the last segment of the DOI path, or "".
 //
 // Example: "10.1056/EVIDoa2100070" → "EVIDoa2100070"
-//          "10.1159/000518619"      → "000518619"
-//          "10.1158/1078-0432.CCR-24-0006" → "CCR-24-0006"
-//          "10.3322/caac.21834"     → "caac.21834"
+//
+//	"10.1159/000518619"      → "000518619"
+//	"10.1158/1078-0432.CCR-24-0006" → "CCR-24-0006"
+//	"10.3322/caac.21834"     → "caac.21834"
 //
 // Algorithm: capture the DOI suffix after "10.<number>/", then take the
 // substring after the LAST "/". This handles multi-segment paths correctly.

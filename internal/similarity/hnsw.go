@@ -19,8 +19,9 @@ import (
 
 // HNSW 是 Hierarchical Navigable Small World 图
 // 算法: 每个节点 = 1 个 PDF embedding 向量 (默认 128 维)
-//       层 0 是底层 (所有节点)
-//       层 k (k=1..M) 是上层 (概率 1/M, 类似跳表)
+//
+//	层 0 是底层 (所有节点)
+//	层 k (k=1..M) 是上层 (概率 1/M, 类似跳表)
 type HNSW struct {
 	mu sync.RWMutex
 
@@ -32,18 +33,18 @@ type HNSW struct {
 	Ml             float64 // 层概率因子 (1/ln(M))
 
 	// 数据
-	nodes    []*HNSWNode      // 所有节点 (index by nodeID)
-	entry    int              // 入口节点 ID
-	distFunc DistanceFunc     // 距离函数 (cosine / euclidean)
-	rng      *rand.Rand       // 算法: 确定性随机
+	nodes    []*HNSWNode  // 所有节点 (index by nodeID)
+	entry    int          // 入口节点 ID
+	distFunc DistanceFunc // 距离函数 (cosine / euclidean)
+	rng      *rand.Rand   // 算法: 确定性随机
 }
 
 // HNSWNode 是图节点
 type HNSWNode struct {
-	ID       int                  // 节点 ID (= PDF ID)
-	Vector   []float64            // embedding 向量 (128 维)
-	Level    int                  // 该节点最大层 (从 Level..0 都有)
-	Friends  [][]int              // Friends[level] = 该层邻居 IDs
+	ID      int       // 节点 ID (= PDF ID)
+	Vector  []float64 // embedding 向量 (128 维)
+	Level   int       // 该节点最大层 (从 Level..0 都有)
+	Friends [][]int   // Friends[level] = 该层邻居 IDs
 }
 
 // DistanceFunc 是向量距离函数
@@ -65,11 +66,11 @@ func NewHNSW() *HNSW {
 }
 
 // Insert 算法: 插入 1 个向量到 HNSW
-//   1. 随机选层 L = floor(-ln(uniform()) * Ml)
-//   2. 从顶层向 L+1 贪心搜索 (找最近邻)
-//   3. 从 L 层向下 (L..0), 用 efConstruction 找 ef 个最近邻
-//   4. 在每层用启发式选 M 个邻居, 加双向边
-//   O(log N) amortized
+//  1. 随机选层 L = floor(-ln(uniform()) * Ml)
+//  2. 从顶层向 L+1 贪心搜索 (找最近邻)
+//  3. 从 L 层向下 (L..0), 用 efConstruction 找 ef 个最近邻
+//  4. 在每层用启发式选 M 个邻居, 加双向边
+//     O(log N) amortized
 func (h *HNSW) Insert(id int, vec []float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -152,8 +153,8 @@ func (h *HNSW) SearchK(query []float64, k int) ([]int, []float64) {
 
 	// 算法: 排序取 top K
 	type scored struct {
-		id    int
-		dist  float64
+		id   int
+		dist float64
 	}
 	var results []scored
 	for _, id := range candidates {
