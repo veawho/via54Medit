@@ -836,13 +836,23 @@ class TestTelemetry(unittest.TestCase):
         from telemetry.models import AggregateReport
 
         # 1) schema 探测：公司既有表 vs 自建标准表 vs 无法识别
+        # 公司表原有 13 列 + v5.4.43 补齐的 8 个统计列 = COMPANY_TABLE_FIELDS
         company_names = {
             "记录标识", "统计周次", "提交成员", "统计日期", "文献检索量",
             "成功下载量", "高亮标注量", "解析物理总页数", "节省工时(小时)",
             "Token消耗量", "项目任务类型", "数据状态", "备注说明",
+            "检索节约工时(h)", "下载节约工时(h)", "高亮节约工时(h)",
+            "其他任务数", "其他工作时长(h)", "其他Token消耗", "其他未归属Token",
+            "API调用次数",
         }
         self.assertEqual(company_names, COMPANY_TABLE_FIELDS)
         self.assertEqual(detect_schema_profile(company_names), SCHEMA_COMPANY)
+        # 补列后两边名字开始交叠(21 列里有 8 列与标准表同名), 判定不能再靠"谁命中多":
+        # 只要出现公司的**独有标记字段**(统计周次/提交成员/…), 就一定判成公司表 ——
+        # 这条判据不随补列漂移; 只有交叠列时则退回兜底逻辑(此处不足 3 列 -> 识别不出)。
+        self.assertEqual(detect_schema_profile({"检索节约工时(h)", "其他任务数"}), "")
+        self.assertEqual(detect_schema_profile(
+            {"统计周次", "提交成员", "检索节约工时(h)", "其他任务数"}), SCHEMA_COMPANY)
         standard_names = {f["field_name"] for f in TABLE_SCHEMA_FIELDS}
         self.assertEqual(detect_schema_profile(standard_names), SCHEMA_STANDARD)
         self.assertEqual(detect_schema_profile({"甲", "乙"}), "")
@@ -882,13 +892,22 @@ class TestTelemetry(unittest.TestCase):
         self.assertEqual(payload["高亮标注量"], 150)
         self.assertEqual(payload["解析物理总页数"], 2917)
         self.assertEqual(payload["节省工时(小时)"], 20.19)
+        # v5.4.43: 三个细分工时与其他类目现在都有专列, 不再是"被丢弃"
+        self.assertEqual(payload["检索节约工时(h)"], 0.0)
+        self.assertEqual(payload["高亮节约工时(h)"], 0.0)
+        self.assertEqual(payload["其他任务数"], 0)
+        self.assertIn("API调用次数", payload)
         self.assertEqual(payload["项目任务类型"], "via54Medit")
         self.assertEqual(payload["数据状态"], "已自动同步")
         # 日期字段必须是毫秒时间戳：ISO 字符串会被飞书拒绝 (1254064)
         self.assertIsInstance(payload["统计日期"], int)
         self.assertEqual(payload["统计日期"], 1788710400000)  # 2026-09-07 00:00 +08:00
-        for absent in ("成员OpenID", "检索节约工时(h)", "API调用次数", "汇报周期"):
+        # 只有"身份标识"没有专列 —— 且是**显式**决策, 不是默默丢
+        for absent in ("成员OpenID", "汇报周期", "成员花名"):
             self.assertNotIn(absent, payload)
+        from telemetry.bitable_sync import INTENTIONALLY_NOT_A_COLUMN
+        self.assertIn("成员OpenID", INTENTIONALLY_NOT_A_COLUMN,
+                      "没列就必须有理由 —— 这是对齐契约的另一半")
 
         # 4) 标准表路径不受影响
         std_payload = mgr.build_standard_payload(rep, "Devin", "ou_x")
@@ -950,7 +969,7 @@ class TestTelemetry(unittest.TestCase):
         import csv as _csv
         from telemetry.bitable_sync import (
             FeishuBitableManager, BACKUP_FIELDS, COMPANY_PAYLOAD_ORDER,
-            SCHEMA_COMPANY, SCHEMA_STANDARD,
+            COMPANY_PAYLOAD_ORDER_LEGACY, SCHEMA_COMPANY, SCHEMA_STANDARD,
         )
         from telemetry.models import AggregateReport
 
@@ -1001,7 +1020,12 @@ class TestTelemetry(unittest.TestCase):
             # 4) 历史错位行：13 列公司数据被追加到 15 列标准表头下，按列序还原
             legacy = os.path.join(d, "legacy.csv")
             mgr._backup_csv_path = lambda: legacy
-            self.assertEqual(len(COMPANY_PAYLOAD_ORDER), 13)
+            # 13 列是**历史**列序, 已冻结为 COMPANY_PAYLOAD_ORDER_LEGACY。
+            # 若让它跟着 COMPANY_FIELD_MAP 一起变长, 这些历史行就再也认不出来,
+            # 回退路径会静默丢行 —— 所以这里同时钉住"两个列序"的关系。
+            self.assertEqual(len(COMPANY_PAYLOAD_ORDER_LEGACY), 13)
+            self.assertGreater(len(COMPANY_PAYLOAD_ORDER), 13,
+                               "当前列序应随映射扩展而变长")
             legacy_values = [
                 "2026-W37_Devin_via54Medit", "2026-W37", "Devin Wei",
                 "2026-09-07T00:00:00.000+08:00", 44, 215, 150, 2917,
@@ -1056,7 +1080,7 @@ class TestTelemetry(unittest.TestCase):
             mgr.app_token, mgr.table_id = "bascn_test", "tbl_test"
             mgr.resolve_schema = lambda: (SCHEMA_COMPANY, "test")
             calls = []
-            mgr._api_request = lambda *a, **k: calls.append(a) or {"code": 0}
+            mgr._api_request = lambda *a, **k: calls.append((a, k)) or {"code": 0}
 
             ok, msg = mgr.sync_weekly_report(rep, "Devin", dry_run=True)
 
@@ -1065,7 +1089,12 @@ class TestTelemetry(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertEqual(set(payload["fields"].keys()), COMPANY_TABLE_FIELDS)
             self.assertFalse(os.path.exists(path), "dry-run 不应写本地备份")
-            self.assertEqual(calls, [], "dry-run 不应发起任何 API 请求")
+            # dry-run 允许**只读**探测 —— 它要告诉你"目标表缺哪些列"就必须读 schema,
+            # 否则"这些值到底写不写得进去"在提交前根本无从得知。写入则一律禁止。
+            mutations = [c for c in calls if (c[1].get("method") or "GET") != "GET"]
+            self.assertEqual(mutations, [], "dry-run 绝不能发起写请求")
+            # 缺列时把话说清楚, 而不是等提交后才发现值被丢了
+            self.assertIn("missing_columns", payload)
 
     def test_bitable_note_protection_follows_custom_field_map(self):
         """测试：备注列被配置改名后，人工填写的备注仍受保护。"""
@@ -1616,8 +1645,12 @@ class TestOtherCategory(unittest.TestCase):
         self.assertEqual(payload["其他Token消耗"], 800)
         self.assertIn("其他工作时长(h)", payload)
 
-    def test_company_payload_mentions_other_in_note(self):
-        """公司表没有「其他」专列 —— 放进备注, 否则这类工作在那张表里完全不可见。"""
+    def test_company_payload_carries_other_columns(self):
+        """公司表**有**「其他」专列 (v5.4.43 补齐) —— 统计项必须落到列里。
+
+        在此之前它们只能挤进「备注说明」当一段纯文本: 看得到, 但筛选不了、分组不了、
+        画不了图。现在改为逐项成列, 备注只留一句人读的摘要。
+        """
         from telemetry.bitable_sync import FeishuBitableManager, COMPANY_TABLE_FIELDS
 
         with self.tracker.track_other(project_name="RSV") as col:
@@ -1625,13 +1658,19 @@ class TestOtherCategory(unittest.TestCase):
         rep = self.aggregator.get_all_time_report()
         payload = FeishuBitableManager(config={"feishu": {}}).build_company_payload(rep, "Devin")
 
-        note = payload["备注说明"]
-        self.assertIn("其他", note)
-        self.assertIn("800", note)
+        # 统计项落到**列**里, 而不是只出现在备注文本中
+        self.assertEqual(payload["其他任务数"], 1)
+        self.assertEqual(payload["其他Token消耗"], 800)
+        self.assertIn("其他工作时长(h)", payload)
+        self.assertIn("其他未归属Token", payload)
+        self.assertIn("API调用次数", payload)
         for key in payload:
             self.assertIn(key, COMPANY_TABLE_FIELDS,
                           "公司表 payload 不得写入它没有的列 (%s)" % key)
-        self.assertNotIn("其他任务数", payload, "公司表没有该列, 应被映射丢弃")
+        # 备注只留人读的摘要: 其他类目已有专列, 再往备注里塞一遍数字就是同一份账记两次
+        note = payload["备注说明"]
+        self.assertIn("其他", note)
+        self.assertNotIn("800", note, "备注不该重复承载已有专列的数值")
 
     def test_team_chart_aggregation_tolerates_missing_other_columns(self):
         """公司表 schema 读回来的记录没有「其他」三列, 不能因此被判成脏数据。"""
@@ -2915,6 +2954,166 @@ class TestPackageImportStrategy(unittest.TestCase):
                     text = fp.read()
                 for needle in needles:
                     self.assertIn(needle, text, f"{rel} 未提及 {needle}")
+
+
+class TestBitableColumnAlignment(unittest.TestCase):
+    """目标表的统计列必须与"最新统计项"对齐 —— 不允许默默少一列。
+
+    由来: 代码里的统计项是**先加字段、后加列**的。新增一个统计项(如 v5.4.37 的"其他"
+    三列)不会让已经建好的表自动长出列来, 于是那些值在写入时被静默丢弃, 只能挤进
+    「备注说明」当一段纯文本: 看得到, 但筛选不了、分组不了、画不了图。实测公司表
+    就这样少了 8 列 —— 而写入不报任何错, 所以没有任何东西会提醒你。
+
+    对齐契约只有两种合法状态: **要么目标表里有同名列, 要么显式写明为什么不该有列**。
+    没有第三种状态。这组测试就是把这条契约钉住。
+    """
+
+    def test_every_standard_field_is_mapped_or_explicitly_excluded(self):
+        from telemetry.bitable_sync import unmapped_standard_fields
+        self.assertEqual(unmapped_standard_fields(), [],
+                         "这些统计项既没有列、也没写明理由 —— 它们会被静默丢弃")
+
+    def test_exclusions_all_carry_a_reason(self):
+        from telemetry.bitable_sync import INTENTIONALLY_NOT_A_COLUMN
+        for name, reason in INTENTIONALLY_NOT_A_COLUMN.items():
+            self.assertTrue(str(reason).strip(),
+                            "%s 被排除但没写理由" % name)
+            self.assertGreater(len(str(reason)), 10,
+                               "%s 的理由太短, 看不出是为了什么" % name)
+
+    def test_missing_columns_detects_the_real_gap(self):
+        from telemetry.bitable_sync import (
+            missing_target_columns, COMPANY_FIELD_MAP, SCHEMA_COMPANY,
+            SCHEMA_STANDARD, TABLE_SCHEMA_FIELDS,
+        )
+        # 补齐前的公司表 (13 列) —— 正是用户报告"统计列没对齐"时的状态
+        legacy = {
+            "记录标识", "统计周次", "提交成员", "统计日期", "文献检索量",
+            "成功下载量", "高亮标注量", "解析物理总页数", "节省工时(小时)",
+            "Token消耗量", "项目任务类型", "数据状态", "备注说明",
+        }
+        missing = missing_target_columns(legacy, SCHEMA_COMPANY)
+        self.assertEqual(sorted(missing), sorted([
+            "检索节约工时(h)", "下载节约工时(h)", "高亮节约工时(h)",
+            "其他任务数", "其他工作时长(h)", "其他Token消耗", "其他未归属Token",
+            "API调用次数",
+        ]))
+        # 刻意不建列的字段不出现在"缺列"里(否则会天天误报)
+        self.assertNotIn("成员OpenID", missing)
+        # 补齐后不再缺
+        all_cols = legacy | set(COMPANY_FIELD_MAP.values())
+        self.assertEqual(missing_target_columns(all_cols, SCHEMA_COMPANY), [])
+        # 标准表视角: 19 个字段一个不差
+        std = {f["field_name"] for f in TABLE_SCHEMA_FIELDS}
+        self.assertEqual(missing_target_columns(std, SCHEMA_STANDARD), [])
+
+    def test_ensure_columns_creates_only_what_is_missing(self):
+        from telemetry.bitable_sync import FeishuBitableManager, SCHEMA_COMPANY
+
+        mgr = FeishuBitableManager(config={"feishu": {}})
+        existing = ["记录标识", "统计周次", "提交成员", "统计日期", "文献检索量",
+                    "成功下载量", "高亮标注量", "解析物理总页数", "节省工时(小时)",
+                    "Token消耗量", "项目任务类型", "数据状态", "备注说明"]
+        posts = []
+
+        def fake_api(endpoint, method="GET", body=None):
+            if method == "GET":
+                return {"code": 0, "data": {"items": [{"field_name": n} for n in existing]}}
+            posts.append(body)
+            return {"code": 0}
+
+        mgr._api_request = fake_api
+        created = mgr.ensure_table_columns("bascn_x", "tbl_x", SCHEMA_COMPANY)
+
+        self.assertEqual(len(created), 8)
+        names = [p["field_name"] for p in posts]
+        self.assertEqual(sorted(names), sorted(created))
+        self.assertNotIn("成员OpenID", names, "身份字段不该被建列")
+        self.assertNotIn("记录标识", names, "已有的列不该重复创建")
+        # 数值统计项必须建为数字列(类型 2), 否则表格里没法求和
+        self.assertTrue(all(p["type"] == 2 for p in posts), posts)
+
+    def test_ensure_columns_dry_run_creates_nothing(self):
+        from telemetry.bitable_sync import FeishuBitableManager, SCHEMA_COMPANY
+
+        mgr = FeishuBitableManager(config={"feishu": {}})
+        writes = []
+
+        def fake_api(endpoint, method="GET", body=None):
+            if method == "GET":
+                return {"code": 0, "data": {"items": [{"field_name": "记录标识"}]}}
+            writes.append(body)
+            return {"code": 0}
+
+        mgr._api_request = fake_api
+        planned = mgr.ensure_table_columns("bascn_x", "tbl_x", SCHEMA_COMPANY, dry_run=True)
+        self.assertEqual(writes, [], "dry-run 不能真的建列")
+        # 公司表应有 21 列(13 原有 + 8 补齐), 已有 1 列 -> 计划 20 列。
+        # 不写死数字: 列定义变了应当由 COMPANY_FIELD_MAP 带着走, 而不是让测试假红。
+        from telemetry.bitable_sync import COMPANY_FIELD_MAP
+        self.assertEqual(len(planned), len(COMPANY_FIELD_MAP) - 1)
+
+    def test_legacy_thirteen_column_rows_survive_map_growth(self):
+        """扩展映射后, 备份里 13 列的历史行必须还能读出来。
+
+        这是最容易被忽略的一条: 历史行靠"列数 == 公司列序长度"被认出来。若列序跟着
+        映射一起变长, 这些行就认不出来, 会被当作脏行**静默丢掉** —— 回退路径上少的就是它们。
+        """
+        import csv as _csv
+        from telemetry.bitable_sync import (
+            FeishuBitableManager, COMPANY_PAYLOAD_ORDER_LEGACY, BACKUP_FIELDS,
+        )
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "backup.csv")
+            mgr = FeishuBitableManager(config={"feishu": {}})
+            mgr._backup_csv_path = lambda: path
+            with open(path, "w", encoding="utf-8-sig", newline="") as f:
+                w = _csv.writer(f)
+                w.writerow(BACKUP_FIELDS)
+                # 公司表 13 列 payload 被追加进标准表头的文件 (历史事故形态)
+                w.writerow(["2026-W37_Devin_via54Medit", "2026-W37", "Devin Wei",
+                            "", 44, 215, 150, 2917, 20.19, 1234, "via54Medit",
+                            "已自动同步", "旧行"])
+            recs = mgr._load_local_csv_records()
+            self.assertEqual(len(recs), 1, "13 列历史行被丢掉了")
+            self.assertEqual(recs[0]["汇报周期"], "2026-W37")
+            self.assertEqual(recs[0]["成员花名"], "Devin Wei")
+            # CSV 回读得到的是字符串(该路径不做类型强转, 与既有行为一致)
+            self.assertEqual(recs[0]["文献检索篇数"], "44")
+            self.assertEqual(recs[0]["总节约工时(h)"], "20.19")
+            self.assertEqual(len(COMPANY_PAYLOAD_ORDER_LEGACY), 13)
+
+    def test_sync_reports_missing_columns_instead_of_silently_dropping(self):
+        """缺列时必须**说出来** —— 缺列不会让写入报错, 只会让值消失。"""
+        from telemetry.bitable_sync import FeishuBitableManager, SCHEMA_COMPANY
+        from telemetry.models import AggregateReport
+
+        mgr = FeishuBitableManager(config={
+            "user": {"nickname": "Devin"},
+            "feishu": {"company_bitable_member": "Devin Wei"},
+        })
+        mgr.app_token, mgr.table_id = "bascn_test", "tbl_test"
+        mgr.resolve_schema = lambda: (SCHEMA_COMPANY, "test")
+        # 目标表只有公司表原有的 13 列
+        legacy = ["记录标识", "统计周次", "提交成员", "统计日期", "文献检索量",
+                  "成功下载量", "高亮标注量", "解析物理总页数", "节省工时(小时)",
+                  "Token消耗量", "项目任务类型", "数据状态", "备注说明"]
+        mgr._api_request = lambda *a, **k: (
+            {"code": 0, "data": {"items": [{"field_name": n} for n in legacy]}}
+            if (k.get("method") or (a[1] if len(a) > 1 else "GET")) == "GET"
+            else {"code": 0, "data": {"record": {"record_id": "rec1"}}})
+        mgr._find_existing_record = lambda *a, **k: None
+        mgr._record_local_csv = lambda *a, **k: None
+
+        ok, msg = mgr.sync_weekly_report(AggregateReport(
+            period_type="weekly", period_name="2026年 第37周",
+            start_date="2026-09-07", end_date="2026-09-13"), "Devin")
+
+        self.assertTrue(ok, msg)
+        self.assertIn("缺", msg, "缺列了却报成功 —— 那些统计项正在被静默丢弃")
+        self.assertIn("其他任务数", msg)
+        self.assertIn("--align-fields", msg, "应给出补齐办法")
 
 
 if __name__ == "__main__":

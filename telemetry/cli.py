@@ -224,7 +224,9 @@ def cmd_bitable(args):
             print(f"  • 多维表格链接: {res['url']}")
             print(f"  • App Token:    {res['app_token']}")
             print(f"  • Table ID:     {res['table_id']}")
-            print("  • 状态: 15 个标准化统计字段与分组视图已自动初始化。")
+            from .bitable_sync import TABLE_SCHEMA_FIELDS
+
+            print(f"  • 状态: {len(TABLE_SCHEMA_FIELDS)} 个标准化统计字段与分组视图已自动初始化。")
         else:
             print(f"[!] 创建提示:\n{res.get('msg')}")
         return
@@ -232,6 +234,45 @@ def cmd_bitable(args):
     if getattr(args, "bind", False):
         ok, msg = mgr.bind_existing_bitable(args.bind)
         print(f"[*] {msg}")
+        return
+
+    if getattr(args, "align_fields", False):
+        # 统计列对齐: 表是"先建后用"的, 代码后来新增统计项不会让已存在的表长出列来 ——
+        # 于是那些值在写入时被静默丢弃(实测公司表少了 8 列)。这里少哪列补哪列。
+        dry = getattr(args, "dry_run", False)
+        align = mgr.column_alignment()
+        if align.get("error"):
+            print(f"[!] 无法读取目标表字段: {align['error']}")
+            return
+        print("=======================================================")
+        print("🧭 多维表格统计列对齐检查")
+        print("=======================================================")
+        print(f"• 目标表:   {mgr.app_token or '(未绑定)'} / {mgr.table_id or '-'}")
+        print(f"• schema:   {align['schema']} ({align['reason']})")
+        print(f"• 表内列数: {len(align['existing'] or [])}")
+        missing = align.get("missing") or []
+        if not missing:
+            print("• 状态:     🟢 已对齐 —— 每个统计项在表里都有对应列")
+        else:
+            print(f"• 状态:     🟡 缺 {len(missing)} 列 —— 这些统计项写入时会被丢弃:")
+            for name in missing:
+                print(f"      - {name}")
+        for name, reason in (align.get("intentionally_skipped") or {}).items():
+            print(f"• 刻意不建列: {name} —— {reason}")
+        if missing:
+            if dry:
+                print("\n[*] DRY-RUN: 以下是将要创建的列, 未实际提交。")
+                for name in missing:
+                    print(f"      + {name}")
+            else:
+                created = mgr.ensure_table_columns(mgr.app_token, mgr.table_id,
+                                                   align["schema"])
+                print(f"\n✓ 已补齐 {len(created)} 列: {', '.join(created) or '(无)'}")
+                if len(created) != len(missing):
+                    print("  ⚠️ 有列未创建成功 —— 检查应用是否具备多维表格编辑权限")
+                print("  提示: 已存在的行不会回溯填数(那些数据当时没写进去), "
+                      "下一次同步起就有新列了。")
+        print("=======================================================\n")
         return
 
     if getattr(args, "sync", False):
@@ -265,9 +306,25 @@ def cmd_bitable(args):
     print(f"• 绑定状态: {'🟢 已绑定' if b_tok else '⚪ 未绑定'}")
     print(f"• 多维表格: {b_url or '未配置 (运行 medit-telemetry bitable --create 创建)'}")
     print(f"• 团队数据: 已自动启用本地零丢失双备份 (~/.medit/team_bitable_backup.csv)")
+    # 列对齐状态: "统计列有没有跟上最新统计项"必须有可查的凭据, 而不是靠肉眼比对
+    try:
+        align = mgr.column_alignment()
+        if align.get("error"):
+            print(f"• 统计列:   ⚪ 无法读取 ({align['error'][:60]})")
+        elif not align.get("missing"):
+            print(f"• 统计列:   🟢 已对齐 (schema={align['schema']}, "
+                  f"{len(align['existing'] or [])} 列)")
+        else:
+            print(f"• 统计列:   🟡 缺 {len(align['missing'])} 列 —— "
+                  f"{', '.join(align['missing'])}")
+            print("            这些统计项写入时会被丢弃; "
+                  "补齐: medit-telemetry bitable --align-fields")
+    except Exception as e:                                  # noqa: BLE001
+        print(f"• 统计列:   ⚪ 检查失败 ({str(e)[:60]})")
     print("• 常用命令:")
     print("    - 飞书创建多维表格: medit-telemetry bitable --create")
     print("    - 绑定已有多维表格: medit-telemetry bitable --bind <URL_OR_TOKEN>")
+    print("    - 统计列对齐检查/补齐: medit-telemetry bitable --align-fields [--dry-run]")
     print("    - 手动上传本周数据: medit-telemetry bitable --sync")
     print("    - 生成团队图表报告: medit-telemetry bitable --report")
     print("=======================================================\n")
@@ -789,6 +846,8 @@ def main():
     p_bitable.add_argument("--bind", default="", help="绑定已有飞书多维表格 URL 或 Token")
     p_bitable.add_argument("--sync", action="store_true", help="上传本周监控数据至多维表格")
     p_bitable.add_argument("--dry-run", action="store_true", help="仅展示 schema 判定与将写入的字段, 不实际提交")
+    p_bitable.add_argument("--align-fields", dest="align_fields", action="store_true",
+                           help="检查并把目标表缺失的统计列补齐 (少哪列补哪列)")
     p_bitable.add_argument("--period", choices=["week", "month", "all"], default="week", help="统计周期")
     p_bitable.add_argument("--report", action="store_true", help="汇总团队所有成员数据生成图表看板")
     p_bitable.add_argument("--open-browser", action="store_true", help="生成报告后在浏览器打开")

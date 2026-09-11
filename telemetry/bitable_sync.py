@@ -37,6 +37,9 @@ TABLE_SCHEMA_FIELDS = [
     {"field_name": "其他任务数", "type": 2},
     {"field_name": "其他工作时长(h)", "type": 2},
     {"field_name": "其他Token消耗", "type": 2},
+    # 其他Token消耗 的子集(没有 task_id 归属的那部分)。单列出来才能分辨
+    # "确实是其他工作"与"调用方忘了标归属" —— 否则这个数字没法解读。
+    {"field_name": "其他未归属Token", "type": 2},
     {"field_name": "真实Token消耗", "type": 2},
     {"field_name": "API调用次数", "type": 2},
     {"field_name": "上报状态", "type": 3, "property": {
@@ -65,15 +68,24 @@ SCHEMA_COMPANY = "company"     # 公司既有「监控数据周报明细」表
 STANDARD_STATUS_VALUE = "🟢 自动同步"
 COMPANY_STATUS_VALUE = "已自动同步"
 
-# 公司既有表的全部字段名
+# 公司既有表实际拥有的字段 = 原有 13 列 + v5.4.43 补齐的 8 个统计列。
+# 补齐前只有前 13 个, 于是"其他"三列与三个细分工时在**写入时被静默丢弃**,
+# 只能挤进「备注说明」当一段纯文本 —— 看得到, 但没法筛选、分组、画图。
 COMPANY_TABLE_FIELDS = {
     "记录标识", "统计周次", "提交成员", "统计日期",
     "文献检索量", "成功下载量", "高亮标注量", "解析物理总页数",
     "节省工时(小时)", "Token消耗量", "项目任务类型", "数据状态", "备注说明",
+    # ↓ v5.4.43 补齐的统计列 (与标准表同名, 映射即恒等)
+    "检索节约工时(h)", "下载节约工时(h)", "高亮节约工时(h)",
+    "其他任务数", "其他工作时长(h)", "其他Token消耗", "其他未归属Token",
+    "API调用次数",
 }
 
-# 标准字段名 -> 公司表字段名。未列出的标准字段 (成员OpenID / 三个细分工时 /
-# API调用次数) 在该表中没有对应列, 写入时自动丢弃, 不报错。
+# 标准字段名 -> 公司表字段名。
+#
+# 对齐契约: **标准表里的每个字段, 要么在这里有同义列, 要么在
+# ``INTENTIONALLY_NOT_A_COLUMN`` 里写明为什么不该有列**。没有第三种状态 ——
+# "静默丢弃"正是"统计列没对齐最新的统计数据项"的成因, 也最难被发现。
 COMPANY_FIELD_MAP: Dict[str, str] = {
     "记录标识": "记录标识",
     "汇报周期": "统计周次",
@@ -88,6 +100,24 @@ COMPANY_FIELD_MAP: Dict[str, str] = {
     "项目任务类型": "项目任务类型",
     "上报状态": "数据状态",
     "备注说明": "备注说明",
+    # v5.4.43: 补齐的统计列 —— 在此之前这些值根本没有落点
+    "检索节约工时(h)": "检索节约工时(h)",
+    "下载节约工时(h)": "下载节约工时(h)",
+    "高亮节约工时(h)": "高亮节约工时(h)",
+    "其他任务数": "其他任务数",
+    "其他工作时长(h)": "其他工作时长(h)",
+    "其他Token消耗": "其他Token消耗",
+    "其他未归属Token": "其他未归属Token",
+    "API调用次数": "API调用次数",
+}
+
+#: 刻意**不建列**的标准字段 -> 理由。
+#:
+#: 对齐契约只有两种合法状态: 目标表里有同名列, 或者在这里写明理由。
+#: 这张表是**显式的决策记录**, 不是"忘了处理"的收容所 —— 加条目必须带理由。
+INTENTIONALLY_NOT_A_COLUMN: Dict[str, str] = {
+    "成员OpenID": "身份标识而非统计项; 公司表多人可见, 不在共享表里扩散 open_id"
+                  "(图表按花名聚合, 不需要它)",
 }
 
 # 反向映射: 公司表字段名 -> 标准字段名
@@ -97,26 +127,92 @@ STANDARD_FIELD_MAP: Dict[str, str] = {v: k for k, v in COMPANY_FIELD_MAP.items()
 # schema 无关 —— 否则同一份 CSV 会混入两种列语义, 表头错位后无法回读。
 BACKUP_FIELDS: List[str] = [f["field_name"] for f in TABLE_SCHEMA_FIELDS]
 
-# 公司表 payload 的写入列序, 即历史上错位行的实际排列顺序。
+# 公司表 payload 的写入列序, 即当前映射的取值顺序。
 # 由 COMPANY_FIELD_MAP 的取值顺序推导, 与其构造方 build_company_payload 保持一致。
 COMPANY_PAYLOAD_ORDER: List[str] = list(COMPANY_FIELD_MAP.values())
+
+#: 历史遗留的 13 列写入顺序 —— **冻结, 不随映射扩展而变**。
+#:
+#: 本地备份里那些"13 列、按公司列序写入"的历史行, 是靠
+#: ``len(row) == len(COMPANY_PAYLOAD_ORDER)`` 认出来的(见 ``_load_local_csv_records``)。
+#: 如果把这里跟着 COMPANY_FIELD_MAP 一起变长, 那些行就再也认不出来, 会被当作
+#: 无法对齐的脏行**静默丢掉** —— 回退路径上少的就是它们。
+COMPANY_PAYLOAD_ORDER_LEGACY: List[str] = [
+    "记录标识", "统计周次", "提交成员", "统计日期",
+    "文献检索量", "成功下载量", "高亮标注量", "解析物理总页数",
+    "节省工时(小时)", "Token消耗量", "项目任务类型", "数据状态", "备注说明",
+]
+
+#: 标准字段 -> 飞书字段类型 (用于给目标表补列)
+STANDARD_FIELD_TYPES: Dict[str, int] = {
+    f["field_name"]: f["type"] for f in TABLE_SCHEMA_FIELDS
+}
+#: 建列时需要带的 property(目前只有单选)
+STANDARD_FIELD_PROPERTIES: Dict[str, Any] = {
+    f["field_name"]: f["property"] for f in TABLE_SCHEMA_FIELDS if "property" in f
+}
+
+
+#: 公司表**独有**的标记字段。标准表里不会出现这些名字, 因此它们是识别的可靠依据。
+COMPANY_MARKER_FIELDS = {"记录标识", "统计周次", "提交成员", "统计日期"}
 
 
 def detect_schema_profile(field_names: Optional[Any]) -> str:
     """根据目标表实际字段名推断 schema 类型。
 
-    取「标准字段命中数」与「公司表字段命中数」中较大者, 且至少命中 3 个,
-    以避免字段极少的空表被误判。识别不出时返回空串。
+    判据优先看**独有标记字段**: 公司表有 ``记录标识 / 统计周次 / 提交成员 / 统计日期``
+    这套命名, 标准表一个都没有。之所以不再单纯比"命中数多少", 是因为 v5.4.43 给公司表
+    补上了 8 个与标准表**同名**的统计列 —— 两边名字开始交叠, 谁多谁少的比较会越来越
+    脆弱(公司表 21 列里已经有 8 列与标准表同名)。标记字段不会交叠, 所以它是稳的。
+
+    命中数比较作为兜底保留: 供既没有标记字段、又确实是标准表的历史表使用。
+    识别不出时返回空串。
     """
     names = set(field_names or [])
     if not names:
         return ""
+    if len(names & COMPANY_MARKER_FIELDS) >= 2:
+        return SCHEMA_COMPANY
     standard_names = {f["field_name"] for f in TABLE_SCHEMA_FIELDS}
     standard_hits = len(names & standard_names)
     company_hits = len(names & COMPANY_TABLE_FIELDS)
     if max(standard_hits, company_hits) < 3:
         return ""
     return SCHEMA_COMPANY if company_hits > standard_hits else SCHEMA_STANDARD
+
+
+def unmapped_standard_fields() -> List[str]:
+    """既没有同义列、也没有写明理由的标准字段。
+
+    **应该永远是空列表**。非空就意味着某个统计项正在被静默丢弃 —— 那正是
+    "统计列没有对齐最新的统计数据项"的成因, 所以它由测试守着(见
+    ``tests/test_telemetry.py::TestBitableColumnAlignment``)。
+    """
+    return [f["field_name"] for f in TABLE_SCHEMA_FIELDS
+            if f["field_name"] not in COMPANY_FIELD_MAP
+            and f["field_name"] not in INTENTIONALLY_NOT_A_COLUMN]
+
+
+def intended_target_columns(schema: str = SCHEMA_STANDARD) -> List[str]:
+    """某个 schema 下, 每个标准字段**应该**落在哪一列。
+
+    标准表用同名; 公司表用 ``COMPANY_FIELD_MAP`` 的映射名。刻意不建列的字段不出现在这里。
+    """
+    if schema == SCHEMA_COMPANY:
+        return list(COMPANY_FIELD_MAP.values())
+    return [f["field_name"] for f in TABLE_SCHEMA_FIELDS]
+
+
+def missing_target_columns(field_names: Optional[Any],
+                           schema: str = SCHEMA_STANDARD) -> List[str]:
+    """目标表里**缺哪些统计列**。返回目标表视角的列名。
+
+    只报"应该有的统计列", 不含刻意不建列的字段(见 ``INTENTIONALLY_NOT_A_COLUMN``)。
+    """
+    names = set(field_names or [])
+    if not names:
+        return []
+    return [c for c in intended_target_columns(schema) if c not in names]
 
 
 def week_label(report: AggregateReport) -> str:
@@ -287,38 +383,91 @@ class FeishuBitableManager:
         self._cfg["feishu"]["company_bitable_url"] = self.bitable_url
         save_config(self._cfg)
 
-        # 尝试初始化字段
+        # 尝试初始化字段。
+        # 注意: 这里必须按**探测出来的 schema** 补列, 不能假定是标准表 ——
+        # 绑定的若是公司既有表, 按标准表补列会往公司表里塞一批"汇报周期/成员花名"
+        # 之类用不上的同义列, 而真正缺的统计列反而没补上。
         if self.table_id:
-            self.init_table_fields(self.app_token, self.table_id)
+            schema, reason = self.resolve_schema()
+            created = self.ensure_table_columns(self.app_token, self.table_id, schema)
+            align = self.column_alignment()
+            tail = ""
+            if created:
+                tail = f"; 已补齐 {len(created)} 个统计列: {', '.join(created)}"
+            if align.get("missing"):
+                tail += (f"; ⚠️ 仍有 {len(align['missing'])} 列缺失: "
+                         f"{', '.join(align['missing'])}")
 
-        return True, f"成功绑定多维表格: {self.bitable_url} (Table ID: {self.table_id or '自动识别'})"
+        return True, (f"成功绑定多维表格: {self.bitable_url} "
+                      f"(Table ID: {self.table_id or '自动识别'})"
+                      + (f" | schema={schema} ({reason}){tail}" if self.table_id else ""))
 
     def init_table_fields(self, app_token: str, table_id: str) -> List[str]:
-        """为多维表格自动创建 15 个标准化统计字段。"""
-        created = []
-        # 1. 查询现有字段，避免重复创建
-        res = self._api_request(f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields")
-        existing_names = set()
-        if res.get("code") == 0:
-            for item in res.get("data", {}).get("items", []):
-                existing_names.add(item.get("field_name"))
+        """为**标准表**补齐缺失的统计列, 返回本次新建的列名。"""
+        return self.ensure_table_columns(app_token, table_id, SCHEMA_STANDARD)
 
-        for fld in TABLE_SCHEMA_FIELDS:
-            name = fld["field_name"]
-            if name in existing_names:
+    def ensure_table_columns(self, app_token: str, table_id: str,
+                            schema: str = "", dry_run: bool = False
+                            ) -> List[str]:
+        """把目标表的**统计列**补齐到与标准字段一致, 返回本次新建的列名。
+
+        这是"统计列对齐"的执行者: 少哪列补哪列。为什么必须有它 —— 表是**先建后用**的,
+        代码后来新增统计项(如 v5.4.37 的"其他"三列)不会让已存在的表自动长出列来,
+        于是那些值在写入时被静默丢弃, 只能挤进备注当纯文本。实测公司表就这样少了 8 列。
+
+        ``dry_run=True`` 只算不建(用于 ``--dry-run`` 与自检)。
+        """
+        created: List[str] = []
+        if not app_token or not table_id:
+            return created
+        schema = schema or self.resolve_schema()[0]
+        res = self._api_request(
+            f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields?page_size=200")
+        if res.get("code") != 0:
+            return created
+        existing = {i.get("field_name") for i in (res.get("data") or {}).get("items", [])}
+        for target in intended_target_columns(schema):
+            if target in existing:
                 continue
-            payload = {
-                "field_name": name,
-                "type": fld["type"]
+            if dry_run:
+                created.append(target)
+                continue
+            payload: Dict[str, Any] = {
+                "field_name": target,
+                # 目标表的列名可能是公司表的别名, 类型要按**标准字段名**取
+                "type": STANDARD_FIELD_TYPES.get(STANDARD_FIELD_MAP.get(target, target), 2),
             }
-            if "property" in fld:
-                payload["property"] = fld["property"]
-
-            f_res = self._api_request(f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields", method="POST", body=payload)
+            prop = STANDARD_FIELD_PROPERTIES.get(
+                STANDARD_FIELD_MAP.get(target, target))
+            if prop:
+                payload["property"] = prop
+            f_res = self._api_request(
+                f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields",
+                method="POST", body=payload)
             if f_res.get("code") == 0:
-                created.append(name)
-
+                created.append(target)
         return created
+
+    def column_alignment(self) -> Dict[str, Any]:
+        """自检: 目标表与"最新统计项"差哪些列。供 CLI 与同步前的告警使用。
+
+        返回 ``{"schema","reason","existing","missing","intentionally_skipped"}``。
+        ``missing`` 非空就是"统计列没对齐"的**确证**, 不再靠肉眼比对。
+        """
+        schema, reason = self.resolve_schema()
+        names, err = self.list_table_field_names()
+        if names is None:
+            return {"schema": schema, "reason": reason, "existing": None,
+                    "missing": [], "intentionally_skipped": INTENTIONALLY_NOT_A_COLUMN,
+                    "error": err}
+        return {
+            "schema": schema,
+            "reason": reason,
+            "existing": sorted(names),
+            "missing": missing_target_columns(names, schema),
+            "intentionally_skipped": INTENTIONALLY_NOT_A_COLUMN,
+            "error": "",
+        }
 
     def init_table_views(self, app_token: str, table_id: str) -> List[str]:
         """初始化表格视图（成员分组视图、每周人效趋势视图）。"""
@@ -400,6 +549,7 @@ class FeishuBitableManager:
             "其他任务数": int(r["other"]["count"]),
             "其他工作时长(h)": float(r["other"]["duration_hours"]),
             "其他Token消耗": int(r["other"]["total_tokens"]),
+            "其他未归属Token": int(r["other"].get("unattributed_tokens", 0)),
             "真实Token消耗": int(r["tokens"]["total_tokens"]),
             "API调用次数": int(r["tokens"].get("llm_call_count", 0)),
             "上报状态": STANDARD_STATUS_VALUE,
@@ -419,10 +569,11 @@ class FeishuBitableManager:
         return nick or configured
 
     def build_company_payload(self, report: AggregateReport, nick: str) -> Dict[str, Any]:
-        """按公司既有「监控数据周报明细」表 (13 字段) 构造 payload。
+        """按公司既有「监控数据周报明细」表构造 payload。
 
-        先按标准字段名组织, 再经 COMPANY_FIELD_MAP 转成目标表字段名;
-        目标表没有的标准字段 (成员OpenID / 三个细分工时 / API调用次数) 自动丢弃。
+        先按标准字段名组织, 再经 ``COMPANY_FIELD_MAP`` 转成目标表字段名。
+        **统计项一个都不丢**: 每个数值统计项在公司表里都有同名列(v5.4.43 补齐);
+        唯一没有列的是 ``成员OpenID``, 理由见 ``INTENTIONALLY_NOT_A_COLUMN``。
         """
         r = report.to_dict()
         feishu = self._cfg.get("feishu", {}) or {}
@@ -438,21 +589,28 @@ class FeishuBitableManager:
             "成员花名": member,
             "上报时间": _period_start_ms(report),
             "文献检索篇数": int(r["retrieval"]["count"]),
+            "检索节约工时(h)": float(r["retrieval"]["saved_hours"]),
             "文献下载篇数": int(r["download"]["count"]),
+            "下载节约工时(h)": float(r["download"]["saved_hours"]),
             "Highlight标注篇数": int(r["highlight"]["count"]),
             "Highlight阅读页数": int(r["highlight"]["pages"]),
+            "高亮节约工时(h)": float(r["highlight"]["saved_hours"]),
             "总节约工时(h)": total_hours,
+            # 其他类目: 与三类一样逐项成列, 否则它在这张表里只能是一段备注文本 ——
+            # 看得到, 但筛选不了、分组不了、画不了图。
+            "其他任务数": int(r["other"]["count"]),
+            "其他工作时长(h)": float(r["other"]["duration_hours"]),
+            "其他Token消耗": int(r["other"]["total_tokens"]),
+            "其他未归属Token": int(r["other"].get("unattributed_tokens", 0)),
             "真实Token消耗": int(r["tokens"]["total_tokens"]),
+            "API调用次数": int(r["tokens"].get("llm_call_count", 0)),
             # 单选字段必须写字符串: 传数组会返回 1254062 SingleSelectFieldConvFail
             "项目任务类型": project,
             "上报状态": COMPANY_STATUS_VALUE,
             "备注说明": (
                 f"自动同步：检索 {r['retrieval']['count']} 篇 / 下载 {r['download']['count']} 篇 / "
-                f"高亮 {r['highlight']['count']} 篇（{r['highlight']['pages']} 页），节约 {total_hours}h"
-                # 公司表没有「其他」专列, 但它是团队实际投入的一部分 —— 放进备注,
-                # 否则这类工作在这张表里完全不可见。
-                f"；其他 {r['other']['count']} 项 / {r['other']['duration_seconds']}s"
-                f" / {r['other']['total_tokens']} tokens"
+                f"高亮 {r['highlight']['count']} 篇（{r['highlight']['pages']} 页），"
+                f"其他 {r['other']['count']} 项，合计节约 {total_hours}h"
             ),
         }
         field_map = self._field_map()
@@ -516,6 +674,16 @@ class FeishuBitableManager:
         else:
             payload = self.build_standard_payload(report, nick, oid)
 
+        # 1b. 列对齐自检: 目标表缺列时**必须说出来**。
+        #     缺列 = 那些统计项写不进去, 而且不会有任何报错 —— 正是"统计列没对齐"
+        #     最难被发现的地方。这里只报不改: 周期同步去改公司共享表的 schema 太越界,
+        #     补列由显式的 `medit-telemetry bitable --align-fields` 执行。
+        try:
+            align = self.column_alignment()
+            missing_cols = align.get("missing") or []
+        except Exception:                                       # noqa: BLE001
+            missing_cols = []
+
         if dry_run:
             return True, json.dumps({
                 "dry_run": True,
@@ -525,6 +693,11 @@ class FeishuBitableManager:
                 "table_id": self.table_id,
                 "field_count": len(payload),
                 "fields": payload,
+                "missing_columns": missing_cols,
+                "align_hint": ("目标表缺 %d 列, 这些统计项写不进去; "
+                               "运行 `medit-telemetry bitable --align-fields` 补齐: %s"
+                               % (len(missing_cols), ", ".join(missing_cols)))
+                              if missing_cols else "",
             }, ensure_ascii=False, indent=2)
 
         # 仅在真正落库后才写本地备份: dry-run 不应产生任何副作用,
@@ -547,6 +720,7 @@ class FeishuBitableManager:
                 return True, (
                     f"已成功更新本周多维表格数据！(schema={schema} | 花名: {nick} | "
                     f"节约工时: {r['overall']['total_saved_hours']}h | 记录ID: {rec_id})"
+                    + self._drift_note(missing_cols)
                 )
             return False, f"更新多维表格记录失败: {self._explain_error(res)}"
 
@@ -558,8 +732,19 @@ class FeishuBitableManager:
             return True, (
                 f"已成功向团队多维表格同步本周数据！(schema={schema} | 花名: {nick} | "
                 f"节约工时: {r['overall']['total_saved_hours']}h | 记录ID: {rec_id})"
+                + self._drift_note(missing_cols)
             )
         return False, f"写入多维表格记录失败: {self._explain_error(res)}"
+
+    @staticmethod
+    def _drift_note(missing_cols: List[str]) -> str:
+        """缺列告警的措辞。**不能只是日志一行** —— 缺列意味着那些统计项在表里不存在,
+        而写入不会报错, 所以必须跟着成功消息一起回到调用方(daemon 会把它写进日志/告警)。"""
+        if not missing_cols:
+            return ""
+        return ("\n  ⚠️ 目标表缺 %d 个统计列, 这些项本次**写不进去**: %s\n"
+                "     补齐: medit-telemetry bitable --align-fields"
+                % (len(missing_cols), ", ".join(missing_cols)))
 
     def _find_existing_record(
         self, report: AggregateReport, nickname: str, schema: str = SCHEMA_STANDARD
@@ -661,6 +846,9 @@ class FeishuBitableManager:
         历史版本曾把公司表 schema 的 13 列 payload 直接追加进标准表头的文件,
         造成列错位。这里按列宽识别这类遗留行并按其写入列序还原, 而不是整行丢弃;
         只有完全无法对齐的行才跳过。
+
+        ``COMPANY_PAYLOAD_ORDER_LEGACY`` 是**冻结**的 13 列序 —— 不能跟着
+        ``COMPANY_FIELD_MAP`` 一起变长, 否则这些历史行会认不出来被静默丢掉。
         """
         csv_path = self._backup_csv_path()
         if not os.path.exists(csv_path):
@@ -683,8 +871,8 @@ class FeishuBitableManager:
             if len(raw) == len(header):
                 row_dict = dict(zip(header, raw))
                 records.append(self.normalize_record_fields(row_dict, header_schema))
-            elif len(raw) == len(COMPANY_PAYLOAD_ORDER) and header == BACKUP_FIELDS:
-                row_dict = dict(zip(COMPANY_PAYLOAD_ORDER, raw))
+            elif len(raw) == len(COMPANY_PAYLOAD_ORDER_LEGACY):
+                row_dict = dict(zip(COMPANY_PAYLOAD_ORDER_LEGACY, raw))
                 records.append(self.normalize_record_fields(row_dict, SCHEMA_COMPANY))
             else:
                 # 列数与表头无法对齐, 视为脏行跳过而非猜测

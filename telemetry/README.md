@@ -104,6 +104,8 @@ medit-telemetry bitable --bind <TOKEN/URL> # 绑定团队已有多维表格
 medit-telemetry bitable --sync             # 手动将本周战报同步到团队多维表格
 medit-telemetry bitable --sync --dry-run   # 仅打印 schema 判定与将写入的字段, 不落库不写备份
 medit-telemetry bitable --report           # 自动汇总全员数据生成可视化图表大屏
+medit-telemetry bitable --align-fields     # 检查并把目标表缺失的统计列补齐 (少哪列补哪列)
+medit-telemetry bitable --align-fields --dry-run   # 只看差哪些列, 不实际建列
 
 # 8. 修改花名与定时汇报时间
 medit-telemetry config                       # 总览: 排程 + 提醒 + 下次推送/提醒日
@@ -188,7 +190,29 @@ unset PYTHONHOME PYTHONPATH                    # 或在当前终端先清掉
 
 ### 接入公司既有表（字段自适应）
 
-目标表的字段命名与本模块自建表不同也能直接写入：同步前先读取目标表实际字段名，自动判定 schema —— 自建标准表（字段见 `bitable_sync.TABLE_SCHEMA_FIELDS`）或公司既有「监控数据周报明细」表（13 字段）。写入时按映射改名，目标表没有的列自动丢弃、不报错；读取时反向归一化为标准字段名，因此图表大屏与战报逻辑无需改动。
+目标表的字段命名与本模块自建表不同也能直接写入：同步前先读取目标表实际字段名，自动判定 schema —— 自建标准表（字段见 `bitable_sync.TABLE_SCHEMA_FIELDS`）或公司既有「监控数据周报明细」表。判定优先看公司表**独有的标记字段**（记录标识 / 统计周次 / 提交成员 / 统计日期），不靠"谁命中多"—— 因为补列之后两边会有 8 个同名统计列，比较命中数会越来越脆弱。写入时按映射改名，读取时反向归一化为标准字段名，因此图表大屏与战报逻辑无需改动。
+
+### 统计列必须与统计项对齐（对齐契约）
+
+表是**先建后用**的：代码里新增一个统计项（如 v5.4.37 的「其他」三列），**不会**让已经建好的表自动长出列来。后果很隐蔽 —— 那些值在写入时被静默丢弃，写入也不报任何错，表面一切正常。
+
+实测：公司表就少了 8 列（三个细分工时 + 其他四列 + API 调用次数），「其他」类目只能挤进「备注说明」当一段纯文本：看得到，但筛选不了、分组不了、画不了图。
+
+因此定下**对齐契约**，只有两种合法状态：
+
+| 状态 | 含义 |
+| :--- | :--- |
+| **目标表里有同名列** | 正常；`COMPANY_FIELD_MAP` 负责改名映射 |
+| **显式写明为什么不该有列** | 见 `INTENTIONALLY_NOT_A_COLUMN`（当前只有 `成员OpenID`：身份标识而非统计项，公司表多人可见，不在共享表里扩散 open_id） |
+
+**没有第三种状态。** `unmapped_standard_fields()` 必须为空，由 `tests/test_telemetry.py::TestBitableColumnAlignment` 守着。
+
+```bash
+medit-telemetry bitable --align-fields --dry-run   # 差哪些列
+medit-telemetry bitable --align-fields             # 少哪列补哪列
+```
+
+边界说明：同步时**只报不改**（`--sync` 会在成功消息里附上"缺 N 列 + 补齐命令"）—— 周期同步去改公司共享表的 schema 太越界；补列由上面这条显式命令执行。缺列告警不会因为"写入成功"就被吞掉。
 
 | 配置键（`feishu` 段） | 说明 |
 | :--- | :--- |

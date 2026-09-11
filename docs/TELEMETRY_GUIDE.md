@@ -165,6 +165,7 @@ python -m telemetry.cli bitable --create             # 云端新建团队监控�
 python -m telemetry.cli bitable --bind <URL_OR_TOKEN>  # 绑定团队已有多维表格
 python -m telemetry.cli bitable --sync               # 上传本周数据 (按「周期+成员」幂等 upsert)
 python -m telemetry.cli bitable --sync --dry-run     # 演练: 只看 schema 判定与将写入的字段, 不落库
+python -m telemetry.cli bitable --align-fields       # 检查/补齐目标表缺失的统计列 (对齐最新统计项)
 python -m telemetry.cli bitable --report             # 汇总全员数据生成图表大屏
 
 # 5. 扫描指定项目目录成果并自动入库

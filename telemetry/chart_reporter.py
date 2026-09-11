@@ -14,8 +14,9 @@ from typing import Any, Dict, List, Tuple
 def _num(value: Any) -> float:
     """宽松取数: 缺列 / 空串 / 脏值一律按 0 处理。
 
-    「其他」三列在**公司表 schema** 里不存在 (该表没有对应的列, 写入时被丢弃),
-    因此读回来的记录缺这三列是正常的 —— 不能因此让整条记录被判为脏数据。
+    记录可能来自**更早的周期**、或来自一张尚未补齐统计列的表(v5.4.43 之前公司表
+    就没有"其他"三列), 因此读回来的记录缺列是正常的 —— 不能因此让整条记录被判为脏数据。
+    缺哪些列由 ``bitable_sync.column_alignment()`` 明确报出, 不靠这里默默兜。
     """
     try:
         return float(value)
@@ -68,7 +69,8 @@ def aggregate_team_metrics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         except (ValueError, TypeError):
             continue
 
-        # 其他类目: 公司表 schema 没有这三列, 缺列按 0 处理, 不影响上面主口径的解析
+        # 其他类目: 历史记录 / 未补列的表里可能没有这三列, 缺列按 0 处理,
+        # 由 bitable_sync.column_alignment() 负责把"缺列"这件事说出来。
         o_count = int(_num(r.get("其他任务数", 0)))
         o_hours = _num(r.get("其他工作时长(h)", 0))
         o_tokens = int(_num(r.get("其他Token消耗", 0)))
