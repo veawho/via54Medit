@@ -35,7 +35,10 @@ def build_rows():
             md5 = hashlib.md5(open(main, 'rb').read()).hexdigest()
             size_kb = str(round(os.path.getsize(main) / 1024))
             try:
-                import fitz
+                try:
+                    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+                except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+                    import fitz
                 doc = fitz.open(main)
                 pages = str(len(doc))
                 doc.close()

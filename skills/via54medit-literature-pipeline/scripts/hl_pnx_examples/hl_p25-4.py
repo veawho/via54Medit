@@ -4,7 +4,7 @@ slide 25 aHUS 列: 核心发病机制(补体旁路失调→MAC→微血栓)、�
 ADAMTS13≥10%(通常正常)、补体检测价值低、确诊靠排除TTP/STEC-HUS+基因检测"""
 import sys, os
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, page_char_stream, locate_sentence
+from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
 SRC = '/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-4_main.pdf'
 OUT = '/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-4/P25-4_highlight.pdf'
@@ -26,7 +26,6 @@ SENTENCES = [
 ]
 
 def build():
-    import fitz
     doc = fitz.open(SRC)
     n = len(doc)
     S = {}

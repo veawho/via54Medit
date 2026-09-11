@@ -2,7 +2,7 @@
 """P13-2: slide 13 引用2 (Martinez BMT 2005 TAM) 裂红细胞与预后应证句"""
 import sys
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, locate_sentence, page_char_stream
+from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
 PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P13-2_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P13-2/P13-2_highlight.pdf"
@@ -14,7 +14,6 @@ SENTENCES = [
 ]
 
 def scan():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     for s in SENTENCES:
@@ -28,7 +27,6 @@ def scan():
     doc.close()
 
 def run():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     S = {}

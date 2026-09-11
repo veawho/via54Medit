@@ -2,7 +2,7 @@
 """P9-2: slide 9 引用2 (Timmermans J Clin Med 2021) TMA分类应证句 (按slide9重选)"""
 import sys
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, locate_sentence, page_char_stream
+from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
 PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-2_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-2/P9-2_highlight.pdf"
@@ -17,7 +17,6 @@ SENTENCES = [
 ]
 
 def scan():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     for s in SENTENCES:
@@ -31,7 +30,6 @@ def scan():
     doc.close()
 
 def run():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     S = {}

@@ -2,7 +2,7 @@
 """P30-4: 固定句子定义, 自动定位页并 highlight"""
 import sys
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, page_char_stream, locate_sentence
+from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
 SRC = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P30-4_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P30-4/P30-4_highlight.pdf"
@@ -14,7 +14,6 @@ SENTENCES = [
 ]
 
 def build():
-    import fitz
     doc = fitz.open(SRC)
     n = len(doc)
     S = {}

@@ -92,7 +92,10 @@ def download_pdf(url, out_path, timeout=90, referer=None):
 def verify_pdf(path):
     """校验: 可打开 + 页数>0 + 首页文本"""
     try:
-        import fitz
+        try:
+            import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+        except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+            import fitz
         doc = fitz.open(path)
         n = len(doc)
         head = doc[0].get_text()[:200].replace('\n', ' ') if n else ''

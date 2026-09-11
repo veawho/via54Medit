@@ -2,7 +2,7 @@
 """P3-1: slide 3 (补体系统三大途径) 应证句逐行 highlight"""
 import sys
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, page_char_stream, locate_sentence, norm
+from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence, norm
 
 PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P3-1_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P3-1/P3-1_highlight.pdf"
@@ -28,7 +28,6 @@ S = {
 }
 
 if __name__ == "__main__":
-    import fitz
     # 先只测定位
     if sys.argv[1] == 'test':
         doc = fitz.open(PDF)

@@ -2,8 +2,8 @@
 """P18-1: slide 18 引用1 (Zheng JTH 2020 ISTH) PLASMIC/French评分应证句"""
 import sys
 sys.path.insert(0, '/tmp')
-import fitz, shutil
-from hl_lib import highlight_sentences, locate_sentence, page_char_stream
+import shutil
+from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
 PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P18-1_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P18-1/P18-1_highlight.pdf"
@@ -15,7 +15,6 @@ SENTENCES = {
 }
 
 def run():
-    import fitz
     doc = fitz.open(PDF)
     S = {}
     for pi, sents in SENTENCES.items():

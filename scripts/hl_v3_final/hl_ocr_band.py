@@ -18,7 +18,10 @@ hl_ocr_band.py — OCR 词级高亮器 (乱码 / 纯图像 PDF 通道)
 """
 import argparse, csv, os, re, subprocess, sys, tempfile
 
-import fitz
+try:
+    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+    import fitz
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hl_lib  # noqa: E402  (复用 canon/canon_keys 规范化)

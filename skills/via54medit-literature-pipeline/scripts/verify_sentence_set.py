@@ -20,7 +20,10 @@ TSV 列: file  page  type  flag  text   (tab 分隔, 首行表头)
 import argparse, csv, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fitz  # noqa: E402
+try:
+    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+    import fitz
 import hl_lib  # noqa: E402
 import layout  # noqa: E402
 import hl_ocr_band as ob  # noqa: E402

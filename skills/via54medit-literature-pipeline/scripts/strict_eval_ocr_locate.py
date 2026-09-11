@@ -8,10 +8,13 @@
 统计: strong / weak / miss 与逐句明细, 供与 21/29 声明口径对比.
 """
 import csv, json, os, re, sys
-sys.path.insert(0, r'G:\agent\ai\projects\via54Medit\scripts\hl_v3_final')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import layout, hl_ocr_band as ob, hl_lib
 
-WORK = r'c:\Users\via54\.trae-cn\work\6a9e448884fcf10fc666920a\rsv_hl'
+#: 回归句子集所在的工作目录。原先硬编码成 Windows 绝对路径
+#: (``r'c:\Users\via54\.trae-cn\work\...'``), 非那台机器上必然找不到;
+#: 改为环境变量可覆盖, 默认值保持原样以免影响原机器 (同 scripts/tma_*.py 的约定)。
+WORK = os.environ.get('RSV_HL_WORK') or r'c:\Users\via54\.trae-cn\work\6a9e448884fcf10fc666920a\rsv_hl'
 TMPD = os.path.join(os.path.dirname(WORK), '_regress_tmp')
 SN = os.path.join(WORK, '_sentences')
 FLAT = os.path.join(WORK, '_flat_official')
@@ -140,7 +143,10 @@ def run():
             ws = read_ws(tsv)
             if not ws:
                 continue
-            import fitz
+            try:
+                import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+            except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+                import fitz
             d = fitz.open(os.path.join(FLAT, f'{pnx}.pdf'))
             hpx = d[pno - 1].rect.height * (300 / 72.0)
             d.close()

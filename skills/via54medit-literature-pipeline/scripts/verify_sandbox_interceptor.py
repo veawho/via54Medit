@@ -4,11 +4,14 @@
 用法: python3 verify_sandbox_interceptor.py
 退出码: 0 = 全部通过, 1 = 有失败
 """
+import os
 import sys
 import subprocess
-from pathlib import Path
 
-sys.path.insert(0, '/Users/david/.hermes/skills/via54')
+#: 被验证的 via54_sandbox_forbidden.py 属 hermes 侧运行时 (不在本仓库), 默认按 ~ 定位。
+#: 原先写死成 /Users/<user>/.hermes/..., 换机器/换用户就失效; 现可用 HERMES_VIA54_DIR 覆盖。
+sys.path.insert(0, os.environ.get("HERMES_VIA54_DIR")
+                or os.path.expanduser("~/.hermes/skills/via54"))
 
 print('=' * 60)
 print('Sandbox 拦截器自检 (2026-08-07 用户硬规则)')

@@ -2,7 +2,7 @@
 """P15-1: slide 15 引用1 (Nadasdy 肾移植TMA 替代文献) 病因应证句"""
 import sys
 sys.path.insert(0, '/tmp')
-from hl_lib import highlight_sentences, locate_sentence, page_char_stream
+from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
 PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P15-1_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P15-1/P15-1_highlight.pdf"
@@ -15,7 +15,6 @@ SENTENCES = [
 ]
 
 def scan():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     for s in SENTENCES:
@@ -29,7 +28,6 @@ def scan():
     doc.close()
 
 def run():
-    import fitz
     doc = fitz.open(PDF)
     n = len(doc)
     S = {}

@@ -3,8 +3,7 @@
 注: slide 11/12/22/25 均引用 Azoulay Chest 2017, 本 Pn-x 用 P12-1_main.pdf(King's Research Portal 版)"""
 import sys
 sys.path.insert(0, '/tmp')
-import fitz
-from hl_lib import highlight_sentences, page_char_stream, locate_sentence
+from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
 SRC = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P12-1_main.pdf"
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P12-1/P12-1_highlight.pdf"

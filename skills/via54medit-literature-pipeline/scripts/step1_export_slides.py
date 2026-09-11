@@ -29,7 +29,10 @@ def export(ppt_path, out_dir, dpi=100):
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     # 2) fitz 渲染每页为 jpg
-    import fitz
+    try:
+        import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+    except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+        import fitz
     doc = fitz.open(pdf_path)
     scale = dpi / 72.0
     mat = fitz.Matrix(scale, scale)

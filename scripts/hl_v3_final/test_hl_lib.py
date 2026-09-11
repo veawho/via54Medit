@@ -10,7 +10,10 @@ from hl_lib import (canon, canon_keys, locate_sentence, locate_sentence_all,
                     sentence_rects, highlight_sentences, norm,
                     filter_sentences_by_slide_context, add_context_box,
                     add_freetext_badge, annotate_document)
-import fitz
+try:
+    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+    import fitz
 
 PASS = 0
 FAIL = 0

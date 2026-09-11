@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """用 fitz 渲染 highlight PDF 全部页面为 PNG (正确处理 cropbox, 无 pdftoppm 偏移)"""
-import fitz, sys, os
+import sys, os
+try:
+    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+    import fitz
 
 def render_all(pdf_path, out_dir, dpi=100):
     os.makedirs(out_dir, exist_ok=True)

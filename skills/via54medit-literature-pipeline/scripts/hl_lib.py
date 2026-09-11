@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """精确逐行 highlight 工具:基于 rawdict 字符 bbox,按句子起止定位,每行一个精确 rect"""
-import fitz, re
+try:
+    import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
+except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
+    import fitz
+import re
 
 def norm(s):
     return re.sub(r'[\s\u3000]+', '', s)
