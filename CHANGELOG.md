@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.12] - 2026-09-11 (清理: 移除被误提交的 6.3 MB 二进制 + 源码 + 两处遗留产物)
+
+收口 v5.4.11 中列为「待确认」的遗留产物项, 过程中又发现并处理了一个更大的问题。
+
+### Removed
+- **`list_citations`（6.3 MB 二进制）从仓库移除**。它是全仓库**唯一被跟踪的二进制**, 比第二大的跟踪文件 (0.2 MB 的 JSON 报告) 大 30 倍, 却没有任何引用方: Makefile 不构建、文档不提及、脚本/技能/测试均不使用。由 `ab1bdf8`「feat(cite): 全量交付」于 2026-07-17 与源码一同提交。之所以会被提交进去, 根因是 `.gitignore` 里 `/medit`、`/medit-mcp`、`cmd/medit/medit`、`list_citations_v2` 都列了, **唯独漏了 `/list_citations`**。
+- **`cmd/list_citations/`（v1 源码, 57 行）一并移除**。它与 `cmd/list_citations_v2/`（511 行, 功能更全, 含 zip / http 处理）同在 `ab1bdf8` 引入; v1 无任何引用方, 保留会留下「该用哪个」的歧义。`cmd/list_citations_v2` 保留未动。
+- 另清理两处**未被 git 跟踪**的本机遗留产物 (不影响仓库, 仅记录在案): `bin/annas-cli` (12.8 MB, 第三方 CLI `github.com/hdimer/annas-archive-cli`, 零引用) 与仓库根目录的 `medit` (11.5 MB, 8 月 21 日误在根目录 `go build` 的产物, 自报 `0.1.0-phase0` 这个并不存在的版本号)。两者合计释放约 24.4 MB。
+
+### 验证
+- `go build ./...` 通过; `cmd/` 现为 `list_citations_v2` / `medit` / `medit-mcp` / `promptctl`。
+- Go `test -race` **24 个包全绿, 0 失败**; `go vet` 干净; `gofmt -l` 归零。
+- 删除前已确认零引用, 且工作区那份二进制与提交内容完全一致 (无本地改动会被牵连)。
+- 移除后仓库中最大的跟踪文件降到 0.2 MB。
+
 ## [5.4.11] - 2026-09-11 (修复: 消除 fitz 弃用警告 + 补齐文档覆盖)
 
 承接 v5.4.10 的收尾核查。上次列出三项残留, 本轮处理前两项; 第三项 `bin/annas-cli` (13 MB、7 月 20 日、未被 git 跟踪、全仓库零引用的遗留产物) 待确认是否废弃后再动。
