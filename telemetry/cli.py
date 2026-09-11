@@ -358,6 +358,11 @@ def cmd_daemon(args):
                 print(f"• 用户:     {details.get('user')} ({details.get('open_id')})")
                 print(f"• 周报调度: {details.get('weekly_schedule')}")
                 print(f"• 月报调度: {details.get('monthly_schedule')}")
+                fd = details.get("fd") or {}
+                if fd.get("used"):
+                    limit = fd.get("limit")
+                    ratio = f" ({fd['used'] * 100 // limit}%)" if limit else ""
+                    print(f"• 文件描述符: {fd['used']}/{limit or '上限未知'}{ratio}")
         else:
             print("• 状态: 🔴 未运行")
             print("  提示: 使用 'python -m telemetry.cli daemon --start' 启动后台主动监控。")

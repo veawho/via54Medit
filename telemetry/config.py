@@ -136,10 +136,22 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any]):
-    """保存配置至 ~/.medit/telemetry_config.json。"""
-    os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
-    with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
+    """保存配置至 ~/.medit/telemetry_config.json。
+
+    配置里含飞书 app_secret, 因此落盘时就把权限收紧: 文件 0600、目录 0700。用 os.open
+    带 mode 创建可避免"先以 0644 落盘、随后才 chmod"之间的可读窗口; 对已存在的旧文件
+    mode 不生效, 所以再显式 chmod 一次 (这正是本次修复前 0644 的成因)。
+    """
+    directory = os.path.dirname(CONFIG_FILE_PATH)
+    os.makedirs(directory, exist_ok=True)
+    fd = os.open(CONFIG_FILE_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
+    try:
+        os.chmod(CONFIG_FILE_PATH, 0o600)
+        os.chmod(directory, 0o700)
+    except OSError:
+        pass
     print(f"[Config] 配置已持久化至: {CONFIG_FILE_PATH}")
 
 

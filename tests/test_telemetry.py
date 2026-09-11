@@ -221,6 +221,101 @@ class TestTelemetry(unittest.TestCase):
         with open(pid_file, encoding="utf-8") as fp:
             self.assertEqual(fp.read().strip(), "424242")
 
+    def test_daemon_log_repeat_throttling(self):
+        """同一消息连续重复时不得逐条落盘。
+
+        现场曾因此把日志刷到 2 MB 且几乎全是同一条 EMFILE, 既膨胀日志又淹没有效信息。
+        """
+        from unittest import mock
+        from telemetry import daemon as dm
+
+        log_path = os.path.join(self.test_dir, "daemon.log")
+        d = dm.TelemetryDaemon.__new__(dm.TelemetryDaemon)  # 不触发 __init__ 的 DB 副作用
+        d._last_msg = ""
+        d._repeat = 0
+
+        with mock.patch.object(dm, "LOG_FILE", log_path), mock.patch("builtins.print"):
+            for _ in range(250):
+                d.log("同一条错误")
+
+        with open(log_path, encoding="utf-8") as fp:
+            lines = [ln for ln in fp.read().splitlines() if ln]
+        # 首次 1 条 + 第 100 / 200 次各 1 条进行中汇总 = 3 条, 而非 250 条
+        self.assertEqual(len(lines), 3, f"重复消息应被限流, 实际落了 {len(lines)} 条")
+        self.assertIn("重复 100 次", lines[1])
+
+    def test_daemon_log_rotation(self):
+        """日志超过上限时留一份 .1 备份并清空当前文件。
+
+        刻意用「复制 + 截断」而非改名: launchd 的 StandardOutPath 长期持有同一个 fd,
+        改名会让它继续写旧 inode, 与按路径写新文件的进程分叉。
+        """
+        from unittest import mock
+        from telemetry import daemon as dm
+
+        log_path = os.path.join(self.test_dir, "daemon.log")
+        backup_path = log_path + ".1"
+        with open(log_path, "w", encoding="utf-8") as fp:
+            fp.write("x" * 1024)
+
+        with mock.patch.object(dm, "LOG_FILE", log_path), \
+                mock.patch.object(dm, "LOG_BACKUP_FILE", backup_path), \
+                mock.patch.object(dm, "LOG_MAX_BYTES", 512):
+            dm.rotate_log_if_needed()
+
+        self.assertTrue(os.path.exists(backup_path), "应留下 .1 备份")
+        self.assertEqual(os.path.getsize(backup_path), 1024)
+        self.assertEqual(os.path.getsize(log_path), 0, "当前日志应被清空 (同一 inode)")
+
+        # 未超限时不应产生备份
+        os.remove(backup_path)
+        with open(log_path, "w", encoding="utf-8") as fp:
+            fp.write("small")
+        with mock.patch.object(dm, "LOG_FILE", log_path), \
+                mock.patch.object(dm, "LOG_BACKUP_FILE", backup_path), \
+                mock.patch.object(dm, "LOG_MAX_BYTES", 512):
+            dm.rotate_log_if_needed()
+        self.assertFalse(os.path.exists(backup_path), "未超限不应轮转")
+        self.assertEqual(os.path.getsize(log_path), 5)
+
+    def test_fd_usage_observation(self):
+        """描述符观测应返回 (已用, 软上限), 且是"远未打满"的正常值。"""
+        from telemetry.daemon import fd_usage
+
+        info = fd_usage()
+        if info is None:
+            self.skipTest("当前平台无法读取 /dev/fd 或 /proc/self/fd")
+        used, soft = info
+        self.assertGreater(used, 0)
+        if soft is not None:
+            self.assertGreater(soft, used, "正常情况不应逼近描述符上限")
+
+    def test_launchd_plist_template(self):
+        """生成的 LaunchAgent plist 必须合法, 且申请了描述符软上限。
+
+        launchd 默认只给 256 个描述符, 对长期常驻的扫描进程余量太薄 (曾在一上午耗尽)。
+        """
+        import plistlib
+        from unittest import mock
+        from telemetry import daemon as dm
+
+        plist_path = os.path.join(self.test_dir, f"{dm.LAUNCHD_LABEL}.plist")
+        with mock.patch.object(dm, "get_launchd_plist_path", return_value=plist_path), \
+                mock.patch.object(dm, "_launchctl", return_value=True), \
+                mock.patch.object(dm, "stop_daemon_process"), \
+                mock.patch.object(dm, "LOG_FILE", os.path.join(self.test_dir, "d.log")), \
+                mock.patch("builtins.print"):
+            dm.install_launchd_agent()
+
+        with open(plist_path, "rb") as fp:
+            data = plistlib.load(fp)  # 解析失败即说明模板生成了非法 plist
+
+        self.assertEqual(data["Label"], dm.LAUNCHD_LABEL)
+        self.assertEqual(data["SoftResourceLimits"]["NumberOfFiles"], dm.LAUNCHD_MAX_OPEN_FILES)
+        self.assertGreater(dm.LAUNCHD_MAX_OPEN_FILES, 256)
+        self.assertEqual(data["ProgramArguments"][0], sys.executable)
+        self.assertTrue(data["KeepAlive"])
+
     def test_scanner_retrieval_from_highlight_reference_list(self):
         """高亮引用清单应折算为检索数, 且重复引用同一文献只计 1 篇 (唯一文献口径)。"""
         from telemetry.watcher import WorkspaceScanner
@@ -439,39 +534,47 @@ class TestTelemetry(unittest.TestCase):
         self.assertTrue(os.path.exists(deploy_bat), "deploy.bat 必须存在于独立模块目录")
 
     def test_deploy_configuration_setup(self):
-        """测试：一句话部署参数装配与配置固化。"""
+        """测试：一句话部署参数装配与配置固化。
+
+        配置路径重定向到临时目录 —— 该用例原先会临时覆写**真实**配置、再在 finally 里
+        还原; 一旦进程在两步之间被强杀 (Ctrl-C / 超时 / OOM), 用户的真实配置就会永久
+        留在测试值上。现在完全不触碰真实文件。
+        """
+        from unittest import mock
         from telemetry.deploy import setup_configuration
-        from telemetry.config import load_config, save_config
+        from telemetry import config as config_mod
         import argparse
 
-        # 备份真实配置
-        real_cfg = load_config()
+        cfg_path = os.path.join(self.test_dir, "telemetry_config.json")
 
-        try:
-            fake_args = argparse.Namespace(
-                silent=True,
-                nickname="张三测试",
-                openid="ou_test_12345",
-                app_id="cli_test_app",
-                app_secret="test_secret",
-                sheet="sheet_token_abc",
-                bitable="bascnTestToken12345",
-                weekly="Friday 18:30",
-                monthly="last 18:00",
-                add_watch_dir=None,
-            )
+        fake_args = argparse.Namespace(
+            silent=True,
+            nickname="张三测试",
+            openid="ou_test_12345",
+            app_id="cli_test_app",
+            app_secret="test_secret",
+            sheet="sheet_token_abc",
+            bitable="bascnTestToken12345",
+            weekly="Friday 18:30",
+            monthly="last 18:00",
+            add_watch_dir=None,
+        )
+        with mock.patch.object(config_mod, "CONFIG_FILE_PATH", cfg_path):
             cfg = setup_configuration(fake_args)
-            self.assertEqual(cfg["user"]["nickname"], "张三测试")
-            self.assertEqual(cfg["user"]["open_id"], "ou_test_12345")
-            self.assertEqual(cfg["feishu"]["app_id"], "cli_test_app")
-            self.assertEqual(cfg["schedule"]["weekly"]["day_of_week"], 4)  # Friday = 4
-            self.assertEqual(cfg["schedule"]["weekly"]["time"], "18:30")
-            self.assertEqual(cfg["schedule"]["monthly"]["day_of_month"], -1)  # last = -1
-            self.assertEqual(cfg["schedule"]["monthly"]["time"], "18:00")
-            self.assertEqual(cfg["feishu"]["company_bitable_token"], "bascnTestToken12345")
-        finally:
-            # 严格恢复真实环境配置
-            save_config(real_cfg)
+
+        self.assertEqual(cfg["user"]["nickname"], "张三测试")
+        self.assertEqual(cfg["user"]["open_id"], "ou_test_12345")
+        self.assertEqual(cfg["feishu"]["app_id"], "cli_test_app")
+        self.assertEqual(cfg["schedule"]["weekly"]["day_of_week"], 4)  # Friday = 4
+        self.assertEqual(cfg["schedule"]["weekly"]["time"], "18:30")
+        self.assertEqual(cfg["schedule"]["monthly"]["day_of_month"], -1)  # last = -1
+        self.assertEqual(cfg["schedule"]["monthly"]["time"], "18:00")
+        self.assertEqual(cfg["feishu"]["company_bitable_token"], "bascnTestToken12345")
+
+        # 落盘确实发生在临时路径上, 且权限已收紧 (配置含 app_secret)
+        self.assertTrue(os.path.exists(cfg_path), "配置应写入被重定向的临时路径")
+        mode = os.stat(cfg_path).st_mode & 0o777
+        self.assertEqual(mode, 0o600, f"含 app_secret 的配置权限应为 0600, 实际 {oct(mode)}")
 
     def test_natural_language_deploy_parser(self):
         """测试：自然语言部署指令提取与实体解析。"""

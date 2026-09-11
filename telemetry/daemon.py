@@ -1,6 +1,7 @@
 """Background proactive daemon and scheduler engine for via54Medit telemetry."""
 
 import os
+import shutil
 import sys
 import time
 import json
@@ -8,6 +9,7 @@ import signal
 import subprocess
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+from xml.sax.saxutils import escape
 
 from .aggregator import TelemetryAggregator
 from .config import load_config, WEEKDAY_NAMES
@@ -19,6 +21,66 @@ from .watcher import WorkspaceScanner
 PID_FILE = os.path.expanduser(r"~/.medit/daemon.pid")
 HEARTBEAT_FILE = os.path.expanduser(r"~/.medit/daemon_heartbeat.json")
 LOG_FILE = os.path.expanduser(r"~/.medit/daemon.log")
+
+# 日志上限与备份文件: 超过上限时留一份 .1 再就地清空 (见 rotate_log_if_needed)。
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_FILE = LOG_FILE + ".1"
+
+# 同一条消息累计重复多少次才补一条汇总 (其余重复一律不再落盘)。
+REPEAT_SUMMARY_EVERY = 100
+
+# 文件描述符占用达到软上限的这个比例即告警。
+FD_WARN_RATIO = 0.8
+
+# LaunchAgent 为守护进程申请的文件描述符软上限。
+LAUNCHD_MAX_OPEN_FILES = 4096
+
+
+def rotate_log_if_needed():
+    """日志超过上限时保留一份 .1 备份并就地清空。
+
+    刻意用「复制 + 截断」而不是「改名 + 新建」: launchd 的 StandardOutPath 只在启动时
+    打开文件一次并长期持有该 fd, 改名会让它继续写进旧 inode (也就是备份文件), 而本进程
+    按路径写的是新文件 —— 两边就此分叉。截断保持同一个 inode, 双方都继续落在 daemon.log。
+    """
+    try:
+        if os.path.getsize(LOG_FILE) <= LOG_MAX_BYTES:
+            return
+    except OSError:
+        return
+    try:
+        shutil.copy2(LOG_FILE, LOG_BACKUP_FILE)
+        with open(LOG_FILE, "w", encoding="utf-8"):
+            pass
+    except Exception:
+        pass
+
+
+def fd_usage() -> Optional[Tuple[int, int]]:
+    """返回当前进程的 (已用文件描述符, 软上限); 无法确定的部分为 None。
+
+    "资源耗尽但不崩溃"这类故障 (进程假死, KeepAlive 无从感知) 只能靠主动观测提前暴露。
+    """
+    used = None
+    for fd_dir in ("/dev/fd", "/proc/self/fd"):
+        try:
+            used = len(os.listdir(fd_dir))
+            break
+        except OSError:
+            continue
+    if used is None:
+        return None
+
+    soft = None
+    try:
+        import resource
+
+        limit = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+        if limit != resource.RLIM_INFINITY and limit > 0:
+            soft = int(limit)
+    except Exception:
+        pass
+    return used, soft
 
 
 def is_pid_running(pid: int) -> bool:
@@ -48,17 +110,70 @@ class TelemetryDaemon:
         self.last_weekly_sent = ""
         self.last_monthly_sent = ""
         self.last_scan_time = 0.0
+        # 重复消息限流状态 (见 log)
+        self._last_msg = ""
+        self._repeat = 0
+        # 最近一次观测到的描述符占用, 供心跳与 daemon --status 展示
+        self.last_fd: Optional[Dict[str, Any]] = None
 
-    def log(self, message: str):
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        line = f"[{now_str}] [TelemetryDaemon] {message}"
+    def _write(self, line: str):
+        """落盘一行日志 (含轮转)。
+
+        stdout 与文件写的是同一份内容: 守护进程由 launchd 拉起时 stdout 也重定向到
+        LOG_FILE, 若只限流其中一边, 另一边照样会把日志刷爆。
+        """
         print(line)
         try:
             os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+            rotate_log_if_needed()
             with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
         except Exception:
             pass
+
+    def log(self, message: str):
+        """写日志, 并对连续重复的消息限流。
+
+        同一句错误在 5 秒滴答的循环里会原地刷屏 —— 现场曾因此把日志刷到 2 MB 且几乎全是
+        同一条 EMFILE, 既快速膨胀日志又淹没有效信息。这里只在"换消息时"补一条累计次数
+        汇总, 并在重复途中每隔 REPEAT_SUMMARY_EVERY 次补一条进行中汇总。
+        """
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if message == self._last_msg:
+            self._repeat += 1
+            if self._repeat % REPEAT_SUMMARY_EVERY == 0:
+                self._write(
+                    f"[{now_str}] [TelemetryDaemon] ↑ 上一条消息已重复 {self._repeat} 次: {message}"
+                )
+            return
+
+        if self._repeat:
+            self._write(
+                f"[{now_str}] [TelemetryDaemon] ↑ 上一条消息共重复 {self._repeat} 次: {self._last_msg}"
+            )
+        self._last_msg = message
+        self._repeat = 0
+        self._write(f"[{now_str}] [TelemetryDaemon] {message}")
+
+    def _check_fd_health(self):
+        """观测文件描述符占用, 逼近软上限时告警。
+
+        告警文案按 10% 分档而不是带精确数字 —— 否则每次占用量变化都会被当成"新消息",
+        绕开上面的限流, 又变回刷屏。精确数字放在心跳文件与 `daemon --status` 里。
+        """
+        info = fd_usage()
+        if not info:
+            return
+        used, soft = info
+        self.last_fd = {"used": used, "limit": soft}
+        if not soft or used < soft * FD_WARN_RATIO:
+            return
+        bucket = min(used * 100 // soft, 100) // 10 * 10
+        self.log(
+            f"文件描述符吃紧: 已达软上限的约 {bucket}% (疑似句柄泄漏), "
+            f"详情见心跳文件中的 fd 占用"
+        )
 
     def run_cycle(self):
         """执行单次循环：1. 产出物主动嗅探；2. 定时排程检查。"""
@@ -84,7 +199,10 @@ class TelemetryDaemon:
         # 2. 定时排程检查
         self._check_schedule(cfg, now)
 
-        # 3. 刷新心跳
+        # 3. 描述符占用观测 (资源耗尽型故障的唯一抓手)
+        self._check_fd_health()
+
+        # 4. 刷新心跳
         self._update_heartbeat(cfg, now)
 
     def _check_schedule(self, cfg: Dict[str, Any], now: datetime):
@@ -166,6 +284,7 @@ class TelemetryDaemon:
             "monthly_schedule": f"每月{cfg['schedule']['monthly']['day_of_month']}日 {cfg['schedule']['monthly']['time']}",
             "user": cfg["user"]["nickname"],
             "open_id": cfg["user"]["open_id"],
+            "fd": self.last_fd,
         }
         try:
             with open(HEARTBEAT_FILE, "w", encoding="utf-8") as f:
@@ -421,29 +540,34 @@ def install_launchd_agent():
     <string>{LAUNCHD_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{py_exe}</string>
+        <string>{escape(py_exe)}</string>
         <string>-m</string>
         <string>telemetry.cli</string>
         <string>daemon</string>
         <string>--foreground</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>{project_root}</string>
+    <string>{escape(project_root)}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PYTHONPATH</key>
-        <string>{project_root}</string>
+        <string>{escape(project_root)}</string>
         <key>HOME</key>
-        <string>{os.path.expanduser("~")}</string>
+        <string>{escape(os.path.expanduser("~"))}</string>
+    </dict>
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>{LAUNCHD_MAX_OPEN_FILES}</integer>
     </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{LOG_FILE}</string>
+    <string>{escape(LOG_FILE)}</string>
     <key>StandardErrorPath</key>
-    <string>{LOG_FILE}</string>
+    <string>{escape(LOG_FILE)}</string>
 </dict>
 </plist>
 '''
