@@ -29,6 +29,13 @@ if REPO not in sys.path:
 from telemetry import llm_providers, llm_spool           # noqa: E402
 from telemetry.db import TelemetryDB                     # noqa: E402
 
+def _read(path):
+    """读源码。显式指定 utf-8 并关闭句柄 —— Windows 上默认编码是 cp1252,
+    而且未关闭的文件会拦住后续的替换/删除。"""
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
 GO_USAGE_SRC = os.path.join(REPO, "internal", "foundation", "llm_usage.go")
 GO_LLM_SRC = os.path.join(REPO, "internal", "foundation", "llm.go")
 GO_GLM_SRC = os.path.join(REPO, "internal", "foundation", "llm_glm.go")
@@ -81,9 +88,9 @@ class TestSourceEvidence(unittest.TestCase):
             self.assertIn(key, go, "Go 侧没有 %s 的记账证据(usageName/字面量)" % key)
 
     def test_go_source_actually_calls_recorder(self):
-        src = open(GO_LLM_SRC, encoding="utf-8").read()
+        src = _read(GO_LLM_SRC)
         self.assertIn("recordLLMUsage(", src, "llm.go 不再调用记账函数")
-        glm = open(GO_GLM_SRC, encoding="utf-8").read()
+        glm = _read(GO_GLM_SRC)
         self.assertIn('recordLLMUsage("zhipu"', glm)
 
     def test_every_integrated_provider_has_a_recorder(self):
@@ -367,13 +374,13 @@ class TestCrossLanguageContract(unittest.TestCase):
     """Go 写出的字段必须与 Python 摄入端读的字段一致 —— 靠源码对齐, 不靠记忆。"""
 
     def test_spool_env_name_matches_between_languages(self):
-        src = open(GO_USAGE_SRC, encoding="utf-8").read()
+        src = _read(GO_USAGE_SRC)
         self.assertIn('LLMUsageSpoolEnv = "%s"' % llm_providers.SPOOL_ENV, src)
 
     def test_go_written_keys_are_all_consumed(self):
         import re
 
-        src = open(GO_USAGE_SRC, encoding="utf-8").read()
+        src = _read(GO_USAGE_SRC)
         # 取 json.Marshal 那段 map 的键
         block = src[src.index("json.Marshal(map[string]any{"):]
         block = block[:block.index("})")]
@@ -401,6 +408,7 @@ class TestEntryPoints(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, "-m", "telemetry.cli", "llm", "--json", "--no-ingest"],
             cwd=REPO, capture_output=True, text=True, timeout=180,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-800:])
         payload = json.loads(proc.stdout)
@@ -435,6 +443,7 @@ class TestEntryPoints(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, os.path.join(REPO, "scripts", "deploy_scan.py"), "--verify-llm"],
             cwd=REPO, capture_output=True, text=True, timeout=180,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-800:])
         self.assertIn("LLM 接入校验 OK", proc.stdout)

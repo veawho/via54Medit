@@ -150,7 +150,8 @@ def launchd_path() -> str:
 
 def run_cmd(cmd, cwd=REPO_DIR, timeout=300):
     try:
-        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+                             encoding="utf-8", errors="replace")
         return res.returncode == 0, res.stdout.strip(), res.stderr.strip()
     except Exception as e:
         return False, "", str(e)

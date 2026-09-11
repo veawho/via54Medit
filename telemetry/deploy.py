@@ -135,7 +135,8 @@ def _editable_install_cmds() -> List[List[str]]:
 def _run_install(cmd: List[str]) -> Tuple[bool, str]:
     """执行一条安装命令。返回 (是否成功, 失败输出)。"""
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False,
+                             encoding="utf-8", errors="replace")
     except Exception as e:
         return False, str(e)
     if res.returncode == 0:

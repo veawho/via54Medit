@@ -48,6 +48,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.42] - 2026-09-12 (修红 CI: v5.4.41 在 Windows 跑者上红了 —— 子进程输出没指定编码)
+
+v5.4.41 的 CI 在 `python (windows-latest)` 上失败, 另外 5 个 job 全绿。原因**全是我这一轮引入的**,
+而且两条都只在 Windows 上现形。
+
+### 一、真因: `subprocess.run(..., text=True)` 没给编码 → 把"成功"读成"失败"
+
+我在 `auto_sync.py` 的"更新后强制校验 LLM 接入"里走了既有的 `run_cmd(...)`, 它是:
+
+```python
+subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+```
+
+Windows 跑者的默认编码是 **cp1252**, 而子进程打印的是 UTF-8 中文。结果是**读线程**里
+`UnicodeDecodeError`(`can't decode byte 0x8f`), `proc.stdout` 变成 `None` —— 于是:
+
+* `json.loads(proc.stdout)` → `TypeError: ... not NoneType`;
+* 更糟的是 `run_cmd` 里那个宽泛的 `except` 会把它吞成 `(False, "", 报错文本)`,
+  也就是**校验通过也会被报成"LLM 接入校验未通过"**并发出告警。一个纯粹的编码问题
+  伪装成了功能缺陷, 并且在 macOS/ubuntu 上完全看不见(它们默认就是 UTF-8)。
+
+修法: 捕获子进程输出时一律显式 `encoding="utf-8", errors="replace"`。范围限定在
+**判读"部署/更新是否就绪"的那条链路**(`deploy_scan.py` / `bootstrap_device.py` /
+`auto_sync.py` / 全部 `telemetry/`) —— 这条链路的判读结果决定流程成败, 不能依赖平台默认编码。
+
+### 二、新增不变量: 往这条链路上加调用时, 现场就红
+
+`tests/test_repo_hygiene.py` 新增 `test_captured_subprocess_output_has_explicit_encoding`:
+凡是在该范围内**捕获输出**(`capture_output=True` 或 `stdout=PIPE`)的 `subprocess.run/Popen`,
+必须出现 `encoding=`; 只写 stdin / 只看返回码的不算(不涉及解码)。
+
+这类问题本地永远看不见, 只有三平台 CI 才会现形 —— 与其等下次再踩, 不如当场红。
+(实测: 把 `auto_sync.run_cmd` 的 `encoding=` 删掉, 它会精确指出 `scripts/auto_sync.py:153`。)
+
+### 三、顺带修掉测试自身的 Windows 不适配
+
+* `tests/test_llm_ledger.py` 里两处 `subprocess.run(..., text=True)` 同样补上编码;
+* 读 Go 源码从 `open(...).read()` 改为 `with open(...)` —— Windows 上未关闭的句柄会拦住
+  后续的替换/删除, 也会刷一屏 `ResourceWarning`。
+
+### Tests
+- Python: 179 → **180**(+1 编码不变量); `deploy_scan` 78 条、`test_llm_ledger` 34 条全绿
+- 本地复检: `--verify-llm` 退出码 0、`--dry-run` 退出码 0、`go build` + `go test` 全绿
+
 ## [5.4.41] - 2026-09-12 (强制验证接入了哪些 LLM + 确保它们的 token 消耗真能读进库)
 
 回应"部署和更新后还需要强制验证接入了哪些 LLM, 并确保真能读取接入的所有 LLM 的 token 消耗"。

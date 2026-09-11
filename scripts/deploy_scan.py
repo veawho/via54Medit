@@ -157,7 +157,8 @@ def _run(cmd, timeout=900, env=None):
     """跑一条命令, 返回 (ok, 输出尾部)。不抛异常。"""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=timeout, env=env, cwd=REPO)
+                           timeout=timeout, env=env, cwd=REPO,
+                           encoding="utf-8", errors="replace")
     except (OSError, subprocess.SubprocessError) as e:
         return False, "%s: %s" % (type(e).__name__, e)
     out = ((r.stdout or "") + (r.stderr or "")).strip()

@@ -496,6 +496,52 @@ class TestSourceHygiene(unittest.TestCase):
             "sys.path 里出现了外机盘符路径(本仓库跑在 macOS/Linux 上, 那种路径必然不存在):\n  "
             + "\n  ".join(bad))
 
+    #: 判读"部署/更新是否就绪"的那条链路 —— 它们捕获的子进程输出**必须**显式指定编码。
+    #:
+    #: 由来 (v5.4.41): 新加的"更新后强制校验 LLM 接入"走了 ``auto_sync.run_cmd(...)``,
+    #: 而它当时是 ``subprocess.run(..., text=True)`` 没给编码。Windows 跑者的默认编码是
+    #: cp1252, 一读子进程的 UTF-8 中文输出就在**读线程**里抛 ``UnicodeDecodeError``,
+    #: ``stdout`` 变成 ``None``, 于是"校验通过"被报成"校验失败" —— 一个纯粹的编码问题
+    #: 伪装成了功能缺陷, 而且在 macOS/ubuntu 上完全看不见(它们默认就是 UTF-8)。
+    #: 这类问题只在三平台 CI 上才现形, 所以设成不变量:
+    #: 往这条链路上加调用时, 现场就会红。
+    _ENCODING_SCOPE = ("scripts/deploy_scan.py", "scripts/bootstrap_device.py",
+                       "scripts/auto_sync.py", "tests/test_llm_ledger.py")
+    _SPAWN_RE = re.compile(r"subprocess\.(?:run|Popen|check_output)\(")
+    #: 只有**捕获输出**才涉及解码; 只写 stdin / 只读返回码的不算。
+    _CAPTURE_RE = re.compile(r"(capture_output\s*=\s*True|stdout\s*=\s*subprocess\.PIPE)")
+
+    def _scope_files(self):
+        for rel, path in self._sources():
+            norm = rel.replace(os.sep, "/")
+            if norm in self._ENCODING_SCOPE or norm.startswith("telemetry/"):
+                yield norm, path
+
+    def test_captured_subprocess_output_has_explicit_encoding(self):
+        bad = []
+        for rel, path in self._scope_files():
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    lines = fh.read().split("\n")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(lines):
+                if not self._SPAWN_RE.search(line):
+                    continue
+                # 一次调用最多看 8 行: 参数通常是按行写的, 再往下就串到别的语句了。
+                call = "\n".join(lines[i:i + 8])
+                if not self._CAPTURE_RE.search(call):
+                    continue
+                if "encoding=" in call:
+                    continue
+                bad.append("%s:%d  %s" % (rel, i + 1, line.strip()[:90]))
+        self.assertEqual(
+            bad, [],
+            "这些捕获子进程输出的地方没指定编码 —— 子进程输出非 ASCII 时, "
+            "Windows(cp1252)会在读线程里抛 UnicodeDecodeError, 输出变 None, "
+            "于是把'成功'读成'失败':\n  加 encoding=\"utf-8\", errors=\"replace\"\n  "
+            + "\n  ".join(bad))
+
 
 if __name__ == "__main__":
     unittest.main()

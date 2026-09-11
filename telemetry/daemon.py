@@ -636,7 +636,8 @@ def _launchd_domain() -> str:
 def _launchctl(*args: str) -> bool:
     """执行 launchctl 子命令, 返回是否成功。"""
     try:
-        res = subprocess.run(["launchctl", *args], capture_output=True, text=True)
+        res = subprocess.run(["launchctl", *args], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
         return res.returncode == 0
     except Exception:
         return False
@@ -649,7 +650,7 @@ def get_launchd_status() -> Optional[bool]:
     try:
         res = subprocess.run(
             ["launchctl", "print", f"{_launchd_domain()}/{LAUNCHD_LABEL}"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         return res.returncode == 0
     except Exception:
@@ -759,7 +760,8 @@ def install_windows_startup_task():
     task_name = "TraeWorkTelemetryDaemon"
     cmd = f'schtasks /create /tn "{task_name}" /tr "\"{py_exe}\" {args}" /sc onlogon /rl highest /f'
     try:
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
         if res.returncode == 0:
             print(f"[Task] 成功注册 Windows 开机自启计划任务: {task_name}")
         else:

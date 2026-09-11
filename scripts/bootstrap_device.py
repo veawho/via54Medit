@@ -51,7 +51,8 @@ def step_print(title):
 
 
 def run_cmd(cmd, cwd=REPO_DIR, timeout=1800):
-    res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
+    res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
+                         encoding="utf-8", errors="replace")
     return res.returncode == 0, (res.stdout or "").strip(), (res.stderr or "").strip()
 
 
@@ -59,7 +60,8 @@ def _supported_flags(script):
     """探测脚本支持哪些开关(避免在 Windows 上误调 --install-launchd)。"""
     try:
         r = subprocess.run([sys.executable, str(script), "--help"],
-                           capture_output=True, text=True, timeout=120, cwd=str(REPO_DIR))
+                           capture_output=True, text=True, timeout=120, cwd=str(REPO_DIR),
+                           encoding="utf-8", errors="replace")
         return (r.stdout or "") + (r.stderr or "")
     except Exception:                                       # noqa: BLE001
         return ""

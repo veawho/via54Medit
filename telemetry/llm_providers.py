@@ -573,7 +573,8 @@ def probe_credential(prov: Dict[str, Any]) -> Dict[str, Any]:
                     "detail": "未安装 mmx-cli, 无法验证该通道凭据"}
         try:
             r = subprocess.run([mmx, "auth", "status"], capture_output=True,
-                               text=True, timeout=PROBE_TIMEOUT)
+                               text=True, timeout=PROBE_TIMEOUT,
+                               encoding="utf-8", errors="replace")
         except Exception as e:                              # noqa: BLE001
             return {"verifiable": False, "ok": None, "detail": "mmx auth status 执行失败: %s" % e}
         if r.returncode != 0:
@@ -631,7 +632,8 @@ def read_mmx_quota(timeout: int = PROBE_TIMEOUT) -> Optional[Dict[str, Any]]:
         return None
     try:
         r = subprocess.run([mmx, "quota", "show", "--output", "json"],
-                           capture_output=True, text=True, timeout=timeout + 10)
+                           capture_output=True, text=True, timeout=timeout + 10,
+                           encoding="utf-8", errors="replace")
         if r.returncode != 0:
             return None
         data = json.loads(r.stdout or "{}")
