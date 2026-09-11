@@ -18,10 +18,17 @@
    ``cmd/medit`` 里同一个 cobra 命令变量不应被 ``rootCmd.AddCommand`` 注册多次, 否则
    ``medit --help`` 会把同名命令列两遍 (2026-09-11 修过一次: anno2ppt / pico / systematic /
    grade 各挂了两遍)。这里加静态防护。
+
+3) 仓库级约定
+   - 不得再出现裸 ``import fitz``(``TestFitzImportForm``);
+   - PPT 的版式与文字必须来自 PowerPoint, 但**只禁会重新排版的引擎**,
+     只光栅化的下游工具 (PyMuPDF / pdftoppm) 允许换 (``TestRenderFidelity``,
+     判定标准见 ``docs/ppt-render-fidelity.md``)。
 """
 import os
 import re
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MIRROR_A = os.path.join(REPO, "scripts", "hl_v3_final")
@@ -267,49 +274,59 @@ class TestFitzImportForm(unittest.TestCase):
         self.assertEqual(getattr(mod.fitz, "__name__", ""), "pymupdf")
 
 
-class TestPowerPointOnlyRender(unittest.TestCase):
-    """PPT 渲染只允许 PowerPoint 一条通道。
+class TestRenderFidelity(unittest.TestCase):
+    """PPT 的**版式与文字必须来自 PowerPoint** —— 但只禁"会重新排版"的引擎。
 
-    规则出处 (2026-08-05 用户硬规则, 2026-09-11 用户重申):
-      "powerpoint 渲染作为默认, 原因是 keynote 和 libreoffice 打开后视觉和 PowerPoint
-       不一致, 以 PowerPoint 为准, 并默认必须用 PowerPoint 渲染"
-    权威说明: ``skills/via54medit-algorithm-driven-upgrade-v2/references/
-    v2.12.0-powerpoint-render-mandatory.md``。
+    规则出处: 2026-08-05 用户硬规则 + 2026-09-11 用户**澄清判定标准**:
+      "我是认为 PowerPoint 渲染出来的图片更符合原版, 如果有其他渲染图片并不会改变
+       PowerPoint 排版与文字的方式也可以集成"
+    → 判定标准是**保真(会不会重新排版)**, 不是"是不是 PowerPoint 这个程序"。
+    完整结论表: ``docs/ppt-render-fidelity.md``。
 
-    为什么值得设成不变量: v5.4.24/v5.4.25 只把 ``scripts/ppt_render_engine.py`` 收口了,
-    但**同一个仓库里还有别的 PPT 渲染入口**没跟着改 (``ppt_expand.render_pptx_images``、
-    技能包里的 ``render_ppt_slides.py``、``step1_export_slides.py``), 于是"禁用其它通道"
-    实际上没禁干净 —— 用户为此重申过一次。这条测试就是为了让那种漏改**当场红**,
-    而不是等下一个人去逐个文件读。
+    所以本类把线划在两处, 两条都要守:
+      * **禁**: 会重新排版的引擎 (LibreOffice/soffice、Keynote、WPS、python-pptx、
+        Aspose、Spire、GroupDocs、Syncfusion) —— 它们各自重排 OOXML, 与原版不一致;
+      * **放**: 只光栅化、不重排的下游工具 (PyMuPDF、pdftoppm) —— 把 PowerPoint 导出的
+        固定版式 PDF 变成图片, 不改变版式, 因此**不算换通道**;
+      * **白名单**: 栅格化器取值必须恰好是那两个, 想加新的得先证明它不重排。
+
+    历史: v5.4.26 的上一版把线划成了"只允许 PowerPoint 这一个程序", 比规则更严 ——
+    连"把 PowerPoint 自己导出的 PDF 转成 PNG"都想禁掉; 用户澄清后纠正如上。
+    那条过度收紧的教训也留着: 当年 v5.4.24/25 只改了一个文件就以为"禁干净了"。
 
     扫描范围: ``scripts/`` 与 ``skills/`` 下的**非测试** Python 文件
-    (测试文件会为"验证某通道已消失"而故意写出通道名, 属正常引用)。
+    (测试文件会为"验证某引擎已消失"而故意写出引擎名, 属正常引用)。
     """
 
     SCAN_DIRS = ("scripts", "skills")
 
-    #: 扫描时跳过的文件名前缀 —— 它们故意写出通道名做反向断言。
+    #: 扫描时跳过的文件名前缀 —— 它们故意写出引擎名做反向断言。
     SKIP_PREFIX = ("test_", "conftest")
 
     #: 允许出现的文件 -> 理由。每条都必须写明, 不许无理由放行。
     ALLOWED = {
         os.path.join("scripts", "unified_render_engine.py"):
             "命中的是 **Word** (DOC/DOCX) → PDF 那条路径, 不是 PPT —— PowerPoint 无法渲染 "
-            "Word 文档, 故 PPT 规则不适用, LibreOffice 在这里是 Word 渲染的实现之一。"
+            "Word 文档, 故本规则不适用, LibreOffice 在这里是 Word 渲染的实现之一。"
             "若要求 Word 也一并收口, 删掉 render_docx_to_images() 的 LibreOffice 分支 "
             "并同步删掉本条目。",
     }
 
-    #: 以可执行名调用其它渲染器 —— 这是"换通道"最直接的形态。
-    _OTHER_RENDERER = re.compile(r"""["'](?:soffice|libreoffice)["']""")
+    #: 会**重新排版**的引擎 —— 以可执行名/模块名出现即为"换排版引擎"。
+    _REFLOW_ENGINE = re.compile(
+        r"""["'](?:soffice|libreoffice|keynote|wps|aspose|spire|groupdocs|syncfusion)["']"""
+        r"""|^\s*(?:import|from)\s+(?:aspose|spire|groupdocs|syncfusion)\b""",
+        re.IGNORECASE)
     #: LibreOffice 的转换开关 (出现即意味着走它转文档)。
     _CONVERT_FLAG = re.compile(r"--convert-to")
-    #: 已删除的通道函数名 —— 连名字都不该再出现。
+    #: 已删除的引擎函数名 —— 连名字都不该再出现。
     _GONE_NAMES = ("render_via_soffice", "render_via_python_pptx",
                    "_find_soffice", "render_ppt_libreoffice")
-    #: RENDER_ENGINE 只允许这两个取值。
+    #: RENDER_ENGINE (排版引擎) 只允许这两个取值。
     _ENGINE_ENV = re.compile(r"""RENDER_ENGINE["']\s*[:=]\s*["']([^"']+)["']""")
     _ALLOWED_ENGINE_VALUES = {"powerpoint", "ppt"}
+    #: RENDER_RASTERIZER (下游只光栅化) 的白名单。
+    _ALLOWED_RASTERIZERS = {"pymupdf", "pdftoppm"}
 
     def _iter_py(self):
         for top in self.SCAN_DIRS:
@@ -333,31 +350,32 @@ class TestPowerPointOnlyRender(unittest.TestCase):
                 continue
             for i, line in enumerate(lines, 1):
                 hit = None
-                if self._OTHER_RENDERER.search(line):
-                    hit = "调用了其它渲染器可执行文件"
+                if self._REFLOW_ENGINE.search(line):
+                    hit = "调用了会重新排版的引擎"
                 elif self._CONVERT_FLAG.search(line):
                     hit = "用了 LibreOffice 的转换开关"
                 else:
                     for name in self._GONE_NAMES:
                         if name in line:
-                            hit = f"出现已删除的通道函数 {name}"
+                            hit = f"出现已删除的引擎函数 {name}"
                             break
                 if hit:
                     offenders.append(f"{rel}:{i}  [{hit}]  {line.strip()}")
         return offenders
 
-    def test_no_other_render_channel_in_code(self):
+    def test_no_reflow_engine_in_ppt_paths(self):
         offenders = self._scan()
         self.assertEqual(
             offenders, [],
-            "这些位置仍在走非 PowerPoint 的渲染通道。按 2026-08-05 用户硬规则, "
-            "PPT 只能由 PowerPoint 渲染 (其它渲染器字体/布局与原版不一致)。"
-            "改法: 委托给 ppt_render_engine.render_ppt_slides_auto() / "
-            "hl_v3_final/ppt_to_pdf.py; 若确属例外, 加进 ALLOWED 并写明理由:\n  "
+            "这些位置用了会**重新排版**的引擎 —— 它们各自实现 OOXML 排版, 字体与布局会与原版"
+            "分叉, 因此不能用于 PPT。按 2026-08-05 用户硬规则, 版式与文字必须由 PowerPoint 产出;"
+            "但只光栅化、不重排的下游工具 (PyMuPDF / pdftoppm) 是允许的, 不算换通道。"
+            "改法: 委托给 ppt_render_engine.render_ppt_slides_auto() / hl_v3_final/ppt_to_pdf.py;"
+            "若确属例外, 加进 ALLOWED 并写明理由:\n  "
             + "\n  ".join(offenders))
 
-    def test_render_engine_env_has_no_other_channel_value(self):
-        """代码里不得再设置指向其它通道的 RENDER_ENGINE 取值。"""
+    def test_render_engine_env_has_no_other_engine_value(self):
+        """代码里不得再设置指向其它**排版引擎**的 RENDER_ENGINE 取值。"""
         bad = []
         for rel, path in self._iter_py():
             try:
@@ -370,6 +388,35 @@ class TestPowerPointOnlyRender(unittest.TestCase):
                 if m and m.group(1).lower() not in self._ALLOWED_ENGINE_VALUES:
                     bad.append(f"{rel}:{i}  {line.strip()}")
         self.assertEqual(bad, [], "RENDER_ENGINE 只允许 powerpoint: \n  " + "\n  ".join(bad))
+
+    def test_rasterizer_whitelist_is_only_fixed_layout_tools(self):
+        """``RENDER_RASTERIZER`` 白名单只能放"只光栅化、不重排"的工具。
+
+        这条正是用户 2026-09-11 那句话的落地: "如果有其他渲染图片并不会改变 PowerPoint
+        排版与文字的方式也可以集成" —— 可以集成, 但**集成进来的必须证明自己不重排**。
+        白名单一旦被塞进会重排的引擎, 或者取值不再受约束, 这里当场红。
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "ppt_render_engine_probe",
+            os.path.join(REPO, "scripts", "ppt_render_engine.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        self.assertEqual(
+            set(mod._RASTERIZERS), self._ALLOWED_RASTERIZERS,
+            "栅格化器白名单变了 —— 新增项必须能证明'只光栅化固定版式、不重排'"
+            "才算合格 (见 docs/ppt-render-fidelity.md)")
+
+        # 默认必须是白名单里的、且被判定的那一个
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertIn(mod._rasterizer_pref(), self._ALLOWED_RASTERIZERS)
+
+        # 会重排的引擎拿来当栅格化器 -> 必须报错, 而不是悄悄用它
+        for bad in ("libreoffice", "soffice", "keynote", "aspose"):
+            with mock.patch.dict(os.environ, {"RENDER_RASTERIZER": bad}):
+                with self.assertRaises(mod.RenderEngineError):
+                    mod._rasterizer_pref()
 
     def test_allowlist_has_no_zombie_entries(self):
         """例外清单不该留僵尸条目 —— 文件改名/删除后条目要跟着清。"""

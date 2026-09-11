@@ -249,8 +249,11 @@ def render_pptx_images(input_path: str, out_dir: str, dpi: int = DEFAULT_DPI) ->
     """
     把 PPT 每页渲染成 jpg。
 
-    **只走 PowerPoint 一条通道** —— 2026-08-05 用户硬规则, 2026-09-11 用户重申:
-    "只使用 PowerPoint 渲染, 禁用其它通道"。原版 PPT 是 PowerPoint 做的,
+    **只走 PowerPoint 一条通道** —— 2026-08-05 用户硬规则, 2026-09-11 用户澄清判定标准:
+    "我是认为 PowerPoint 渲染出来的图片更符合原版, 如果有其他渲染图片并不会改变 PowerPoint
+    排版与文字的方式也可以集成"。即: **版式与文字**这一步不可替代, 由 PowerPoint 产出;
+    **只光栅化、不重排**的下游工具则可以换 (见 docs/ppt-render-fidelity.md)。
+    原版 PPT 是 PowerPoint 做的,
     Keynote / LibreOffice / WPS / python-pptx 打开后字体与布局和原版不一致,
     不能当作渲染标准 (见 skills/.../references/v2.12.0-powerpoint-render-mandatory.md)。
 

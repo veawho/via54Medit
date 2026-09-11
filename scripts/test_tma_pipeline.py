@@ -625,10 +625,11 @@ class TestRenderEngine(unittest.TestCase):
         self.assertIn("PowerPoint 渲染失败", logged)
 
     def test_powerpoint_pref_never_falls_back_to_other_channels(self):
-        """规范: **只使用 PowerPoint 渲染**。偏好=powerpoint 时不可用 → 直接失败, 不换通道。
+        """版式必须由 PowerPoint 产出。偏好=powerpoint 时不可用 → 直接失败, 不换排版引擎。
 
         这条钉住一个**真实存在过的违规**: 原先 darwin 上没装 PowerPoint 时会回落到
-        soffice 或 python-pptx —— 那等于自动切换渲染通道。现改为抛错。
+        soffice 或 python-pptx —— 那等于自动换个排版引擎。现改为抛错。
+        (注意区分: 只光栅化、不重排的下游工具可以换, 见 ``_RASTERIZERS``。)
         """
         clean = {k: v for k, v in os.environ.items() if k != "RENDER_ENGINE"}
         tmp = tempfile.mkdtemp()
@@ -647,7 +648,8 @@ class TestRenderEngine(unittest.TestCase):
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=False):
             with self.assertRaises(RuntimeError) as cm:
                 pre._build_engine_list()
-        self.assertIn("只使用 PowerPoint", str(cm.exception))
+        self.assertIn("必须由 PowerPoint 产出", str(cm.exception))
+        self.assertIn("不降级", str(cm.exception))
 
         # 渲染入口返回 0; 别的通道**在代码里已不存在**, 不可能被调用
         with mock.patch.dict(os.environ, clean, clear=True), \
@@ -683,14 +685,17 @@ class TestRenderEngine(unittest.TestCase):
                 pre._build_engine_list()
 
     def test_no_advice_to_switch_render_channels(self):
-        """仓库内不得出现"改用其它渲染通道"的引导表述。
+        """仓库内不得出现"改用其它**排版引擎**"的引导表述。
 
         这条是**给我自己上的锁**: v5.4.23 我把"改用其它渲染通道"写进了失败提示文案
-        和 CHANGELOG, 直接违反 2026-09-04 的"只使用 PowerPoint、禁用其它通道"规范。
+        和 CHANGELOG, 而那等于引导换掉 PowerPoint 的排版 —— 违反"版式必须由 PowerPoint 产出"。
         光把它从代码里删掉不够 —— 要有一条测试防止再写回去。
 
+        注意区分 (2026-09-11 用户澄清判定标准): 禁的是"换**排版引擎**"的引导;
+        提及"只光栅化、不重排的下游工具"(PyMuPDF / pdftoppm)是允许的, 它们不改变版式。
+
         允许的形态: 参数校验/文档里**客观列出** RENDER_ENGINE 的可选值(那是参数说明,
-        不是建议改用), 以及测试里为验证 auto 分支而显式设置的 ``{"RENDER_ENGINE": "auto"}``。
+        不是建议改用), 以及测试里为验证分支而显式设置的取值。
         """
         # 注意: 模式用**拼接**构造, 否则定义它的这两行自己就会命中(自我引用)。
         _v = "RENDER_ENGINE="
@@ -717,7 +722,7 @@ class TestRenderEngine(unittest.TestCase):
                                                        i + 1, line.strip()[:110]))
         self.assertEqual(
             hits, [],
-            "出现了引导改用其它渲染通道的表述 —— 违反'只使用 PowerPoint 渲染, 禁用其它通道':\n  "
+            "出现了引导改用其它**排版引擎**的表述 —— 版式必须由 PowerPoint 产出:\n  "
             + "\n  ".join(hits))
 
     def test_hint_line_is_separate_from_truncated_message(self):
@@ -740,6 +745,99 @@ class TestRenderEngine(unittest.TestCase):
         fail_lines = [l for l in lines if "失败:" in l]
         self.assertTrue(fail_lines and len(fail_lines[0]) < 400,
                         "失败行本身应保持简短(被截断)")
+
+    def test_rasterizer_env_rejects_reflow_engines(self):
+        """``RENDER_RASTERIZER`` 只认"只光栅化、不重排"的工具。
+
+        用户 2026-09-11: "如果有其他渲染图片并不会改变 PowerPoint 排版与文字的方式也可以集成"
+        —— 可以集成, 但清单外的取值必须**报错**, 而不是悄悄拿一个会重排的引擎去画。
+        """
+        with mock.patch.dict(os.environ, {"RENDER_RASTERIZER": "pymupdf"}):
+            self.assertEqual(pre._rasterizer_pref(), "pymupdf")
+        for bad in ("libreoffice", "soffice", "keynote", "wps", "aspose"):
+            with mock.patch.dict(os.environ, {"RENDER_RASTERIZER": bad}):
+                with self.assertRaises(pre.RenderEngineError):
+                    pre._rasterizer_pref()
+
+    def test_pdftoppm_rasterizer_forces_cropbox(self):
+        """pdftoppm 路径**必须**带 ``-cropbox``。
+
+        它默认按 MediaBox 渲染, 页面若被裁过就会带出白边/偏移 —— 那等于改变了版式,
+        正是"保真"标准不允许的。所以 ``-cropbox`` 是硬要求, 这里钉住。
+        """
+        calls = []
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        tmp = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {"RENDER_RASTERIZER": "pdftoppm"}), \
+                mock.patch("shutil.which", return_value="/usr/bin/pdftoppm"), \
+                mock.patch.object(pre.subprocess, "run",
+                                  side_effect=lambda cmd, **kw: (calls.append(cmd), _R())[1]):
+            n = pre._rasterize_pdf(os.path.join(tmp, "x.pdf"), tmp, 150)
+        self.assertEqual(n, 0, "替身不产文件, 这里只验证命令形态")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("-cropbox", calls[0], "pdftoppm 必须带 -cropbox 才不会偏移")
+        self.assertIn("-r", calls[0])
+        self.assertIn("150", calls[0])
+
+    def test_non_embedded_fonts_distinguishes_embedded(self):
+        """``_non_embedded_fonts`` 要能分清"字形随文档走"与"要靠替代字体"。
+
+        两种形态都用 PyMuPDF 实测过的真实结果构造:
+          * base-14 (Helvetica) -> ``ext='n/a'``, 字形不随文档走 -> **必须**被列出;
+          * ``insert_htmlbox`` 产生内嵌字体 -> ``ext='ttf'/'cid'`` -> **不得**被列出。
+        """
+        import pymupdf as fitz
+        tmp = tempfile.mkdtemp()
+
+        base14 = os.path.join(tmp, "base14.pdf")
+        doc = fitz.open()
+        doc.new_page().insert_text((72, 72), "Hello world", fontsize=14)
+        doc.save(base14)
+        doc.close()
+        self.assertIn("Helvetica", pre._non_embedded_fonts(base14),
+                      "base-14 字体的字形不随文档走, 应被列出")
+
+        embedded = os.path.join(tmp, "embedded.pdf")
+        doc = fitz.open()
+        doc.new_page().insert_htmlbox(fitz.Rect(50, 50, 500, 300),
+                                      "<p>Embedded test ABC 你好</p>")
+        doc.save(embedded)
+        doc.close()
+        self.assertEqual(pre._non_embedded_fonts(embedded), [],
+                         "内嵌字体不该被列为未内嵌")
+
+    def test_macos_render_warns_when_fonts_not_embedded(self):
+        """未内嵌字体必须**打印保真警告** —— 否则"字形被替换"会静默发生。"""
+        tmp = tempfile.mkdtemp()
+        with mock.patch.object(pre, "export_ppt_to_pdf",
+                               return_value=os.path.join(tmp, "s.pdf")), \
+                mock.patch.object(pre, "_non_embedded_fonts",
+                                  return_value=["Calibri", "Arial"]), \
+                mock.patch.object(pre, "_rasterize_pdf", return_value=3), \
+                mock.patch("builtins.print") as mp:
+            n = pre.render_via_macos_powerpoint(os.path.join(tmp, "x.pptx"), tmp)
+        self.assertEqual(n, 3)
+        lines = [" ".join(str(a) for a in c.args) for c in mp.call_args_list]
+        self.assertTrue(any("未内嵌字体" in l and "Calibri" in l for l in lines),
+                        "应打印未内嵌字体警告, 实际: %s" % lines)
+
+    def test_macos_render_is_quiet_when_fonts_embedded(self):
+        """字体都内嵌时不该有警告 —— 否则警告会变成噪音、被无视。"""
+        tmp = tempfile.mkdtemp()
+        with mock.patch.object(pre, "export_ppt_to_pdf",
+                               return_value=os.path.join(tmp, "s.pdf")), \
+                mock.patch.object(pre, "_non_embedded_fonts", return_value=[]), \
+                mock.patch.object(pre, "_rasterize_pdf", return_value=3), \
+                mock.patch("builtins.print") as mp:
+            n = pre.render_via_macos_powerpoint(os.path.join(tmp, "x.pptx"), tmp)
+        self.assertEqual(n, 3)
+        lines = [" ".join(str(a) for a in c.args) for c in mp.call_args_list]
+        self.assertFalse(any("未内嵌字体" in l for l in lines), "不该有警告: %s" % lines)
 
 
 # ---------- T13: 自然语言一键全自动管线 (via54_auto) ----------

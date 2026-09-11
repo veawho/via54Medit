@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ppt_to_pdf.py — PPT → PDF 导出 (**只走 Microsoft PowerPoint 一条通道**)
+"""ppt_to_pdf.py — PPT → PDF 导出 (**版式与文字由 Microsoft PowerPoint 产出**)
 
 为什么单独一个模块
 ------------------
@@ -8,12 +8,18 @@
 技能包必须**自包含** (会被分发到 ``~/.hermes/skills/``), 不能 import 上层
 ``scripts/ppt_render_engine.py``, 所以这里放一份可独立运行的最小实现。
 
-规则 (2026-08-05 用户硬规则; 2026-09-11 用户重申)
---------------------------------------------------
-"只使用 PowerPoint 渲染, 禁用其它通道" —— 原版 PPT 是 PowerPoint 做的,
-Keynote / LibreOffice / WPS / python-pptx 打开后字体、布局、颜色都不一致,
-不能作为渲染标准 (见 ``references/v2.12.0-powerpoint-render-mandatory.md``)。
-故本模块**不 fallback**: 拿不到 PowerPoint 就抛错, 不产出近似渲染的替代品。
+规则与判定标准 (2026-08-05 用户硬规则; 2026-09-11 用户澄清)
+------------------------------------------------------------
+用户 2026-09-11: "我是认为 PowerPoint 渲染出来的图片更符合原版, 如果有其他渲染图片
+并不会改变 PowerPoint 排版与文字的方式也可以集成"。
+
+所以标准是**保真**, 不是程序名:
+  * **不可替代** —— PPTX→画面这一步 (版式/文字)。Keynote / LibreOffice / WPS /
+    python-pptx 会各自重排 OOXML, 字体与布局和原版不一致, 一律不用。
+  * **可以换** —— 把这里产出的**固定版式 PDF** 再栅格化成图片那一步 (不重排)。
+  * 拿不到 PowerPoint 就**抛错**, 不产出近似渲染的替代品。
+完整结论表见仓库 ``docs/ppt-render-fidelity.md``; 规则出处见
+``references/v2.12.0-powerpoint-render-mandatory.md``。
 
 用法
 ----
@@ -96,8 +102,8 @@ def export_ppt_to_pdf(pptx_path, pdf_path):
 
     if sys.platform != "darwin":
         raise PPTExportError(
-            "本平台没有 PowerPoint 通道 —— 规范要求只使用 PowerPoint 渲染、"
-            "禁用其它通道, 故不降级。")
+            "本平台没有 PowerPoint 通道 —— 版式规定必须由 PowerPoint 产出、"
+            "不用别的排版引擎, 故不降级。")
 
     # 清掉可能卡死的残留实例(模态对话框会阻塞 Apple 事件, 表现为 -9074 / 超时)
     subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)

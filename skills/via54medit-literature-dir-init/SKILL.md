@@ -262,7 +262,8 @@ save theDoc in POSIX file "{output_dir}/_ppt_export.pdf" as save as PDF
 
 **入口 (只有 PowerPoint 一条通道)**:
 ```bash
-# 只走 PowerPoint (2026-08-05 用户硬规则; 2026-09-11 重申"禁用其它通道")
+# 只走 PowerPoint (2026-08-05 用户硬规则; 2026-09-11 澄清: 版式必须来自 PowerPoint,
+# 但"只光栅化、不重排"的下游工具可以换 —— 判定标准见 docs/ppt-render-fidelity.md)
 python render_ppt_slides.py <pptx>
 ```
 原先还有 `--engine libreoffice` 备选引擎, **已按规范删除** —— Keynote / LibreOffice / WPS

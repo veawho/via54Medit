@@ -41,8 +41,13 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
    - Python: use `/Users/david/.hermes/hermes-agent/venv/bin/python3` or system `python3`.
    - Go: use standard Go 1.22+.
    - DeepSeek API: use `DEEPSEEK_API_KEY`.
-5. **PPT 渲染: 只使用 Microsoft PowerPoint, 禁用其它通道 (2026-08-05 用户硬规则, 2026-09-11 重申)**:
-   - 原版 PPT 是 PowerPoint 做的。Keynote / LibreOffice / WPS / python-pptx 打开后字体、布局、颜色都与原版不一致, 不能作为渲染标准。用户原话: "powerpoint 渲染作为默认... 并默认必须用 PowerPoint 渲染"。
-   - 因此 **不做默认也不做兜底**: 拿不到 PowerPoint 就**报错** (或返回 0 页并打印原因), 绝不静默换渲染器。
-   - 唯一实现: `scripts/hl_v3_final/ppt_to_pdf.py` (PPT→PDF, 技能包自包含) 与 `scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
-   - 不变量由 `tests/test_repo_hygiene.py::TestPowerPointOnlyRender` 看守; 权威说明见 `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.12.0-powerpoint-render-mandatory.md`。
+5. **PPT 渲染保真: 版式与文字必须来自 Microsoft PowerPoint (2026-08-05 用户硬规则; 2026-09-11 澄清判定标准)**:
+   - 用户原话 (2026-08-05): "powerpoint 渲染作为默认... 并默认必须用 PowerPoint 渲染"。
+   - 用户澄清 (2026-09-11): "我是认为 PowerPoint 渲染出来的图片更符合原版, **如果有其他渲染图片并不会改变 PowerPoint 排版与文字的方式也可以集成**"。
+   - 所以判定标准是**会不会重新排版**, 不是"是不是 PowerPoint 这个程序":
+     - **不可替代**: PPTX→画面这一步 (版式/文字)。只允许 PowerPoint —— Windows COM / macOS 原生 AppleScript。
+     - **可以换**: 把 PowerPoint 导出的**固定版式**产物 (PDF/EMF/位图) 再栅格化成图片这一步 —— PDF 只解释绘制指令、不重排, 所以不算换通道。栅格化器见 `RENDER_RASTERIZER` (`pymupdf` 默认 / `pdftoppm` 强制 `-cropbox`)。
+     - **禁止**: 任何会重新排版的引擎 —— LibreOffice / Keynote / WPS / python-pptx / Aspose.Slides / Spire.Presentation / GroupDocs / Syncfusion。拿不到 PowerPoint 就**报错**, 不降级。
+   - 首选 PowerPoint **直接出位图** (Windows `Slide.Export`), 因为还绕开"PDF 字体未内嵌 → 栅格化替换字形"的风险; 走 PDF 时会打印未内嵌字体的保真警告。
+   - 实现位置: `scripts/hl_v3_final/ppt_to_pdf.py` (PPT→PDF, 技能包自包含) 与 `scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
+   - 不变量由 `tests/test_repo_hygiene.py::TestRenderFidelity` 看守; 判定标准与各方案结论表见 `docs/ppt-render-fidelity.md`, 规则出处见 `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.12.0-powerpoint-render-mandatory.md`。

@@ -3,9 +3,10 @@
 用法: python3 step1_export_slides.py <ppt_path> <out_dir> [dpi]
 输出: <out_dir>/<base>_expanded.pdf, <out_dir>/images/slide_pp_NNN.jpg
 
-渲染通道: **只走 Microsoft PowerPoint** —— 见同目录 ``ppt_to_pdf.py``。
-原版 PPT 是 PowerPoint 做的, Keynote / LibreOffice / WPS / python-pptx 打开后
-字体与布局和原版不一致, 按 2026-08-05 用户硬规则 (2026-09-11 重申) 禁用, **不 fallback**。
+渲染通道: **版式与文字由 Microsoft PowerPoint 产出** —— 见同目录 ``ppt_to_pdf.py``。
+Keynote / LibreOffice / WPS / python-pptx 会各自重排 OOXML, 字体与布局和原版不一致,
+按 2026-08-05 用户硬规则一律不用, **不 fallback** (2026-09-11 用户澄清: 判定标准是
+"会不会改变 PowerPoint 的排版与文字", 不是程序名 —— 见 docs/ppt-render-fidelity.md)。
 本文件原先直接调用 LibreOffice 的 headless 转换, 已按规范改掉。
 """
 import os

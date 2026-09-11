@@ -4,7 +4,9 @@
 核心原则:
   1. 只用 PowerPoint 渲染 —— 原版 PPT 是 PowerPoint 做的, Keynote / LibreOffice /
      WPS / python-pptx 打开后字体与布局不一致, 不能当作渲染标准
-     (2026-08-05 用户硬规则; 2026-09-11 用户重申"只使用 PowerPoint 渲染, 禁用其它通道")。
+     (2026-08-05 用户硬规则; 2026-09-11 用户澄清判定标准: "如果有其他渲染图片并不会改变
+      PowerPoint 排版与文字的方式也可以集成" —— 即版式必须来自 PowerPoint, 但只光栅化、
+      不重排的下游工具可以换)。
      本文件原先带 `--engine libreoffice` 备选引擎, 已按规范删除。
   2. 输出到 PPT 同目录树下的 _ppt_renders/ (避免沙盒授权)
 
@@ -121,8 +123,8 @@ def render(pptx_path, output_dir, engine='powerpoint'):
 
     if engine not in ('powerpoint', 'applescript'):
         raise RuntimeError(
-            f'不支持的渲染通道 {engine!r} —— 按规范只使用 PowerPoint 渲染、禁用其它通道 '
-            f'(Keynote / LibreOffice / WPS / python-pptx 会与原版视觉不一致)。')
+            f'不支持的渲染通道 {engine!r} —— 版式规定必须由 PowerPoint 产出 '
+            f'(Keynote / LibreOffice / WPS / python-pptx 会重排, 与原版视觉不一致)。')
 
     print('[引擎] PowerPoint (macOS 原生 AppleScript)')
     pdf_path = render_ppt_applescript(pptx_path, output_dir)

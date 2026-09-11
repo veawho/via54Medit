@@ -3,7 +3,7 @@
 test_pipeline_ha.py — via54Medit 全链路高可用性 (High Availability) 与 5 步双重对齐流水线回归测试
 
 测试覆盖:
-  1. PPT 渲染只走 PowerPoint (2026-09-04 规范; 2026-09-11 用户重申"禁用其它通道")
+  1. PPT 渲染: 版式与文字只由 PowerPoint 产出 (2026-08-05 硬规则; 2026-09-11 澄清判定标准)
   2. 统一多模态视觉 Provider (MiniMax mmx / SenseNova / GLM 容错与模拟应答)
   3. 统一 LLM Provider (DeepSeek / MiniMax / SenseNova / GLM)
   4. 幻灯片作用域隔离验证 (杜绝跨 Slide 候选句污染)
@@ -60,7 +60,7 @@ class TestPipelineHA(unittest.TestCase):
     def _require_powerpoint_render(self):
         """依赖**真实 PowerPoint 渲染**的用例先过这道闸。
 
-        为什么需要: 自 v5.4.24 起 PPT 渲染只走 PowerPoint、不 fallback。本机若 PowerPoint
+        为什么需要: PPT 的版式与文字只由 PowerPoint 产出、不 fallback 到别的排版引擎。本机若 PowerPoint
         自动化被模态对话框挡住(实测 `save ... as PDF` 报 AppleEvent -1712), 渲染就是 0 页 ——
         那**是环境故障, 不是管线回归**。让它以"跳过 + 写明原因"呈现, 比伪装成断言失败诚实,
         也不会把 PowerPoint 自身的问题误记到 Step1/2/5 的账上。
