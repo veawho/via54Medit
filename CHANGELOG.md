@@ -48,6 +48,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.5] - 2026-09-11 (修复: 守护进程文件描述符泄漏 + 后台启动回归)
+
+### Fixed
+- **守护进程耗尽文件描述符 (`Errno 24`)**: `TelemetryDB.get_connection()` 返回的是裸 `sqlite3` 连接, 而全部调用方都写成 `with self.get_connection() as conn: x`。Python 的 `sqlite3.Connection` 上下文管理器**只提交事务、并不关闭连接**, 于是每一次查询都漏掉一个连接。守护进程以 5 秒滴答高频调用这些查询, 连接持续累积, 最终撞穿 `EMFILE` 上限。
+  - **现场**: 日志自 01:38 起累积 **12200 条** `[Errno 24] Too many open files`, 日志被同一句错误刷到 2 MB; 目录扫描、配置读取全面失败, 监控实际已停摆。
+  - **修复**: `get_connection()` 改为 `@contextmanager`, 在 `finally` 中 `close()`; 各写入方法已有的显式 `commit()` 保持不变 (语义不变)。
+- **启动守护时抛 `NameError`**: `daemon.py` 的后台分支在移除 `PYTHONPATH` 注入时, 把 `env` 参数遗留在了 `subprocess.Popen(...)` 中, 而该变量已无任何定义。此分支**必然**抛 `NameError`, 使手动 `daemon --start` 与一键部署「步骤 5/6 启动后台守护」双双失效 —— 后者意味着**新机器部署会在最后一步失败**。
+  - **为何长期静默**: 正式运行路径由 LaunchAgent 以 `--foreground` 拉起, 恰好不经过这段代码; 单测亦未覆盖该分支。
+  - **修复**: 移除该参数, 子进程继承当前环境。子进程以 `cwd=project_root` 配合 `-m telemetry.cli` 运行, 标准做法即可定位模块, 无需注入 `PYTHONPATH`。
+- **`pdf_utils.get_pdf_page_count()` 泄漏文件句柄**: pypdf 分支打开的文件对象与 PyMuPDF 分支的 `Document` 均未关闭; 现分别改用 `with open(...)` 与 `with fitz.open(path) as doc`。
+- **`feishu_sync` 自动建表请求泄漏响应对象**: `urlopen()` 的返回值未关闭, 现改为 `with ... as _: pass`。
+- **`daemon.py` 启动时日志句柄泄漏**: `open(LOG_FILE, "a")` 未关闭; 现改为 `with open(...)`。
+
+### 验证
+- test_telemetry **37/37 passed** (新增 1 项 `test_start_daemon_background_spawn`: 打桩 `subprocess.Popen` 并把 PID / 日志路径指向临时目录, 断言后台分支真正走到 `Popen`、`cwd` 真实存在, 且不产生任何真实进程)。
+- **负向对照**: 把缺陷注入回 `daemon.py` 后, 该项单测立即以 `NameError: name 'env' is not defined` 失败 ⇒ 用例确能捕获此回归 (此前该分支无任何覆盖)。
+- **真机实测** (macOS / uv Python 3.11.15): 泄漏期间 FD 持续攀升至上限; 修复并重启后守护进程 **FD 稳定在 11**, 日志不再出现 `EMFILE`, 心跳与目录扫描恢复正常。
+
+### 补充说明
+- 文件描述符泄漏期间, 进程只"假死"而不退出, LaunchAgent 的 `KeepAlive` 无从感知, 因此故障可持续十余小时无人察觉 —— 这类"资源耗尽但不崩溃"的故障建议后续纳入监控告警。
+
 ## [5.4.4] - 2026-09-10 (变更默认: PEP 668 改为需显式授权的保守策略)
 
 ### Changed
