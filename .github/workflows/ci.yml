@@ -61,6 +61,10 @@ jobs:
         working-directory: scripts/hl_v3_final
         run: python test_hl_lib.py
 
+      - name: forbidden zones (v3 FINAL) tests
+        working-directory: scripts/hl_v3_final
+        run: python test_forbidden_zones.py
+
       - name: Toolchain imports (cross-platform surface)
         working-directory: scripts
         run: |

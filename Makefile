@@ -148,6 +148,8 @@ telemetry-test:
 
 # 仓库卫生不变量: 技能分发包不得携带过期的高亮工具链; 命令不得重复注册。
 # 漂移的修法是 `python3 scripts/sync_skill_bundle.py`。
+# 另跑 v3 FINAL 的禁止区校验单测 (highlight 不得盖标题/作者/参考文献/页眉页脚)。
 .PHONY: test-py
 test-py:
 	python3 -m unittest tests.test_telemetry tests.test_repo_hygiene
+	cd scripts/hl_v3_final && python3 test_forbidden_zones.py
