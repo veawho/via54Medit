@@ -48,6 +48,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.14] - 2026-09-11 (仓库卫生: 命令去重 / 工具链镜像补齐 / 生成物入库治理)
+
+承接同日那次成体系扫查。四项处置里, 有一项在核查后**推翻了我先前的建议** —— 见下。
+
+### Fixed
+- **命令重复注册**: `anno2ppt` / `pico` / `systematic` / `grade` 各被 `rootCmd.AddCommand`
+  注册了两次（`root.go` 第 102-104 行与第 131-133 行重复; `anno2ppt` 另在 `anno2ppt.go`
+  的 `init()` 里又注册一次），导致 `medit --help` 把这四条各列两遍。已去掉重复注册。
+- **死桩**: `stubs.go` 的 `anno2pptCmdStub` 从未被注册（`medit anno2ppt-old-stub` 报
+  unknown command），其自身注释已写明"已被 anno2ppt.go 真实实现取代"。已删除。
+- **生成物入库**: `scripts/multi_project_diff.py` 的输出路径原先硬编码为本机绝对路径
+  `/Users/david/.../docs/`，换机器或 CI 上会写到不存在的位置；且每跑一次就往 `docs/` 里
+  新增一份快照，已累积 13 个入库。改为仓库相对的 `docs/multi_project_diff/`，该目录已进
+  `.gitignore`；13 个历史快照移除（可从 git 历史找回）。
+
+### Added
+- **`scripts/sync_skill_bundle.py`**: 把权威工具链 `scripts/hl_v3_final/` 同步到技能分发包
+  `skills/via54medit-literature-pipeline/scripts/`。支持 `--check` 只报告不写（有差异退出码 1）。
+- **`tests/test_repo_hygiene.py`**: 两道不变量防护 —— ① 技能分发包不得携带过期工具链
+  （权威侧每个文件都必须在分发包中按映射存在且内容一致）; ② 同一命令不得被重复注册。
+- **`make test-py`**: 一次跑完 Python 侧两套测试（遥测模块 + 仓库卫生）。
+- **`auto_sync` 新增第 3b 步**: 每 6 小时巡检里校验上述不变量, 失败时推 `warning`
+  飞书告警（key `autosync-hygiene-failed`）—— 这类退化不会让任何东西报错, 只能靠主动检查。
+
+### Docs
+- **`docs/ROADMAP.md` 状态更正**: §2.4 原先把 `enrich.go` / `index.go` / `query.go` 标为 `[x]`
+  已完成，但它们实际仍是占位桩（`medit enrich` 打印 `[Phase 0 stub] … 将在 Phase 2 实现`）。
+  已改为 `[ ]` 并标注真实实现位于 `internal/enrich`（未接线）。新增 §2.4b: 列出 8 个
+  「已实现但不在任何构建目标依赖图内」的包（约 3000 行, 均带单测），明确标注**不是废弃代码**,
+  并给出可复现的 `go list` 差集复核命令。
+
+### 一处自我纠正（重要）
+扫查时我判定 `scripts/hl_v3_final/` 与技能目录里那份是"冗余重复"，并倾向删除前者。
+**核查后推翻**: `scripts/hl_v3_final/` 才是**权威开发位置** —— CI 的 `working-directory`、
+`auto_sync.py` 的定时自测路径、7 个 `scripts/*.py` 的 `sys.path.insert`、`.trae/rules/project_rules.md`、
+`.cursorrules`、`.github/copilot-instructions.md`、`AGENTS.md` 与多份 `docs/` 全都指向它；
+技能目录那份则是**必须自包含**的分发副本（两个 SKILL.md 按 `~/.hermes/skills/...` 引用）。
+按我先前的想法删它，会同时打断 CI、定时自测与 7 个脚本。
+
+同时, 我此前说「两侧逐字节相同」也是**过度断言**: 实际已经漂移 —— 分发包缺少权威侧在
+2026-09-07 新增的 5 个 OCR/版面脚本（`layout.py` / `hl_ocr_band.py` / `verify_sentence_set.py` /
+`smoke_m1m2.py` / `strict_eval_ocr_locate.py`）, 且 `vision_check.py` 停在旧版（缺 telemetry
+token 埋点）。根因是那次同步是手工做的（提交 `01a9452` 只同步了 2 个文件）, 之后 4 天无人再同步。
+故本轮处置是**补齐 + 给出可重复的同步脚本 + 加防护**, 而不是删除任何一份。
+
+### 验证
+- `make test-py` **62 passed**（遥测 60 + 仓库卫生 2）; Go `test -race` **24 包全绿 0 失败**;
+  `gofmt -l` 归零; `go vet` 干净; 高亮工具链 **36/0**。
+- 防护有效性经负向对照验证: 只改一侧 → 镜像检查失败; 重新引入一次重复注册 → 检查失败并报出
+  `{'picoCmd': ['root.go', 'root.go']}`; `sync_skill_bundle.py --check` 一致时退出码 0、有差异时 1。
+- `medit --help` 中 `anno2ppt` / `pico` / `grade` / `systematic` / `list` 各出现 **1 次**（原为 2 次）,
+  且四条命令及其子命令实跑正常。
+- `auto_sync` 端到端实测新增步骤: `✓ 仓库卫生不变量通过`。
+
 ## [5.4.13] - 2026-09-11 (清理: 移除从未能运行的 cmd/list_citations_v2)
 
 收口 v5.4.12 末尾保留的那一项。核查结论是它**不仅被取代, 而且自提交之日起就从未能运行**。
