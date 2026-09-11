@@ -48,6 +48,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.34] - 2026-09-12 (部署工具升级为"深度扫描 + 按平台补缺口": 修掉三个让它形同虚设的硬伤)
+
+回应"确保部署到任何设备 / 更新任何版本后, 部署工具会深度扫描系统环境与依赖, 只部与系统环境
+相关且缺失的(Windows 不部署 macOS 那套; 缺 OCR 主动装; 缺 mmx-cli 视觉能力主动部署)"。
+
+### 先摆事实: 旧的"一键部署"为什么是假动作
+
+| 硬伤 | 实情 |
+| --- | --- |
+| **`pip install mmx-cli` 永远失败** | mmx-cli **不是 PyPI 包**: `pip index versions mmx-cli` → *No matching distribution found*。它是 **npm 包**(本机 `~/.local/bin/mmx -> ../lib/node_modules/mmx-cli/dist/mmx.mjs`, shebang 是 node)。`install_mmx.py` 与 `bootstrap_device.py` **两处**都用 pip 装它, 失败还被退出码与错误处理吞掉, 于是"看起来装过了"。 |
+| **完全不检测 OCR** | 三份依赖清单里都没有 `paddleocr`。缺了没人知道, 直到 L2 中文识别那步才炸。本机实测**确实没装**(`No module named 'paddleocr'`; 文档里说的"已在 hermes-agent venv"是另一个解释器)。 |
+| **不分平台** | `bootstrap_device.py` 无条件 `pip install pymupdf python-pptx pillow requests mmx-cli`, 把 **Windows 专属的 pywin32 也列进清单**;Go 侧 `medit doctor` 反过来在 Windows 上也会校验 AppleScript 通道, 并且**还在把 LibreOffice 报成"PPT 真渲染"**(那个通道 v5.4.25 已按规范删除)。 |
+
+### Added — `scripts/deploy_scan.py`: 深度扫描 + 缺口自愈
+
+**能力矩阵的唯一事实来源**。Go 的 `medit doctor`、`deps_auto.py`、`bootstrap_device.py`
+全部改读它, 不再各自维护清单。三段式:
+
+1. **环境**: OS / 架构 / 容器 / 解释器 / 包管理器 / 输出编码;
+2. **能力**: 逐项探测, **与平台无关的标 `· 不适用` —— 既不安装也不校验**;
+3. **兼容性**: 硬编码 `/tmp`、外机绝对路径(`C:\Users\via54`)、未加 darwin 守卫的
+   `osascript`。本机实测 **50 处 / 34 个文件**。
+
+平台过滤的落地(即"部署到 Windows 不必管 macOS 那套"):
+
+| 能力 | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| `pywin32` (Office COM) | 必需, 缺失即装 | **不适用** | **不适用** |
+| 桌面版 PowerPoint / Word | 必需 | 必需 | **不适用** → `RENDER_ENGINE=graph` |
+| PaddleOCR (L2 中文 OCR) | 缺失即装 | 缺失即装 | 缺失即装 |
+| `mmx-cli` 视觉引擎 | 经 **npm** 装 | 同左 | 同左 |
+
+安装通道分派: Python 包 → pip;`mmx-cli` → npm;系统工具 → 本机可用的
+brew/apt/dnf/pacman/winget/choco/scoop;需要管理员权限却拿不到时**打印完整命令**, 不静默失败。
+`--check` 只报不改、`--skip-heavy` 跳过数百 MB 的 OCR、`--strict` 让兼容性问题也计失败、
+`--json` 供 `medit doctor` 与 CI 消费。
+
+### Fixed — 四个入口全部改接同一引擎
+
+- `bootstrap_device.py`: 删掉无条件 pip 批量安装, 改为「深度扫描 → 渲染真出图自检 → 构建 →
+  按平台注册自动更新(launchd / cron / **schtasks**)」;并探测 `auto_sync.py` 实际支持的开关,
+  不再在 Windows 上误调 `--install-launchd`。
+- `deps_auto.py`: 收成薄适配层, 保留 `ensure_env()` 签名(仍有 `via54_auto.py` 与
+  `medit doctor --fix` 在用), 依赖清单不再重复维护。
+- `install_mmx.py`: 改走 npm, 并对照 npm 最新版提示升级(本机 1.0.19 / npm 1.0.25)。
+- `medit doctor`(Go): 重写为消费 `deploy_scan.py --json` 的渲染层, 删掉 LibreOffice 那段,
+  新增 `--strict` / `--skip-heavy`, 保留 Go 侧独有的 CDP 可达性探测。
+
+### 我自己犯的两个错(都是负向对照抓出来的)
+
+- **Word 那行复用了 PowerPoint 的探测** → "没装 Word"被报成"已就绪"(实测输出
+  "已探测到 PowerPoint (macOS)")。已拆成两个独立探测。
+- 修完之后 **PowerPoint 那行又显示成了 Word 的结果** —— 调用点把 `app` 传成了 `"ppt"`,
+  落进 Word 分支。已加别名归一 + 一条专门的回归用例钉住。
+
+### 顺带修掉 CI 里我自己刚写下的同类问题
+
+新加的 CI 冒烟步骤里我写了 `/tmp/ds.json` —— Windows 跑者上那是 `C:\tmp`, 正是这个扫描器
+要报的那类 POSIX 假设。已改为工作目录内的相对路径。
+
+### 测试
+
+新增 `scripts/test_deploy_scan.py`(**23 项**), 守的是这个功能承诺本身:
+
+- **平台过滤**: Windows 上必须探测/安装 `pywin32`, 在 macOS/Linux 上**不得探测也不得安装**;
+  Linux 上 PowerPoint/Word 必须是 `na` 且探测/安装调用数为 0;
+- **只装缺失的**: 全就绪时安装调用数 = 0;`--check` 下安装调用数恒为 0;
+- **通道正确**: `mmx-cli` 走 npm, 且**任何能力都不得用 pip 装它**(AST 级检查, 不看 docstring,
+  免得被"这就是错的"这类说明误判);OCR 走 pip 且带 `paddlepaddle`;
+- **门禁语义**: 缺 OCR 判失败;缺桌面 Office **不判失败**(脚本装不了它);
+- **回归**: Word 探测不得等于 PowerPoint 探测;扫描器不得把自己那份检测规则报成违规。
+
+CI 三平台新增两项: `test_deploy_scan` + **部署扫描冒烟**(硬断言平台分类: 非 Windows 上
+`pywin32` 必须是 `na`, Linux 上 Office 必须是 `na`)。
+
 ## [5.4.33] - 2026-09-11 (部署指南本身在教人装错东西 —— 修 DEPLOY.md; 并确认 CI 三平台已全绿)
 
 接着上一条的"能否分发部署"。CI 修好之后顺查部署文档, 发现 **`docs/DEPLOY.md` 的
