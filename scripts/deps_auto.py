@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 deps_auto.py — 环境自检 + 自动接入系统软件/依赖/包 (部署新系统即用)
 
