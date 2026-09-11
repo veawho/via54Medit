@@ -442,6 +442,36 @@ class TelemetryDB:
             query += " ORDER BY created_at ASC"
             return conn.execute(query, params).fetchall()
 
+    def existing_llm_req_ids(self, req_ids=None) -> set:
+        """已入库的非空 req_id 集合, 供 spool 摄入做幂等去重。
+
+        ``req_ids`` 传了就只查这些(用 IN), 否则返回全部。注意:
+        **不能**假设 req_id 唯一 —— 手工录入(cli token --log)与旧数据都可能是空串,
+        所以只看非空值, 且不建 UNIQUE 索引(老库可能已有重复, 建索引会直接失败)。
+        """
+        with self.get_connection() as conn:
+            if req_ids is not None:
+                vals = [r for r in req_ids if r]
+                if not vals:
+                    return set()
+                out = set()
+                # SQLite 的变量上限是 999, 分片查避免大 spool 触发 "too many SQL variables"
+                for i in range(0, len(vals), 500):
+                    chunk = vals[i:i + 500]
+                    marks = ",".join("?" * len(chunk))
+                    rows = conn.execute(
+                        "SELECT DISTINCT req_id FROM llm_token_logs "
+                        "WHERE req_id IS NOT NULL AND req_id != '' AND req_id IN (%s)" % marks,
+                        chunk,
+                    ).fetchall()
+                    out.update(r[0] for r in rows)
+                return out
+            rows = conn.execute(
+                "SELECT DISTINCT req_id FROM llm_token_logs "
+                "WHERE req_id IS NOT NULL AND req_id != ''"
+            ).fetchall()
+            return {r[0] for r in rows}
+
     def query_downloads(self, start_iso: Optional[str] = None, end_iso: Optional[str] = None) -> List[sqlite3.Row]:
         with self.get_connection() as conn:
             query = "SELECT * FROM download_items WHERE 1=1"
@@ -505,7 +535,7 @@ class TelemetryDB:
             )
             conn.commit()
 
-    def query_llm_tokens(self, start_iso: Optional[str] = None, end_iso: Optional[str] = None, 
+    def query_llm_tokens(self, start_iso: Optional[str] = None, end_iso: Optional[str] = None,
                          provider: Optional[str] = None) -> List[sqlite3.Row]:
         """查询指定时间段或供应商的真实 Token 日志。"""
         with self.get_connection() as conn:

@@ -157,11 +157,42 @@ medit-telemetry bitable --report           # 自动汇总全员数据生成图�
 medit-telemetry token --status
 medit-telemetry token --mode exact
 
-# 7. 后台主动监控守护进程状态与启停
+# 7. LLM 接入与 Token 用量读取能力校验 (部署/更新后**强制**跑)
+medit-telemetry llm              # 审计: 接入了哪些 LLM、token 真能读进库吗(有事退出码 2)
+medit-telemetry llm -v           # 展开到通道级: 每条通道在记 / 不返回 token / 没接记录
+medit-telemetry llm --live       # 额外联网探凭据可达性, 并读 mmx 账户级配额
+medit-telemetry llm --json       # 机器可读(供部署脚本消费)
+
+# 8. 后台主动监控守护进程状态与启停
 medit-telemetry daemon --status    # 查询存活 PID 与最近心跳
 medit-telemetry daemon --stop      # 停止后台服务
 medit-telemetry daemon --start     # 重新拉起后台服务
 ```
+
+### 部署 / 更新后为什么必须跑 `llm`
+
+记账是**旁路**: 一条调用路径不再记录 token, 调用本身不会报错、不会有异常、不会有非零
+退出码, 报表只是安静地少一块数字。所以"部署成功"不能只等于"守护进程起来了"。
+
+```bash
+# 部署或更新后 (任选其一, 都会强制校验并以非 0 退出告警)
+python3 scripts/bootstrap_device.py            # 第 4 步就是该校验
+python3 scripts/deploy_scan.py --verify-llm    # 独立跑一次
+medit-telemetry deploy                         # 部署概览里会跑同一份校验
+```
+
+`auto_sync.py`(定时从 GitHub 拉取)在拉取+重建**之后**也会跑一遍, 失败会发告警。
+
+它验证三类**可确证**的事实(全部离线, 不联网、不花钱):
+
+| 校验 | 内容 | 为什么非它不可 |
+| --- | --- | --- |
+| 源码级证据 | 扫仓库里真实的记账调用点(Python `record_llm_usage(` / Go `recordLLMUsage(`), 并判断该调用点**可达** | 注册表说自己被记录不算数; 实测抓到过"包装函数定义了却没人调用"的假性记录 |
+| 端到端摄入 | 各 provider 的**真实响应形状** → 落库 → 读回 → 报表层(写临时库, 不碰生产数据) | 有 `usage` 字段不等于落得了库、更不等于统计口径算得进去 |
+| Go 侧 spool 链路 | 落盘 → 摄入 → 读回, 含别名归一(`glm`→`zhipu`)与重放幂等 | Go 没有 SQLite 驱动, 用量先落盘再由本模块摄入; 这条链路断了不会报错 |
+
+读不到的部分会**如实报出**, 不折算、不造数: mmx-cli 只返回 content 不暴露 token(其账户级
+配额是**调用次数**而非 token); openai 用量接口需 Admin key; deepseek 逐条用量需控制台导出。
 
 ---
 

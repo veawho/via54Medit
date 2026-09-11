@@ -150,8 +150,8 @@ telemetry-test:
 # 漂移的修法是 `python3 scripts/sync_skill_bundle.py`。
 # 另跑 v3 FINAL 的禁止区校验单测 (highlight 不得盖标题/作者/参考文献/页眉页脚)。
 .PHONY: test-py
-test-py:	## 跑 Python 测试 (遥测 + 仓库卫生 + 禁止区校验 + 部署扫描)
-	python3 -m unittest tests.test_telemetry tests.test_repo_hygiene
+test-py:	## 跑 Python 测试 (遥测 + 仓库卫生 + LLM 记账 + 禁止区校验 + 部署扫描)
+	python3 -m unittest tests.test_telemetry tests.test_repo_hygiene tests.test_llm_ledger
 	python3 scripts/hl_v3_final/test_forbidden_zones.py
 	python3 scripts/test_deploy_scan.py
 

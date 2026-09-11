@@ -118,6 +118,8 @@ class TelemetryDaemon:
         # 落盘的状态保证, 这里只是避免同一天里每 5 秒反复走一遍判断。
         self._last_reminder_key = ""
         self.last_scan_time = 0.0
+        # Go 侧 LLM 用量 spool 的上次摄入时刻
+        self.last_spool_time = 0.0
         # 重复消息限流状态 (见 log)
         self._last_msg = ""
         self._repeat = 0
@@ -224,14 +226,40 @@ class TelemetryDaemon:
                     except Exception as e:
                         self.log(f"扫描目录 {wdir} 异常: {e}")
 
-        # 2. 定时排程检查
+        # 2. 摄入 Go 侧 LLM 用量 spool
+        #    Go 没有 SQLite 驱动(见 internal/foundation/llm_usage.go), 用量先落盘到
+        #    JSONL 再由这里摄入。不做这一步的话, medit ask / medplan / docproc 的
+        #    token 会永远停在 spool 里进不了报表 —— 而调用本身一切正常, 不报任何错。
+        self._drain_llm_spool(cfg)
+
+        # 3. 定时排程检查
         self._check_schedule(cfg, now)
 
-        # 3. 描述符占用观测 (资源耗尽型故障的唯一抓手)
+        # 4. 描述符占用观测 (资源耗尽型故障的唯一抓手)
         self._check_fd_health()
 
-        # 4. 刷新心跳
+        # 5. 刷新心跳
         self._update_heartbeat(cfg, now)
+
+    def _drain_llm_spool(self, cfg: Dict[str, Any]):
+        """按间隔把 Go 侧 spool 摄入 telemetry.db。只在真的导入/出错时写日志。"""
+        interval = cfg.get("telemetry", {}).get("llm_spool_interval_seconds", 60)
+        if time.time() - getattr(self, "last_spool_time", 0.0) < interval:
+            return
+        self.last_spool_time = time.time()
+        try:
+            from .llm_spool import ingest
+
+            res = ingest()
+            if res.get("imported"):
+                self.log("LLM 用量 spool 摄入: 导入 %d 行(重复跳过 %d)"
+                         % (res["imported"], res.get("duplicated", 0)))
+            if res.get("invalid"):
+                self.log("LLM 用量 spool 有 %d 行无法解析: %s"
+                         % (res["invalid"], "; ".join(res.get("problems") or [])[:200]))
+        except Exception as e:                              # noqa: BLE001
+            # 记账是旁路, 绝不能把守护进程搞挂
+            self.log("LLM 用量 spool 摄入异常: %s" % e)
 
     def _check_schedule(self, cfg: Dict[str, Any], now: datetime):
         today_str = now.strftime("%Y-%m-%d")
@@ -362,6 +390,18 @@ class TelemetryDaemon:
         try:
             freshness["latest_ingest_at"] = self.db.latest_ingest_at() or ""
             freshness["counts"] = self.db.table_counts()
+        except Exception:                                   # noqa: BLE001
+            pass
+        # LLM 用量 spool 的积压量也进心跳: "待摄入一直不为 0" 就是摄入挂了或
+        # 两端字段约定漂了的第一信号, 不该等到月底对账才发现。
+        try:
+            from .llm_spool import spool_status
+
+            st = spool_status()
+            freshness["llm_spool"] = {
+                "pending": st.get("pending", 0),
+                "last_write": st.get("mtime", ""),
+            }
         except Exception:                                   # noqa: BLE001
             pass
         hb = {

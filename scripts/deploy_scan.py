@@ -1050,8 +1050,53 @@ def verify_platform(result):
     return (not problems), problems
 
 
+def verify_llm(live=False, ingest=True):
+    """**强制**校验"接入了哪些 LLM"以及"它们的 token 消耗真能读进库"。
+
+    为什么这件事必须由部署流程强制跑, 而不是靠人记得手工看: 记账是**旁路** ——
+    一条路径不记用量, 调用本身不会报任何错, 报表只是安静地少一块数字。
+    实测就抓到过两处: ``scripts/provider_llm.py``(默认文本 provider)把 ``usage``
+    返回给调用方却从不写库; Go 侧 ``internal/foundation/llm.go`` 整个丢弃 ``usage``。
+    两者都不会让任何测试变红, 只有主动验证才能发现。
+
+    校验内容(全部离线, 不联网、不花钱):
+    * 源码级证据 —— 扫仓库里真实的记账调用点(Python ``record_llm_usage`` /
+      Go ``recordLLMUsage``), 不信任任何自我声明;
+    * 端到端摄入 —— 用各 provider 的真实响应形状跑一遍落库并读回, 含报表层;
+    * Go 侧 spool 链路 —— 落盘 → 摄入 → 读回, 并验别名归一与重放幂等。
+
+    ``live=True`` 时才联网探测凭据可达性(部署机上通常没必要, 也慢)。
+    返回 ``(ok, problems, payload)``; ``payload=None`` 说明校验器本身不可用。
+    """
+    root = REPO
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        from telemetry import llm_providers
+    except Exception as e:                                  # noqa: BLE001
+        return False, ["无法导入 telemetry.llm_providers: %s" % e], None
+    try:
+        res = llm_providers.audit(live=bool(live), ingest=bool(ingest))
+    except Exception as e:                                  # noqa: BLE001
+        return False, ["LLM 审计执行异常: %s" % e], None
+    return (not res.get("problems")), list(res.get("problems") or []), res
+
+
+def render_llm_verification(payload):
+    """用遥测模块里那**同一份**渲染器输出报告 —— 两处口径不会分叉。"""
+    if not payload:
+        return
+    try:
+        from telemetry import llm_providers
+
+        print(llm_providers.format_report(payload))
+    except Exception as e:                                  # noqa: BLE001
+        print("  (LLM 报告渲染失败: %s)" % e)
+
+
 def run(install=True, include_heavy=True, strict=False, as_json=False, env=None,
-        dry_run=False, only=None, stage="all", emit_frame=False):
+        dry_run=False, only=None, stage="all", emit_frame=False,
+        llm_live=False, skip_llm=False):
     flags = stage_flags(stage)
     if flags is None:
         print("未知阶段: %r (可选: %s)" % (stage, ", ".join(STAGES)))
@@ -1069,6 +1114,22 @@ def run(install=True, include_heavy=True, strict=False, as_json=False, env=None,
                               include_caps=include_caps, include_compat=include_compat)
     result["strict"] = strict          # 供渲染层区分"阻塞"与"提示"
     result["stage"] = stage
+
+    # --- 强制校验: 接入了哪些 LLM + 它们的 token 消耗真能读进库 ---
+    # 只在"全量"阶段跑 —— bootstrap 会分三次调 env / deps / compat, 每步都跑一遍
+    # 只是重复同样的扫描。要跳过必须显式给 --no-verify-llm(或设环境变量),
+    # 也就是说"忘了验证"是不可能的, 只能"主动不验证"。
+    llm = {"skipped": True, "ok": True, "problems": [], "detail": None}
+    if not skip_llm and stage in ("all", "", None):
+        llm_ok, llm_problems, llm_payload = verify_llm(live=llm_live, ingest=not dry_run)
+        llm = {"skipped": False, "ok": llm_ok, "problems": llm_problems,
+               "detail": llm_payload, "live": bool(llm_live)}
+    elif skip_llm:
+        llm["why"] = "已按 --no-verify-llm 跳过"
+    else:
+        llm["why"] = "阶段 %s 不跑(请用 --verify-llm 单独执行)" % stage
+    result["llm"] = llm
+
     s = result["summary"]
     if dry_run:
         # dry-run 的语义是"计划已生成", 不是"环境就绪"; 只有必需且**无任何自动通道**
@@ -1076,6 +1137,9 @@ def run(install=True, include_heavy=True, strict=False, as_json=False, env=None,
         ok = not s["unresolvable"]
     else:
         ok = not s["blockers"] and (not strict or not result["compat"]["findings"])
+    # LLM 记账链路不通 = 部署没完成: token 统计会安静地少一块, 且不会报任何错。
+    if not llm.get("skipped") and not llm.get("ok"):
+        ok = False
     result["ok"] = ok
     if as_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -1132,6 +1196,19 @@ def _render(res):
             if len(c["findings"]) > 8:
                 print("      ... 其余 %d 处见 --json" % (len(c["findings"]) - 8))
         print()
+    # 第 4 节: LLM 接入与 token 用量读取能力 —— 部署/更新后**强制**核验。
+    llm = res.get("llm") or {}
+    if not llm.get("skipped"):
+        print("== 4. LLM 接入与 Token 用量读取能力 (强制校验) ==")
+        render_llm_verification(llm.get("detail"))
+        if not llm.get("ok"):
+            print("  ✗ 校验未通过: token 统计会少一块, 且调用本身不会报错 —— 必须修。")
+            for p in llm.get("problems") or []:
+                print("      • %s" % p)
+        print()
+    elif llm.get("why"):
+        print("== 4. LLM 接入校验: 已跳过 (%s) ==" % llm["why"])
+        print()
     s = res["summary"]
     if res.get("dry_run"):
         print("== 结果: 计划已生成 (待补 %d · 必需缺口 %d · 不适用 %d) =="
@@ -1156,10 +1233,14 @@ _USAGE = """用法: deploy_scan.py [选项]
   --strict          平台兼容性问题也计入失败
   --stage S         只跑一个阶段: env | deps | compat | all
   --verify-platform CI 用: 只校验"平台分类是否与宿主一致"
+  --verify-llm      只校验"接入了哪些 LLM + token 消耗能不能读到"(部署/更新后强制跑)
+  --llm-live        配合 --verify-llm: 联网探测凭据可达性与 mmx 账户级用量
+  --no-verify-llm   跳过 LLM 接入校验(仅用于确实无法验证的环境)
   --help            显示本帮助
 
 环境变量: VIA54_DRY_RUN / VIA54_ONLY / VIA54_SKIP_HEAVY / VIA54_STRICT /
-          VIA54_JSON / VIA54_STAGE / VIA54_HOME / VIA54_ALLOW_BREAK_SYSTEM
+          VIA54_JSON / VIA54_STAGE / VIA54_HOME / VIA54_ALLOW_BREAK_SYSTEM /
+          VIA54_LLM_LIVE / VIA54_SKIP_LLM_VERIFY
 退出码: 0=就绪  1=仍有必需缺口  2=用法错误"""
 
 
@@ -1222,9 +1303,29 @@ def main(argv):
             print("  ✗ %s" % p)
         return EXIT_GAP
 
-    return run(install=install, include_heavy=include_heavy, strict=strict,
-               as_json=as_json, dry_run=dry_run, only=only, stage=stage)
+    if "--verify-llm" in argv:
+        # 独立模式: 部署器与更新脚本**强制**调用的那一步。只读(除摄入 spool 外),
+        # 且失败必须非零退出 —— 否则"验证过了"就成了空话。
+        live = "--llm-live" in argv or _env_flag("VIA54_LLM_LIVE")
+        ok, problems, payload = verify_llm(live=live, ingest=not dry_run)
+        if as_json:
+            print(json.dumps({"ok": ok, "problems": problems, "detail": payload},
+                             ensure_ascii=False, indent=2))
+        else:
+            render_llm_verification(payload)
+            if ok:
+                print("LLM 接入校验 OK: 接入了 %d 个 provider, 全部可读 token 用量"
+                      % len((payload or {}).get("providers") or []))
+            else:
+                print("LLM 接入校验未通过 (%d 项):" % len(problems))
+                for p in problems:
+                    print("  ✗ %s" % p)
+        return EXIT_OK if ok else EXIT_GAP
 
+    return run(install=install, include_heavy=include_heavy, strict=strict,
+               as_json=as_json, dry_run=dry_run, only=only, stage=stage,
+               llm_live=("--llm-live" in argv or bool(_env_flag("VIA54_LLM_LIVE"))),
+               skip_llm=("--no-verify-llm" in argv or bool(_env_flag("VIA54_SKIP_LLM_VERIFY"))))
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

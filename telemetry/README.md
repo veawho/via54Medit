@@ -87,6 +87,12 @@ medit-telemetry sync --period week
 medit-telemetry token --status
 medit-telemetry token --mode exact
 
+# 5.1 校验"接入了哪些 LLM"以及它们的 token 真能读进库 (部署/更新后强制跑)
+medit-telemetry llm              # 有确证问题时以退出码 2 结束
+medit-telemetry llm -v           # 通道级细节: 在记 / 本就不返回 token / 没接记录
+medit-telemetry llm --live       # 额外联网探凭据可达性 + 读 mmx 账户级配额
+medit-telemetry llm --json       # 机器可读
+
 # 6. 守护服务管理
 medit-telemetry daemon --status     # 查询后台守护存活状态与 PID
 medit-telemetry daemon --stop       # 停止后台服务
@@ -345,6 +351,31 @@ medit-telemetry status       # 末尾会显示"最近入库时间 + 距今多久
 
 ---
 
+## LLM 接入与 Token 可读性（部署 / 更新后强制校验）
+
+"接入了哪些 LLM"**光看文档或配置答不出来** —— 它由代码里的调用路径决定。仓库里其实是**两套** LLM 调用面：Python 侧（`scripts/provider_llm.py` / `glm_vision.py` / `hl_v3_final/vision_check.py` 等）直接调 `record_llm_usage()` 入库；Go 侧（`internal/foundation/llm.go`、`llm_glm.go`）承载 `medit ask` / `medplan` / docproc / medit-mcp，因为没有 SQLite 驱动，改为把用量追加到 `~/.medit/llm_usage_spool.jsonl`，再由本模块**幂等**摄入。
+
+记账是**旁路**：一条路径不再记录 token，调用不会报错、不会有异常、不会有非零退出码，报表只是安静地少一块数字。实测抓到过三处这样的缺口（默认文本 provider 把 `usage` 返回给调用方却从不写库；SenseNova 视觉把 `usage` 丢掉；Go 侧整个丢弃 `usage`）—— 三处都不会让任何测试变红。所以部署与更新后必须**主动验证**：
+
+```bash
+medit-telemetry llm            # 有问题退出码 2
+python3 scripts/deploy_scan.py --verify-llm
+```
+
+| 校验 | 内容 | 为什么非它不可 |
+| :--- | :--- | :--- |
+| **源码级证据** | 扫仓库里真实的记账调用点（Python `record_llm_usage(` / Go `recordLLMUsage(`），并判断该调用点**可达** | 注册表说自己被记录不算数；正则数调用点会被"包装函数定义了却没人调用"骗过去（第一版检查器就踩了这个坑） |
+| **端到端摄入** | 各 provider 的**真实响应形状** → 落库 → 读回 → **报表层**（写临时库，绝不碰生产数据） | 有 `usage` 字段不等于落得了库，更不等于统计口径算得进去 |
+| **Go 侧 spool 链路** | 落盘 → 摄入 → 读回，含别名归一（Go 叫 `glm`，落库必须是 `zhipu`）与**重放幂等** | 这条链路断了不会报错，Go 侧 token 会一行都进不了库 |
+
+**强制点**（都不会"忘了跑"）：`bootstrap_device.py` 第 4 步、`auto_sync.py` 拉取+重建之后、`medit-telemetry deploy` 的部署概览、`deploy_scan.py --stage all` 第 4 节，以及 CI。任一处不过就非零退出/发告警。
+
+**账户级用量与单次用量是两个口径，不混算**：目前唯一可程序化读取的账户级数据是 `mmx quota show`，它返回的是按模型的**调用次数**（不是 token），因此**不会**被折成 token 入库 —— 混进去就是造数。单次 token 一律只取响应体的 `usage`。
+
+**读不到的会如实报出**：mmx-cli 只返回 content 不暴露 token；openai 用量接口需 Admin key（`sk-admin-` + `api.usage.read`）；deepseek 有 `GET /user/balance` 但没有逐条用量接口，逐条要走控制台导出 CSV。
+
+---
+
 ## 目录结构
 
 ```
@@ -365,6 +396,13 @@ telemetry/
 ├── csv_migrate.py        # CSV 表头迁移 (新增类目 = 新增列, 只能追加在末尾)
 ├── tracker.py            # 三段式埋点上下文 (检索 / 下载 / 高亮 / 其他)
 ├── token_tracker.py      # LLM 网关拦截与 100% 控制台对齐
+├── llm_providers.py      # 接入了哪些 LLM + token 用量可读性校验 (注册表/源码证据/端到端摄入)
+├── llm_spool.py          # Go 侧用量 spool 的幂等摄入器 (落盘 → llm_token_logs)
+├── models.py             # 数据模型 (含 LLMTokenRecord)
+├── holidays.py           # 权威法定节假日日历 (排程与提醒日的推算依据)
+├── reminders.py          # 推送日前一个工作日的「别关机」提醒
+├── schedule.py           # 排程顺延的唯一实现 (遇周末/法定节假日 → 下一个工作日)
+├── alerter.py            # 关键事件外部告警通道 (飞书) 与静默期
 ├── pdf_utils.py          # 三重容灾真实 PDF 物理页数计算
 ├── watcher.py            # 工作区产出物主动感知器
 ├── feishu_sync.py        # 飞书卡片构建与消息推送

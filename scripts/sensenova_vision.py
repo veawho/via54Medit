@@ -71,6 +71,32 @@ def get_image_mime(image_path):
     return mime_map.get(ext, "image/png")
 
 
+def _record_usage(result):
+    """把这次视觉调用的真实 usage 记进遥测库。
+
+    这个通道此前**拿到了 usage 却直接丢掉**(只把 content 返回给调用方), 于是走
+    ``sensenova_vision.vision_analyze`` 的调用在报表里全都不计 token —— 同类缺口在
+    ``provider_llm.py`` 也有一处。包装在 try/except 里: 遥测不可用不该让调用失败。
+    """
+    try:
+        import os as _os
+        import sys as _sys
+
+        _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from telemetry.token_tracker import record_llm_usage
+
+        record_llm_usage(
+            response=result,
+            provider="sensenova",
+            model=result.get("model", "") if isinstance(result, dict) else "",
+            source="sensenova_vision.py",
+        )
+    except Exception:
+        pass
+
+
 def vision_analyze(image_path, prompt, json_mode=False, timeout=30):
     """
     调用 sensenova-6.7-flash-lite 多模态 API 分析图片。
@@ -135,6 +161,7 @@ def vision_analyze(image_path, prompt, json_mode=False, timeout=30):
                 .get("message", {})
                 .get("content", "")
             )
+            _record_usage(result)
             return {"success": True, "content": content, "error": ""}
     except urllib.error.HTTPError as e:
         body = e.read().decode()

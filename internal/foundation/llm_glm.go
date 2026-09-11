@@ -119,18 +119,18 @@ func (g *GLMProvider) CompleteWithOptions(ctx context.Context, opts CompleteOpti
 		return "", fmt.Errorf("llm: %s returned %d: %s", g.Name(), resp.StatusCode, truncate(string(raw), 200))
 	}
 
-	var got struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
+	var got llmResponseEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		return "", fmt.Errorf("llm: decode response: %w", err)
 	}
 	if len(got.Choices) == 0 {
 		return "", fmt.Errorf("llm: %s returned 0 choices", g.Name())
 	}
-	return got.Choices[0].Message.Content, nil
+	// 记账：智谱 GLM 同样在 usage 里返回 token，落库时统一归一到 "zhipu"。
+	recModel := model
+	if strings.TrimSpace(got.Model) != "" {
+		recModel = got.Model
+	}
+	recordLLMUsage("zhipu", recModel, got.ID, opts.Source, "", got.Usage)
+	return got.content(), nil
 }

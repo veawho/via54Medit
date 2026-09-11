@@ -5,7 +5,7 @@
 
     python3 scripts/bootstrap_device.py
 
-它做四件事:
+它做五件事:
   1. **深度扫描本机环境 + 按平台补齐缺口** —— 交给 scripts/deploy_scan.py:
      只装"与本平台相关且确实缺失"的能力, 并按正确通道装
      (Python 包走 pip、mmx-cli 走 npm、系统工具走 brew/apt/winget/choco/scoop)。
@@ -13,7 +13,10 @@
      分阶段跑(``--stage env|deps|compat``), 这样进度是可见的, 而不是等一大坨输出。
   2. **渲染通道真出图自检** —— 交给 scripts/render_doctor.py: "探测到"不等于"能出图"。
   3. **构建 Go 二进制**(有 go 工具链时)。
-  4. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
+  4. **强制校验 LLM 接入与 token 用量可读性** —— 交给 ``deploy_scan.py --verify-llm``:
+     接入了哪些 LLM、它们的 token 消耗能不能真的读进库。记账是旁路, 少了不会报错,
+     所以这一步不能靠"记得去看"; 校验失败时本脚本以非 0 退出。
+  5. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
 
 本脚本**幂等**: 重复运行、或在版本更新后运行, 都只会补上当时缺的东西。
 
@@ -137,8 +140,31 @@ def step_build_go():
         print("  ⚠️ 编译未成功: %s %s" % (err1 or "", err2 or ""))
 
 
+def step_verify_llm():
+    """**强制**校验接入了哪些 LLM, 以及它们的 token 消耗真能读进库。
+
+    为什么要强制而不是可选: 记账是旁路 —— 一条路径不记用量, 调用本身不会报任何错,
+    报表只是安静地少一块数字。实测抓到过两处(``scripts/provider_llm.py`` 返回 usage
+    却从不写库; Go 侧 ``internal/foundation/llm.go`` 整个丢弃 usage), 都不会让任何
+    测试变红。所以部署/更新后必须主动验一次, 且失败要能被看见。
+    """
+    step_print("4. 校验 LLM 接入与 Token 用量可读性 (deploy_scan.py --verify-llm)")
+    script = SCRIPTS / "deploy_scan.py"
+    if not script.exists():
+        print("  ✗ 未找到 scripts/deploy_scan.py")
+        return False
+    res = subprocess.run([sys.executable, str(script), "--verify-llm"],
+                         cwd=str(REPO_DIR))
+    if res.returncode == 0:
+        print("  ✓ 已接入的 LLM 全部可读 token 用量")
+        return True
+    print("  ✗ LLM 接入校验未通过 —— 后果: token 统计会缺一块, 且调用不会报错。")
+    print("     排查: medit-telemetry llm -v   (看是哪个 provider 的哪条通道没在记)")
+    return False
+
+
 def step_periodic_sync():
-    step_print("4. 注册自动更新 (定时从 GitHub 拉取)")
+    step_print("5. 注册自动更新 (定时从 GitHub 拉取)")
     script = SCRIPTS / "auto_sync.py"
     if not script.exists():
         print("  ✗ 未找到 auto_sync.py")
@@ -177,19 +203,30 @@ def main():
         return 0
     step_render_doctor()
     step_build_go()
+    # LLM 记账校验必须发生在"动过代码之后"(build_go 之后), 且**不可跳过** ——
+    # 除非显式给 --no-verify-llm(给确实无法验证的环境留一条明路, 但会记进结论)。
+    llm_ok = True
+    if "--no-verify-llm" in argv:
+        print("\n4. LLM 接入校验: 已按 --no-verify-llm 跳过")
+    else:
+        llm_ok = step_verify_llm()
     step_periodic_sync()
 
+    ready = scan_ok and llm_ok
     print("\n======================================================")
-    print(" 初始化完成%s" % ("" if scan_ok else "(仍有缺口, 见上)"))
+    print(" 初始化完成%s" % ("" if ready else "(仍有缺口, 见上)"))
+    if not llm_ok:
+        print(" ⚠️ LLM 接入校验未通过: token 统计会缺一块, 而这些调用不会报任何错。")
     print(" 默认配置:")
     print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx, 经 npm 安装)")
     print("   • PPT Engine   : 桌面版 Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
     print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装)")
     print("   • Auto-Sync    : 已按平台注册系统定时任务")
     print(" 复检任意时刻: python3 scripts/deploy_scan.py --check")
+    print(" 复检 LLM 记账: python3 scripts/deploy_scan.py --verify-llm")
     print(" 预演将要做什么: python3 scripts/bootstrap_device.py --dry-run")
     print("======================================================")
-    return 0 if scan_ok else 1
+    return 0 if ready else 1
 
 
 if __name__ == "__main__":

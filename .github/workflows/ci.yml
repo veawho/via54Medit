@@ -76,6 +76,20 @@ jobs:
         working-directory: scripts
         run: python -m unittest test_deploy_scan
 
+      - name: LLM ledger tests (记账链路不许悄悄退化)
+        # 记账是旁路: 一条路径不再记录 token, 调用不会报错、不会有非零退出码,
+        # 报表只是安静地少一块。实测抓到过两处(provider_llm.py 返回 usage 却不写库、
+        # Go 侧 llm.go 整个丢弃 usage), 都不会让任何测试变红 —— 所以这组测试
+        # 连"探测器自身能否发现退化"一起测。
+        run: python -m unittest tests.test_llm_ledger
+
+      - name: LLM integration verification (which LLMs, and can we read their tokens)
+        working-directory: scripts
+        # 与部署/更新时跑的是**同一条**命令、同一份渲染逻辑(telemetry/llm_providers.py)。
+        # 这里跑的是离线部分: 扫源码找记账调用点 + 各 provider 的端到端摄入校验 +
+        # Go 侧 spool 链路校验。凭据可达性需要 --llm-live, CI 里没有真 key, 不跑。
+        run: python deploy_scan.py --verify-llm
+
       - name: Deploy scan — platform classification self-check
         working-directory: scripts
         # 断言"平台分类与宿主一致"的逻辑放在脚本里(而不是写在这份 YAML 里) ——

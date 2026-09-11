@@ -472,19 +472,55 @@ def launch_daemon_service(args):
     start_daemon_process()
 
 
-def display_deployment_summary(cfg: dict):
-    """展示最终部署概览与快速命令卡片。"""
-    print(f"\n[*] 步骤 6/6: 校验部署状态与服务健康度...")
+def verify_llm_integration():
+    """步骤 6 的一部分: **强制**校验接入了哪些 LLM、token 消耗能不能真读进库。
+
+    "部署成功"不能只等于"守护进程起来了" —— 记账是旁路: 一条调用路径不记用量,
+    调用本身不会报任何错, 报表只是安静地少一块数字。实测抓到过两处
+    (``scripts/provider_llm.py`` 返回 usage 却从不写库; Go 侧
+    ``internal/foundation/llm.go`` 整个丢弃 usage), 都不会让测试变红。
+    所以部署流程里必须主动验一次。返回是否通过。
+    """
+    print("\n[*] 步骤 6/6: 校验 LLM 接入与 Token 用量读取能力 (强制)...")
+    try:
+        from . import llm_providers
+
+        res = llm_providers.audit(live=False, ingest=True)
+        print(llm_providers.format_report(res))
+        if res.get("problems"):
+            print("  ✗ 校验未通过: 某些 LLM 的 token 消耗进不了库 —— 调用不会报错, "
+                  "但报表会少一块。排查: medit-telemetry llm -v")
+            return False
+        print("  ✓ 已接入的 LLM 全部可读 token 用量, Go 侧 spool 链路也已验证。")
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        print("  ✗ LLM 接入校验执行失败: %s" % e)
+        print("     排查: medit-telemetry llm -v")
+        return False
+
+
+def display_deployment_summary(cfg: dict) -> bool:
+    """展示最终部署概览与快速命令卡片。返回 LLM 强校验是否通过。"""
     st = get_daemon_status()
     is_running = st.get("running", False)
     pid = st.get("pid", "N/A")
+    llm_ok = verify_llm_integration()
 
-    print("""
+    if llm_ok:
+        print("""
 ╔═══════════════════════════════════════════════════════════════╗
 ║               🎉 medit-telemetry 部署成功！                   ║
 ╚═══════════════════════════════════════════════════════════════╝""")
+    else:
+        # 不留"成功"的错觉: 强校验没过就是没部署完
+        print("""
+╔═══════════════════════════════════════════════════════════════╗
+║        ⚠️  medit-telemetry 部署完成, 但校验未通过             ║
+║        服务已就位, LLM Token 记账仍有缺口 (见上)              ║
+╚═══════════════════════════════════════════════════════════════╝""")
     status_icon = "🟢 正常运转中" if is_running else "🟡 未运行 (可通过命令启动)"
     print(f"  • 后台守护状态: {status_icon} (PID: {pid})")
+    print(f"  • LLM Token 记账: {'🟢 全部可读' if llm_ok else '🔴 有缺口 (见上, 请先修)'}")
     print(f"  • 配置文件路径: {CONFIG_FILE_PATH}")
     print(f"  • 运行日志文件: {LOG_FILE}")
     print(f"  • 用户昵称花名: {cfg['user'].get('nickname', 'wtg')}")
@@ -503,9 +539,11 @@ def display_deployment_summary(cfg: dict):
     print("    - 推送飞书卡片:      medit-telemetry push --period week")
     print("    - 团队图表看板:      medit-telemetry bitable --report")
     print("    - 查看 Token 账单:   medit-telemetry token --status")
+    print("    - 查 LLM 接入校验:   medit-telemetry llm -v")
     print("    - 查询守护进程:      medit-telemetry daemon --status")
     print("    - 桌面伴随启动:      双击桌面 [启动 TraeWork (带自动监控).vbs]")
     print("═══════════════════════════════════════════════════════════════\n")
+    return llm_ok
 
 
 def uninstall_deployment():
@@ -591,7 +629,10 @@ def main():
     cfg = setup_configuration(args)
     setup_autostart_and_launcher(args)
     launch_daemon_service(args)
-    display_deployment_summary(cfg)
+    # 强校验没过就以非 0 退出: 部署器(与 CI/自动更新)据此判断"是否真的就绪",
+    # 而不是看到一个"部署成功"的横幅就当没事。
+    if not display_deployment_summary(cfg):
+        sys.exit(2)
 
 
 if __name__ == "__main__":

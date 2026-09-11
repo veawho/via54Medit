@@ -48,6 +48,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.41] - 2026-09-12 (强制验证接入了哪些 LLM + 确保它们的 token 消耗真能读进库)
+
+回应"部署和更新后还需要强制验证接入了哪些 LLM, 并确保真能读取接入的所有 LLM 的 token 消耗"。
+
+"接入了哪些 LLM"这个问题**光看文档或配置答不出来** —— 它由代码里的调用路径决定。
+所以这一轮先造了一把能回答它的尺子, 再用尺子去量, 结果量出**三处真实缺口**。
+
+### 一、三处真实缺口(都是"调用正常、报表少数字"的沉默型缺陷)
+
+记账是**旁路**: 一条路径不再记录用量, 调用本身不会报错、不会有异常、不会有非零退出码,
+报表只是安静地少一块数字。这就是为什么必须主动验证。
+
+1. **`scripts/provider_llm.py` 返回 `usage` 却从不落库** —— 它是 `LLM_PROVIDER` 的**默认值**
+   (deepseek) 的实现, 也就是说默认文本通道的 token 消耗**一直是 0**, 而卡片还写着
+   "100% 控制台对齐"。修法: 新增 `canonical_provider()` + `_record_usage()`, 并把
+   `provider=` 贯穿到 4 个调用点。整个包装在 `try/except` 里 —— 遥测不可用不该让 LLM 调用失败。
+2. **`scripts/sensenova_vision.py` 把 `usage` 丢掉** —— 只返回 `content`, 于是 SenseNova
+   视觉调用的 token 全部无账。同类缺口, 由上面的源码扫描发现(不是靠人肉复盘)。
+3. **Go 侧的整个 LLM 调用面完全不计账** —— `internal/foundation/llm.go`、`llm_glm.go`
+   解析响应时只取 `choices`, `usage` **整个丢弃**。受影响的是 `medit ask` / `medplan` /
+   docproc / medit-mcp 四条真实链路, 覆盖 deepseek / openai / hermes / glm 四个 provider。
+
+### 二、新增: 一把"能回答这个问题"的尺子 `telemetry/llm_providers.py`
+
+- **注册表是唯一事实来源**: 6 个 provider(deepseek / openai / minimax / zhipu / sensenova /
+  hermes)各自的接入通道、凭据来源、单次用量来源、账户级用量怎么读。
+- **证据来自源码, 不来自声明**: 注册表里**没有**"记录者清单"字段 —— 谁在记账必须由
+  `scan_recorders()` 扫出来(Python 的 `record_llm_usage(` + Go 的 `recordLLMUsage(`)。
+  实测的缺口(上面的 1 和 3)就是被这个检查抓出来的, 靠声明永远抓不到。
+- **离线端到端摄入校验**: 把每个 provider 的**真实响应形状**喂进 `record_llm_usage`,
+  写入**临时**库再读回, 并一路核对到**报表层** —— 全程不碰生产数据、不发网络请求。
+- **Go 侧 spool 链路校验**: spool 一行 → 摄入 → 读回 → 报表, 额外验两件事:
+  别名归一(Go 叫 `glm`, 落库必须是 `zhipu`, 否则报表里凭空多一家)与**重放幂等**。
+
+### 三、新增: Go 侧用量落盘 `internal/foundation/llm_usage.go`
+
+Go 没有 SQLite 驱动, 为一个记账功能引入 cgo/driver 会让构建显著变重, 所以改为
+**追加一行 JSONL 到 `~/.medit/llm_usage_spool.jsonl`**, 由 Python 侧幂等摄入。
+
+- 幂等靠 `req_id`(服务商返回的 id 优先, 没有就自造唯一值), 所以"写了一半崩了再重跑"
+  不会重复计费 —— 这也是不能靠"读完就删文件"保证正确性的原因。
+- 记账**永不返回错误**: 它绝不能因为自己失败而让 LLM 调用失败。
+- `Source` 字段优先取显式标签(如 `docproc/entity`), 否则从调用栈推断调用源
+  (如 `go:medplan/research.go`) —— 让"这笔 token 是谁花的"可追溯。
+- 顺手修正一处身份错位: openai / deepseek **复用**了 `HermesProvider` 的实现,
+  记账时若直接用 `Name()` 会把它们全记成 hermes。新增 `usageName` 字段, 账各归各。
+- **跨语言契约有测试守着**: 从 Go 源码里把 `json.Marshal` 那段 map 的键抠出来,
+  与 Python 摄入端实际读的键做全等断言。字段一漂就红。
+
+### 四、新增: 摄入器 `telemetry/llm_spool.py` + 守护进程自动收口
+
+- `created_at` 取 spool 里的 `ts`(真实调用时刻), **不是**摄入时刻 —— 否则按周切分的
+  统计会对不上真实调用时间。
+- 没有 token 计数的行**不入库**(记 0 只会污染口径); 坏行跳过不中断整批。
+- 守护进程每 60s 收口一次(`telemetry.llm_spool_interval_seconds` 可调); `refresh`
+  也顺手收口; 心跳新增 `freshness.llm_spool` —— "待摄入一直不为 0"就是摄入挂了或两端
+  字段约定漂了的第一信号, 不该等到月底对账才发现。
+
+### 五、强制验证: 部署与更新后都必须跑, 失败非零退出
+
+- 新增命令 `medit-telemetry llm`(`--live` 联网探凭据 / `--verbose` 通道级细节 /
+  `--json` / `--no-ingest`), 有问题时**以退出码 2 结束**。
+- `scripts/deploy_scan.py --verify-llm`(**独立模式**)与 `--stage all` 都会跑; 结果进入
+  报告第 4 节, 校验不过则 `--stage all` 也判"未就绪"。
+- `scripts/bootstrap_device.py`(部署/更新后的一键就绪)新增第 4 步, 校验失败**以非 0 退出**。
+- `scripts/auto_sync.py`(定时从 GitHub 拉取)在拉取+重建**之后**加了一步校验并接入告警。
+- `medit-telemetry deploy` 的部署概览里加入同一份校验; 不过就**不打印"部署成功"横幅**,
+  且 `sys.exit(2)`。
+- CLI 与部署校验**共用同一份渲染器** `llm_providers.format_report()`, 免得两处口径分叉。
+
+### 六、勘误: 我自己第一版检查器有假阳性, 已修
+
+第一版用正则扫 `record_llm_usage(` 的出现次数来判"有没有在记账"。把 `provider_llm.py` 里
+**所有对 `_record_usage()` 的调用删掉、只留函数定义**, 它依然判"记录中" —— 因为函数体里
+那个调用点还在。这比没有检查更危险(会给人"已验证"的错觉)。
+
+改为 **AST 可达性判断**: 记账调用点所在的**私有**包装函数必须在同文件内被调用过;
+公开入口(如 `vision_analyze`, 由 CLI 拉起)豁免, 否则会产生大量假阳性。
+负向测试已固化在 `tests/test_llm_ledger.py::TestDetectorCatchesRegression`。
+实测: 删掉那个调用点后 `--verify-llm` 报出 6 条问题并以退出码 1 结束, 恢复后回到 0。
+
+### 七、诚实说明读不到的部分(不折算、不造数)
+
+- **mmx / MiniMax VLM 的单次 token 读不到**: `mmx vision describe --output json` 只返回
+  content, CLI 不暴露 token。它的用量只能取账户级配额, 且 `mmx quota show` 返回的是
+  **调用次数**而不是 token —— 所以**不会**被折成 token 入库, 混进去就是造数。
+- **openai 的用量接口要 Admin key**(`sk-admin-` + `api.usage.read`), 普通 key 读不到。
+- **deepseek 有余额接口(`GET /user/balance`)没有逐条用量接口**, 逐条要走控制台导出 CSV。
+- **本机当前只有 `SENSENOVA_API_KEY` 一个凭据** —— 审计如实报出其余 provider "凭据 ✗"
+  (不是缺陷, 是这台机器的实际状态); 凭据是否真能通过需要 `--live` 才会联网探。
+
+### Tests
+- Python: 145 → **176**(新增 `tests/test_llm_ledger.py` 31 条, 含探测器自身的负向测试)
+- Go: 新增 `internal/foundation/llm_usage_test.go` 6 条(含"provider 不得串账"与
+  "没有 usage 就不落盘"两条真实约束); 跨语言链路另用真 Go 调用 + 真 Python 摄入各验一次
+- 校验结果: `--verify-llm` → 6 个 provider 全部"记录点 ✓ / 单次用量可读 / 端到端往返一致",
+  0 问题
+
 ## [5.4.40] - 2026-09-12 (确保统计数据实时更新: 修掉 3 倍虚高 + 已收录条目不冻结 + 新鲜度可查)
 
 回应"确保所有统计数据实时更新"。

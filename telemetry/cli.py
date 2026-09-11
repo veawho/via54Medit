@@ -88,6 +88,23 @@ def cmd_refresh(args):
                   "不是产出物)" % (removed["highlight_items"], removed["download_items"]))
         else:
             print("  • 清理备份副本行: 无需清理")
+    # Go 侧 LLM 用量 spool 也在这里收口: refresh 的语义就是"现在就把数字对齐到最新",
+    # 留着待摄入的行不算对齐。
+    try:
+        from .llm_spool import ingest, spool_status
+
+        before = spool_status()
+        res = ingest()
+        if res.get("imported") or res.get("duplicated") or res.get("invalid"):
+            print("  • LLM 用量 spool: 待摄入 %d 行 → 导入 %d / 重复跳过 %d / 无效 %d"
+                  % (before.get("pending", 0), res.get("imported", 0),
+                     res.get("duplicated", 0), res.get("invalid", 0)))
+            for prob in (res.get("problems") or [])[:3]:
+                print("      ! %s" % prob)
+        else:
+            print("  • LLM 用量 spool: 无待摄入记录")
+    except Exception as e:                                  # noqa: BLE001
+        print("  • LLM 用量 spool: 摄入失败 (%s)" % e)
     print()
     cmd_status(args)
 
@@ -654,6 +671,29 @@ def cmd_token(args):
     print("=======================================================\n")
 
 
+def cmd_llm(args):
+    """审计接入了哪些 LLM, 并验证它们的 token 消耗真能读进库。
+
+    这不是"看一眼有没有配 key", 而是三类确证:
+    1. 源码级证据 —— 扫仓库里真实的 ``record_llm_usage(`` 调用点(不信任任何自我声明);
+    2. 离线端到端 —— 用真实形状的响应跑一遍落库, 再从库里读回, 并核对报表层;
+    3. 可选在线探测 —— ``--live`` 才发网络请求(凭据可达性 + mmx 账户级用量)。
+    """
+    from . import llm_providers
+
+    res = llm_providers.audit(live=bool(args.live),
+                              ingest=not getattr(args, "no_ingest", False))
+
+    if getattr(args, "json", False):
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(llm_providers.format_report(res, verbose=bool(args.verbose)))
+
+    # 有确证问题时以非 0 退出, 好让部署/更新脚本能**强制**拦截
+    if res.get("problems"):
+        sys.exit(2)
+
+
 def cmd_deploy(args):
     from .deploy import (
         print_banner,
@@ -788,6 +828,17 @@ def main():
     p_token.add_argument("--project", default="", help="所属项目名称")
     p_token.add_argument("--status", action="store_true", help="查询当前真实调用日志")
     p_token.set_defaults(func=cmd_token)
+
+    # llm (接入审计 + token 用量读取能力验证)
+    p_llm = subparsers.add_parser(
+        "llm", help="审计接入了哪些 LLM, 并强制验证它们的 token 消耗真能读进库")
+    p_llm.add_argument("--live", action="store_true",
+                       help="联网探测凭据可达性, 并读取 mmx 账户级用量 (默认纯离线)")
+    p_llm.add_argument("--verbose", "-v", action="store_true", help="展开每个 provider 的通道级细节")
+    p_llm.add_argument("--json", action="store_true", help="以 JSON 输出 (供部署脚本解析)")
+    p_llm.add_argument("--no-ingest", action="store_true",
+                       help="不摄入 Go 侧用量 spool (默认会摄入, 保证积压的 token 真的进库)")
+    p_llm.set_defaults(func=cmd_llm)
 
     # deploy (一键独立部署)
     p_deploy = subparsers.add_parser("deploy", help="一键独立部署引擎 (环境自检/注册/开机自启/启动守护)")

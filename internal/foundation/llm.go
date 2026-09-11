@@ -49,6 +49,9 @@ type CompleteOptions struct {
 	Model       string  // model override ("" = use provider default)
 	MaxTokens   int     // 0 = use provider default
 	Temperature float64 // 0 = use provider default
+	// Source 是记账用的调用源标签（如 "medit/ask"、"medplan"）。
+	// 留空等价于 "go"。只影响 spool 里的 source 字段，不影响请求本身。
+	Source string
 	// Phase 1.5: TopP, StopSequences, ResponseFormat
 }
 
@@ -100,6 +103,17 @@ type HermesProvider struct {
 	model    string
 	apiKey   string
 	client   *http.Client
+	// usageName 是**记账时**的 provider 名。openai / deepseek 复用本类型的
+	// 实现，但账必须分别记到各自账本上，所以不能直接用 Name()。
+	usageName string
+}
+
+// usageProvider 返回落库用的 provider 名（空 = hermes）。
+func (h *HermesProvider) usageProvider() string {
+	if h.usageName != "" {
+		return h.usageName
+	}
+	return "hermes"
 }
 
 func init() {
@@ -108,9 +122,10 @@ func init() {
 
 func newHermes(cfg map[string]any) (LLMProvider, error) {
 	h := &HermesProvider{
-		endpoint: "http://localhost:8765",
-		model:    "MiniMax-M3",
-		client:   &http.Client{Timeout: 60 * time.Second},
+		endpoint:  "http://localhost:8765",
+		model:     "MiniMax-M3",
+		client:    &http.Client{Timeout: 60 * time.Second},
+		usageName: "hermes",
 	}
 	if v, ok := cfg["endpoint"].(string); ok && v != "" {
 		h.endpoint = v
@@ -178,20 +193,21 @@ func (h *HermesProvider) CompleteWithOptions(ctx context.Context, opts CompleteO
 		return "", fmt.Errorf("llm: %s returned %d: %s", h.Name(), resp.StatusCode, truncate(string(raw), 200))
 	}
 
-	var got struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
+	var got llmResponseEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		return "", fmt.Errorf("llm: decode response: %w", err)
 	}
 	if len(got.Choices) == 0 {
 		return "", fmt.Errorf("llm: %s returned 0 choices", h.Name())
 	}
-	return got.Choices[0].Message.Content, nil
+	// 记账：把服务商返回的真实 usage 追加进 spool。
+	// 响应体的 model 优先（服务商可能改派到别的模型），没有才用请求时的。
+	recModel := model
+	if strings.TrimSpace(got.Model) != "" {
+		recModel = got.Model
+	}
+	recordLLMUsage(h.usageProvider(), recModel, got.ID, opts.Source, "", got.Usage)
+	return got.content(), nil
 }
 
 // --- openai backend (also OpenAI-compatible) ---
@@ -279,10 +295,11 @@ func (d *DeepSeekProvider) Complete(ctx context.Context, system, user string) (s
 
 func (d *DeepSeekProvider) CompleteWithOptions(ctx context.Context, opts CompleteOptions) (string, error) {
 	h := &HermesProvider{
-		endpoint: d.endpoint,
-		model:    d.model,
-		apiKey:   d.apiKey,
-		client:   d.client,
+		endpoint:  d.endpoint,
+		model:     d.model,
+		apiKey:    d.apiKey,
+		client:    d.client,
+		usageName: "deepseek",
 	}
 	return h.CompleteWithOptions(ctx, opts)
 }
@@ -291,10 +308,11 @@ func (o *OpenAIProvider) CompleteWithOptions(ctx context.Context, opts CompleteO
 	// Implementation is identical to Hermes — we just swap the endpoint/model.
 	// To avoid duplication, build a HermesProvider with OpenAI's config.
 	h := &HermesProvider{
-		endpoint: o.endpoint,
-		model:    o.model,
-		apiKey:   o.apiKey,
-		client:   o.client,
+		endpoint:  o.endpoint,
+		model:     o.model,
+		apiKey:    o.apiKey,
+		client:    o.client,
+		usageName: "openai",
 	}
 	return h.CompleteWithOptions(ctx, opts)
 }

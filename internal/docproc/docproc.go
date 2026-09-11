@@ -363,6 +363,7 @@ Return the entities in this exact JSON format:
 		User:        userPrompt,
 		Temperature: 0.1, // low temp for deterministic entity extraction
 		MaxTokens:   4000,
+		Source:      "docproc/entity",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("entity extraction LLM call failed: %w", err)
@@ -452,6 +453,7 @@ Return ONLY valid JSON matching this exact schema:
 		User:        userPrompt,
 		Temperature: 0.2,
 		MaxTokens:   3000,
+		Source:      "docproc/soap",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soap summarization LLM call failed: %w", err)

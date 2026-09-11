@@ -277,6 +277,39 @@ def pull_and_rebuild():
             level="warning",
         )
 
+    # 3c. **强制**校验 LLM 接入与 token 用量可读性。
+    #     放在拉取+重建之后的理由: 代码刚变过, 记账调用点可能被改坏了 —— 而这类
+    #     回归**不会让任何测试变红**, 只会让报表安静地少一块 token。实测抓到过
+    #     provider_llm.py 返回 usage 却从不写库(默认文本 provider 的 token 一直是 0)、
+    #     以及 Go 侧 internal/foundation/llm.go 整个丢弃 usage。
+    log("[auto_sync] 校验 LLM 接入与 Token 用量可读性 (deploy_scan.py --verify-llm)...")
+    llm_script = REPO_DIR / "scripts" / "deploy_scan.py"
+    if not llm_script.exists():
+        log("  ~ 未找到 scripts/deploy_scan.py, 跳过 LLM 接入校验")
+    else:
+        llm_ok, llm_out, llm_err = run_cmd(
+            [sys.executable, str(llm_script), "--verify-llm"]
+        )
+        if llm_ok:
+            log("  ✓ LLM 接入校验通过: 已接入的 provider 全部可读 token 用量")
+        else:
+            llm_lines = [ln.strip() for ln in (llm_err or llm_out).splitlines() if ln.strip()]
+            llm_detail = llm_lines[-1] if llm_lines else "(无输出)"
+            log(f"  ✗ LLM 接入校验未通过: {llm_detail}")
+            notify(
+                "定时同步巡检: LLM 接入/token 记账校验失败",
+                [
+                    f"**仓库**：`{REPO_DIR}`",
+                    f"**失败摘要**：`{llm_detail}`",
+                    "**后果**：某些 LLM 的 token 消耗进不了库, 而调用本身不会报错 —— "
+                    "报表会安静地少一块数字。",
+                    "**排查**：`medit-telemetry llm -v`（或 `python3 scripts/deploy_scan.py "
+                    "--verify-llm`）看是哪个 provider 的哪条通道没在记。",
+                ],
+                key="autosync-llm-verify-failed",
+                level="warning",
+            )
+
     # 4. 结论: 只有「构建没成功」才算部署未更新; 拉取问题单独表述, 不掩盖也不冒领
     if not build_ok:
         log("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")
