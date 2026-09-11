@@ -48,6 +48,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.23] - 2026-09-11 (macOS PowerPoint 渲染: 加快速预检 (a) + 超时可配并下调默认 (b))
+
+承接 5.4.22 隔离出的缺陷: `open` 这一步被模态对话框挡住(AppleEvent -1712), 而 PowerPoint
+进程与 Apple 事件通道本身都正常。影响是默认偏好下**静默等 300 秒后返回 0 张幻灯片**。
+按 (a)+(b) 方案处理。
+
+### Added (a) 快速预检
+- **`probe_macos_powerpoint(timeout=None)`** —— 只做 `launch` + `get version`, 返回 `(ok, 详情)`。
+  实测暖机 0.4s 返回。`render_via_macos_powerpoint()` 在花钱 `open` 之前先调它,
+  不通过就**立刻报错**, 不再白等几分钟。
+  (osascript 拉不起来时返回 `(False, 说明)` 而不抛异常 —— 预检自己不该成为新的故障点。)
+- **`RenderEngineError(RuntimeError)` 携带 `hint` 属性** —— 可操作建议不再拼进异常消息。
+
+  **这是从一次真实疏漏里改出来的**: 先把建议拼在消息末尾, 结果调用方
+  `render_ppt_slides_auto` 打印时 `str(e)[:100]` **正好把它整段切掉** —— 异常里有建议、
+  用户却只看到一句原始报错。改放到消息最前面, 原始错误又被挤没, 还留下"｜ 原"这种半截断口。
+  最终改为: 消息归消息(截断到 160), 建议走 `hint` 属性由调用方**单独成行**打印:
+  ```
+  [render] PowerPoint (macOS) 失败: PowerPoint AppleScript error: ... (-1712)
+  [render] 处理建议: PowerPoint 多半是弹了模态对话框(登录 / 激活 / 文件访问权限)挡住了 Apple 事件。...
+  [render] 所有引擎均失败, 返回 0 张幻灯片
+  ```
+- 引擎全部失败时补一行明确的收尾提示(原先只有每个引擎各自一行, 然后静默返回 0)。
+
+### Changed (b) 超时可配并下调默认
+- `PPT_RENDER_TIMEOUT`(秒) 控制 open/save 超时, **默认由写死的 300 降到 60**。
+- `PPT_RENDER_PREFLIGHT_TIMEOUT`(秒) 控制预检超时, 默认 20(覆盖冷启动)。
+- 缺失 / 不可解析 / 非正数的取值一律回落到默认(`_env_seconds`)。
+- `subprocess` 超时比 AppleScript 多 15s, 让 AppleScript 自己的 -1712 先报出来(信息更具体)。
+
+### 验证
+- **真实端到端(本机默认偏好)**: `render_ppt_slides_auto()` **302.4s → 65.9s**, 且日志里
+  可操作建议完整可见。注意仍返回 `(0,"none")` —— 这是 (b) 的直接效果, 不是本机能修好的事
+  (PowerPoint 装了, 但 `open` 被模态框挡住, 需人工处理那个对话框)。
+- 测试 **79 → 89 项**全过; `TestRenderEngine` 14 项 0.13s。
+- **负向对照**: 把建议改回"拼在消息末尾"且截断改回 100 → `test_failure_hint_reaches_the_log`
+  立刻失败, 且打印出的日志尾巴正是被切断的半句话(`...PowerPoint 多半是弹了模态对话`),
+  说明这条测试确实守住了那个疏漏。另把 `_build_engine_list` 的 auto 分支改坏 →
+  seam 测试同样立刻失败。
+- `make test-py` 67 + 24 全过; `gofmt` / `go vet` 干净; 镜像 `--check` 退出码 0; 规则校验 7/7。
+
+### 诚实说明: (a) 覆盖的不是本机的失败模式
+本机实测时把预检超时压到 **1 秒**, 预检**依然通过**(PowerPoint 1 秒内就应答了), 于是照常走到
+`open` 再挂 60s。原因是本机的故障在 **`open` 这一步的模态对话框**, 而非 Apple 事件通道 ——
+"能不能应答"区分不了这两件事。
+
+所以两者的适用范围要分清:
+  * **(a) 预检** 解决的是"**通道完全不通**"的情形(macOS 自动化权限被拒 -1743、PowerPoint 无法启动等):
+    那种情况下原先要白等 300s, 现在约 1s 就报错。**它对本机这种模态框挡 open 的情形无效。**
+  * **(b) 超时下调** 才是本机实际受益的那一项: 302.4s → 65.9s。
+由于本机通道是通的, (a) 的快速失败路径**无法自然触发**, 只能由 mock 测试覆盖
+(断言 `open` 从未被执行、且立即返回)。
+
 ## [5.4.22] - 2026-09-11 (修复: test_tma_pipeline 那条"打了失效接缝"的渲染测试)
 
 5.4.21 顺带发现 `test_tma_pipeline` 有 1 项失败。本轮查明: **失败的是测试本身写错了接缝**,
