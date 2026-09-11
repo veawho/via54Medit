@@ -10,9 +10,12 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz  # PyMuPDF 1.24+ 的正式导入名
 except ImportError:
-    fitz = None
+    try:
+        import fitz  # 仅旧版本才有这个名字
+    except ImportError:
+        fitz = None
 
 from .db import TelemetryDB
 from .models import DownloadItem, HighlightItem, RetrievalItem, TaskRecord, TaskType

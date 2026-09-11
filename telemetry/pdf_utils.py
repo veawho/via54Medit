@@ -20,8 +20,13 @@ def get_pdf_page_count(path: str) -> int:
         return 1
 
     # 1. PyMuPDF (fitz) —— 硬依赖, 通常可用
+    #    优先用 `pymupdf` 这个正式导入名: 写 `import fitz` 时 PyMuPDF 自己会打一条
+    #    弃用警告, 而该警告会顺着导入链污染调用方的 stderr (守护进程日志、CLI 输出等)。
     try:
-        import fitz
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz  # 仅旧版本才有这个名字
         with fitz.open(path) as doc:
             count = len(doc)
             if count > 0:

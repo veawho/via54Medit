@@ -1672,6 +1672,23 @@ class TestPackageImportStrategy(unittest.TestCase):
         import telemetry
         return telemetry.__version__
 
+    def test_pdf_stack_import_carries_no_deprecation_warning(self):
+        """导入 PDF 相关模块不得打 PyMuPDF 的弃用警告。
+
+        写 ``import fitz`` 时 PyMuPDF 会往 stderr 打一行 "The `fitz` API is deprecated";
+        改用 ``import pymupdf as fitz`` 才没有。这行警告会顺着导入链污染守护进程日志与
+        CLI 输出, 所以要钉住。
+        """
+        code = (
+            "from telemetry import WorkspaceScanner\n"
+            "from telemetry.pdf_utils import get_pdf_page_count\n"
+            "print('OK')\n"
+        )
+        r = self._run(code)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("OK", r.stdout)
+        self.assertNotIn("deprecated", r.stderr, "PDF 导入不该打弃用警告")
+
 
 if __name__ == "__main__":
     unittest.main()
