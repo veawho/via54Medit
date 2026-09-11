@@ -80,7 +80,6 @@ references/test-data/embedded/
 /medit-mcp
 cmd/medit/medit
 *.exe
-list_citations_v2
 
 # User-specific paths (NEVER commit; protect private project data + tokens)
 # 雷管方案 (临床文献整理项目, 私有, 商业机密)
