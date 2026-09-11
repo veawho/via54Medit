@@ -26,22 +26,51 @@ go build -o bin/medit ./cmd/medit/          # 或 make build
 ## 2. 环境自检与自动接入 (核心)
 
 ```bash
-medit doctor            # 全项探测: Python/包/浏览器/CDP/soffice/pdftotext/lark-cli
+medit doctor            # 全项探测: Python/包/浏览器/CDP/pdftotext/lark-cli
 medit doctor --fix      # 自动 pip 安装缺失的 Python 包
 medit browser start     # 自动探测 Chrome/Edge/Chromium 并启动 CDP 调试实例 (port 9223)
 medit browser health    # 验证 CDP 可达
+python3 scripts/render_doctor.py   # 渲染通道**真出图**自检 —— 跑管线前必做, 见 §2.1
 ```
 
-### 各平台软件接入矩阵
+### 2.1 渲染前置条件 (部署后必读)
+
+PPT / Word 的**版式**只能由微软的引擎产出 —— 第三方引擎会各自重排 OOXML, 字体与断行都和原版
+分叉, 已整体删除(判定标准与证据见 `docs/ppt-render-fidelity.md`)。所以各平台的渲染路径是:
+
+| 能力 | Windows | macOS | Linux |
+|---|---|---|---|
+| PPT 版式渲染 | 桌面版 **PowerPoint** (COM, 需 pywin32) | 桌面版 **PowerPoint** (原生 AppleScript) | ✗ 需显式 `RENDER_ENGINE=graph` |
+| Word 版式渲染 | 桌面版 **Word** (COM) | 桌面版 **Word** (原生 AppleScript) | ✗ 先用 Word 另存为 PDF 再传入 |
+| 微软在线渲染 | `RENDER_ENGINE=graph` (Microsoft Graph, 需凭据) | 同左 | 同左 |
+| PDF / 图片 → 分页图 | pymupdf (pip, 只光栅化不重排) | 同左 | 同左 |
+
+**没有兜底通道**: WPS / LibreOffice / Keynote / python-pptx / Aspose / Spire / GroupDocs /
+Syncfusion 都已删除。拿不到微软引擎就**直接失败**, 不会产出"看起来像"的近似渲染。
+
+**部署后先跑真出图自检, 别跳过**:
+
+```bash
+python3 scripts/render_doctor.py           # 真出图探针: 现场造最小文档, 用生产函数真渲染一遍
+python3 scripts/render_doctor.py --quick    # 只查依赖(快, 但**不能**据此认为能渲染)
+```
+
+为什么不能只看依赖探测: 实测 `launch` + `get version` **秒回**, 但真正 `open` 文档时会被
+模态对话框挡住一直挂着 —— 只查依赖会给**假 OK**, 管线跑到渲染那步才炸。
+`render_doctor.py` **退出码非 0 就说明这台设备现在渲染不出来**, 先解决它再跑管线。
+
+macOS 上若报 `AppleEvent -1712` / `-1708`: 手动打开一次 PowerPoint / Word 关掉模态对话框,
+并在 系统设置 › 隐私与安全性 › 自动化 里放行当前终端(或 Agent)。
+
+### 2.2 各平台依赖接入矩阵
 
 | 能力 | Windows | macOS | Linux |
 |---|---|---|---|
 | Python 3.10+ | `python.org` 安装包 | `brew install python@3.11` | `apt install python3.11` |
-| Python 包 (fitz/pptx/PIL) | 自动 pip (`doctor --fix` / `deps_auto.py`) | 同左 | 同左 |
-| PPT 真实渲染 | PowerPoint/WPS COM (自动探测+装 pywin32) | LibreOffice soffice (自动探测) | LibreOffice soffice |
-| PPT 近似渲染 (兜底) | python-pptx (含 CJK 字体: 微软雅黑) | python-pptx (苹方/黑体探测) | python-pptx (Noto CJK 探测) |
+| Python 包 (pymupdf/pptx/PIL) | 自动 pip (`doctor --fix` / `deps_auto.py`) | 同左 | 同左 |
+| 桌面版 Office (渲染必需) | Microsoft PowerPoint / Word | Microsoft PowerPoint / Word | ✗ (或用 `RENDER_ENGINE=graph`) |
 | 浏览器 CDP | Chrome/Edge 自动启动 | Chrome/Chromium 自动启动 | chromium 自动启动 |
-| PDF 文本 (pdftotext) | 需 poppler (可选) | `brew install poppler` | `apt install poppler-utils` |
+| pdftoppm (`RENDER_RASTERIZER=pdftoppm` 时) | 需 poppler (可选) | `brew install poppler` (可选) | `apt install poppler-utils` (可选) |
 | 飞书 CLI | `$LARK_CLI` 指定 | 内置默认 | `$LARK_CLI` 指定 |
 
 ### 环境变量覆盖点 (新设备无需改代码)
@@ -56,6 +85,10 @@ medit browser health    # 验证 CDP 可达
 | `LIT_ROOT` | 文献库根 (self_check) |
 | `LARK_CLI` | 飞书 CLI 可执行文件 |
 | `MEDIT_HOME` | via54Medit 数据根 (默认 ~/.medit) |
+| `RENDER_ENGINE` | 排版引擎: `powerpoint`(默认, 桌面版) / `graph`(Microsoft Graph 在线渲染) |
+| `RENDER_RASTERIZER` | 只光栅化不重排的下游: `pymupdf`(默认) / `pdftoppm`(强制 `-cropbox`) |
+| `PPT_RENDER_TIMEOUT` / `WORD_RENDER_TIMEOUT` | 渲染等待上界(秒), 默认 60; 另有 `*_PREFLIGHT_TIMEOUT`(默认 20) |
+| `GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET` / `GRAPH_DRIVE_ID` | `RENDER_ENGINE=graph` 所需凭据(或直接给 `GRAPH_ACCESS_TOKEN`) |
 
 ## 3. skills 接入 (经验库)
 
@@ -81,9 +114,20 @@ python scripts/deps_auto.py                   # 探测 + 自动安装
 
 ## 5. CI 验证 (三平台)
 
-`.github/workflows/ci.yml` 在 ubuntu/macos/windows 上自动执行:
+`.github/workflows/ci.yml` 在 **ubuntu / macos / windows** 上自动执行:
 - Go: `go build ./...` + `go vet ./...` + `go test -race ./...`
-- Python: `pip install -r requirements.txt` + test_tma_pipeline (79) + hl_lib (25) + 工具链 import
+- Python: `pip install -r requirements.txt` + `test_tma_pipeline`(120) + `hl_lib`(36) +
+  禁止区校验 + **工具链 import 探测**(含整条渲染链路: `unified_render_engine` /
+  `render_doctor` / `graph_render` / `bootstrap_device`)
+
+Python 测试**刻意不依赖具体平台**: 测 darwin 分支的用例用 `_as_macos()` 伪装平台(同时伪装
+`os.name` 与 `sys.platform`), 另有一条 `test_render_engine_suite_passes_on_non_macos` 在本机就把
+`sys.platform` 伪装成 linux 重跑一遍 —— 防止再出现"本机绿、CI 红"。
+(**教训**: v5.4.26~v5.4.31 连续六次提交在 ubuntu/windows 上是红的, 却因为只在本机 macOS 上
+验证而一直没被发现。)
+
+渲染通道的**真出图探针故意不进 CI** —— 跑者镜像里没有桌面版 Office, 它必然报不可用。
+那一步在真机上跑: `python3 scripts/render_doctor.py`。
 
 ## 6. 常见问题
 
