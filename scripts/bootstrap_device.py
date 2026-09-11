@@ -10,11 +10,20 @@
      只装"与本平台相关且确实缺失"的能力, 并按正确通道装
      (Python 包走 pip、mmx-cli 走 npm、系统工具走 brew/apt/winget/choco/scoop)。
      与平台无关的能力会被明确标成"不适用", **不安装也不校验**。
+     分阶段跑(``--stage env|deps|compat``), 这样进度是可见的, 而不是等一大坨输出。
   2. **渲染通道真出图自检** —— 交给 scripts/render_doctor.py: "探测到"不等于"能出图"。
   3. **构建 Go 二进制**(有 go 工具链时)。
   4. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
 
 本脚本**幂等**: 重复运行、或在版本更新后运行, 都只会补上当时缺的东西。
+
+先看要装什么, 再决定装不装
+--------------------------
+    python3 scripts/bootstrap_device.py --dry-run
+
+``--dry-run`` 会把第 1 步换成"只报计划" —— 打印出**真会执行的那条命令**, 不落地任何修改。
+这是参考 openclaw 的 ``--dry-run`` 加的; 与之配套的还有 deploy_scan.py 的 ``--only``
+(只补单个能力) 与安装后的**复验**(安装器说成功不算, 复验通过才算)。
 
 为什么不再自己装依赖 (v5.4.34 更正)
 -----------------------------------
@@ -53,14 +62,46 @@ def _supported_flags(script):
         return ""
 
 
-def step_deep_scan():
-    step_print("1. 深度扫描系统环境 + 按平台补齐缺口 (deploy_scan.py)")
+def step_deep_scan(plan=False):
+    """第 1 步 —— 分阶段跑部署扫描器。
+
+    hermes-agent 的安装器把流程切成可单独复跑的 ``--stage``(prerequisites /
+    repository / venv / …), 外层部署器因此能逐步显示进度、失败时也能只重跑一段。
+    这里借同一套做法: 环境 -> 依赖/工具 -> 平台兼容性。
+
+    返回 True 表示"必需能力齐备"。
+    """
+    step_print("1. 深度扫描系统环境 + 按平台补齐缺口 (deploy_scan.py%s)"
+               % ("、--dry-run 预演)" if plan else ")"))
     script = SCRIPTS / "deploy_scan.py"
     if not script.exists():
         print("  ✗ 未找到 scripts/deploy_scan.py")
         return False
-    res = subprocess.run([sys.executable, str(script)], cwd=str(REPO_DIR))
-    if res.returncode == 0:
+    extra = ["--dry-run"] if plan else []
+
+    # 阶段一: 环境(只读, 永远成功; 失败说明连解释器都不对)
+    res = subprocess.run([sys.executable, str(script), "--stage", "env"] + extra,
+                         cwd=str(REPO_DIR))
+    if res.returncode not in (0, 1):
+        print("  ✗ 环境阶段未能完成 (退出码 %d)" % res.returncode)
+        return False
+
+    # 阶段二: 依赖/工具 —— 这一步才会真的装东西
+    print("  ── 依赖与工具 ──", flush=True)
+    deps = subprocess.run([sys.executable, str(script), "--stage", "deps"] + extra,
+                          cwd=str(REPO_DIR))
+    if deps.returncode not in (0, 1):
+        print("  ✗ 依赖阶段未能完成 (退出码 %d)" % deps.returncode)
+        return False
+
+    # 阶段三: 平台兼容性(只读)
+    subprocess.run([sys.executable, str(script), "--stage", "compat"] + extra,
+                   cwd=str(REPO_DIR))
+
+    if plan:
+        print("  ✓ 以上为预演, **未做任何修改**。去掉 --dry-run 即可真正执行")
+        return True
+    if deps.returncode == 0:
         print("  ✓ 必需能力已齐备")
         return True
     print("  ⚠️ 仍有必需缺口 —— 见上面报告的 '→ 处理:' 行; 修好后重跑本脚本即可")
@@ -121,12 +162,19 @@ def step_periodic_sync():
 
 
 def main():
+    argv = sys.argv[1:]
+    plan = "--dry-run" in argv or "--plan" in argv
     print("======================================================")
     print(" via54Medit 设备部署 / 版本更新后的一键就绪初始化")
     print(" (兼容 Traework / Hermes / Codex / OpenClaw / DeepSeek)")
     print(" 可重复运行: 只会补上当时缺的东西")
+    if plan:
+        print(" 模式: --dry-run 预演 (不会改动任何东西)")
     print("======================================================")
-    scan_ok = step_deep_scan()
+    scan_ok = step_deep_scan(plan=plan)
+    if plan:
+        print("\n预演结束。真正执行: python3 scripts/bootstrap_device.py")
+        return 0
     step_render_doctor()
     step_build_go()
     step_periodic_sync()
@@ -139,6 +187,7 @@ def main():
     print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装)")
     print("   • Auto-Sync    : 已按平台注册系统定时任务")
     print(" 复检任意时刻: python3 scripts/deploy_scan.py --check")
+    print(" 预演将要做什么: python3 scripts/bootstrap_device.py --dry-run")
     print("======================================================")
     return 0 if scan_ok else 1
 

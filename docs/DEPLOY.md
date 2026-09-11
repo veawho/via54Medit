@@ -35,9 +35,19 @@ python3 scripts/bootstrap_device.py   # 深度扫描 + 按平台补齐缺口 + �
 
 ```bash
 python3 scripts/deploy_scan.py --check   # 深度扫描(只报不改); 退出码 0 = 必需能力齐备
+python3 scripts/deploy_scan.py --dry-run # 预演: 打印**将执行的完整命令**, 不落地任何修改
 medit doctor                              # 同一份扫描结果的 Go 侧渲染(多一项 CDP 可达性)
+medit doctor --plan                       # 同上, 但只报计划 (= deploy_scan.py --dry-run)
 medit browser start / health              # CDP 调试实例 (port 9223)
 python3 scripts/render_doctor.py          # 渲染通道**真出图**自检 —— 跑管线前必做, 见 §2.1
+```
+
+先预演、再决定装不装:
+
+```bash
+python3 scripts/bootstrap_device.py --dry-run          # 一键部署的预演(不落地)
+python3 scripts/deploy_scan.py --only ocr               # 只补一个能力
+python3 scripts/deploy_scan.py --list                   # 列出所有能力键(配合 --only)
 ```
 
 ### 2.1 渲染前置条件 (部署后必读)
@@ -113,10 +123,47 @@ brew / apt / dnf / pacman / winget / choco / scoop。需要管理员权限却拿
 | 开关 | 作用 |
 | --- | --- |
 | `--check` | 只扫描, 不安装 |
+| `--dry-run` | 预演: 打印将执行的完整命令, **不落地任何修改** |
+| `--only KEY[,KEY]` | 只处理指定能力 (配合 `--list`) |
+| `--list` | 列出所有能力键 |
 | `--json` | 机器可读(供 `medit doctor` / CI 消费) |
 | `--skip-heavy` | 跳过重依赖(OCR/Paddle, 数百 MB) |
 | `--strict` | 平台兼容性问题也计入失败 |
+| `--stage env\|deps\|compat\|all` | 只跑一个阶段(供外层部署器分步显示进度) |
 | `make deploy-check` / `make deploy-fix` | 上面前两条的快捷方式 |
+| `make deploy-plan` / `make deploy-only KEY=ocr` | 预演 / 只补一个能力 |
+
+**退出码**: `0` = 必需能力齐备; `1` = 仍有必需缺口; `2` = **用法错误**(能力键或阶段名拼错)。
+三者刻意分开 —— 拼错一个开关不该被读成"这台机器环境有问题"。
+
+**环境变量**(CI / 无人值守部署): 与开关一一对应 ——
+`VIA54_DRY_RUN` / `VIA54_ONLY` / `VIA54_SKIP_HEAVY` / `VIA54_STRICT` / `VIA54_JSON` /
+`VIA54_STAGE` / `VIA54_HOME`(私有前缀, 默认 `~/.via54medit`) / `VIA54_ALLOW_BREAK_SYSTEM`。
+命令行开关优先于同名环境变量。
+
+### 2.4 装完凭什么算"装好了"
+
+这一节的机制参考了两个成熟项目的部署方式 —— `hermes-agent`(`scripts/install.sh`、
+`hermes_cli/dep_ensure.py`、`hermes_cli/managed_uv.py`)与 `openclaw`(`install.sh` /
+`install-cli.sh` / `install.ps1`, 见其 `docs/install/installer.md`)。借来的做法:
+
+| 机制 | 来自 | 本仓库的落点 |
+| --- | --- | --- |
+| **装后复验** | hermes: "installer reported success but binary not found" → 退出 1;openclaw: 残留 `lifecycle-pending` 标记时必须判失败 | 每次安装后**立刻重新探测**;复验不过就记成"仍缺失", 并单独报出复验详情。这条正是 Word 通道踩过的坑:`save as` 返回 rc=0 却**没有任何产出** |
+| **探测"真的能跑"** | openclaw: "probe the exact executable it will use" | 工具探测从"文件在不在"升级为**真跑一次版本命令**。实测教训:`pdftoppm --version` 会把 `--version` 当文件名报 I/O Error, 只有 `-v` 可用 —— 所以版本开关逐个工具声明 |
+| **私有前缀兜底** | openclaw `install-cli.sh`(全程无 root);hermes 把 node/uv 装进 `$HERMES_HOME` | `npm install -g` 撞权限时自动退回 `$VIA54_HOME/tools/node`;不 sudo、不污染系统 `node_modules`。探测也会查这个前缀, 否则装好的会被判成"没装"而反复重装 |
+| **不静默越过边界** | openclaw: "unreadable npm version stops before package mutation";本项目 v5.4.3 的既定决定 | 撞上 PEP 668(`externally-managed-environment`)时**默认不追加** `--break-system-packages`, 而是报出三个可执行选项(venv / `--user` / 显式授权 `VIA54_ALLOW_BREAK_SYSTEM=1`) |
+| **单能力补齐** | hermes `--ensure node,browser` | `--only KEY` —— 别的入口按需回调同一引擎, 不必各写一份清单 |
+| **安装方式戳记** | hermes 的 `.install_method` | `$VIA54_HOME/.deploy_stamp.json` 记下每个能力**实际用了哪条通道**, 下次沿用同一条。复验没过的**不记**(否则下次会去沿用一条已知失败的通道) |
+| **阶段 + 进度帧** | hermes `--stage` / `emit_stage_json` | `--stage env\|deps\|compat`;`bootstrap_device.py` 借此分步显示进度 |
+| **`--dry-run`** | openclaw | 见上 |
+| **不做交互** | 两者都规定 CI 里绝不提示 | 本工具**从不提示**。因此不提供 `--no-prompt` —— 它已是默认行为 |
+
+**探测超时只给"跨 GUI / 授权边界"的探测**(Office 走 AppleEvent, 系统弹窗没人点时会
+永远卡住, 把部署挂死)。**不给进程内 `import` 设超时** —— 那是个假阴性发生器:重的包
+(如 Paddle) 首次导入会编译/初始化, 超过小上界就被误报"没装";而且被 `join` 超时掐断的
+线程会继续在后台把导入跑完, 使同进程里**后续**探测得到不同结果。本机实测到过同一条命令
+两次结论不同(一次 `missing` 一次 `ok`), 这条已由 `TestProbeTimeoutPolicy` 守住。
 
 ### 环境变量覆盖点 (新设备无需改代码)
 

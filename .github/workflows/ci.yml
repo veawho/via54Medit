@@ -85,6 +85,13 @@ jobs:
         # 要验的是非 Windows 上 pywin32 必须是 na、Linux 上 Office 必须是 na。
         run: python deploy_scan.py --verify-platform
 
+      - name: Deploy scan — dry-run is side-effect free
+        working-directory: scripts
+        # --dry-run 必须能跑通且**退出 0**(只报计划)。它不该在三个平台上因用法/平台
+        # 差异而失败。这里刻意不写任何 shell 重定向, 也不断言语义 —— "绝不落地"这条
+        # 由 test_deploy_scan.py 的 TestDryRun 在三个跑者上分别验证。
+        run: python deploy_scan.py --dry-run --skip-heavy
+
       # 注: 渲染通道的"真出图"探针 (scripts/render_doctor.py) **故意不放进 CI** ——
       # 跑者的镜像里没有(也不该有)桌面版 PowerPoint/Word, 它必然报不可用。
       # 那一步在真机上跑: python3 scripts/render_doctor.py

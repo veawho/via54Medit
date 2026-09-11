@@ -53,11 +53,14 @@ var (
 	doctorFix      bool
 	doctorStrict   bool
 	doctorSkipHevy bool
+	doctorPlan     bool
 	doctorCDPPort  int
 )
 
 func init() {
 	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "执行安装 (缺什么装什么)")
+	doctorCmd.Flags().BoolVar(&doctorPlan, "plan", false,
+		"只打印将要执行的动作, 不做任何修改 (等价于 --dry-run)")
 	doctorCmd.Flags().BoolVar(&doctorStrict, "strict", false, "平台兼容性问题也计入失败")
 	doctorCmd.Flags().BoolVar(&doctorSkipHevy, "skip-heavy", false, "跳过重依赖 (OCR/Paddle)")
 	doctorCmd.Flags().IntVar(&doctorCDPPort, "port", DefaultCDPPort, "DevTools 端口")
@@ -74,6 +77,12 @@ type dsRow struct {
 	Required bool   `json:"required"`
 	Heavy    bool   `json:"heavy"`
 	Gate     bool   `json:"gate"`
+	// Verified 为 false 表示"安装器报成功, 但装完复验没过" —— 这正是 Word 通道
+	// 踩过的那个坑(save as 返回 rc=0 却没有任何产出), 必须单独可见。
+	// 注意: JSON 里的 "channel" 是个**对象**, 这里不要用 string 去接 —— 类型不匹配会让
+	// json.Unmarshal 整份失败, doctor 就会报"输出不是合法 JSON"(已实测)。
+	Verified *bool  `json:"verified"`
+	Verify   string `json:"verify_detail"`
 }
 
 type dsFinding struct {
@@ -91,11 +100,15 @@ type dsResult struct {
 	} `json:"compat"`
 	Summary struct {
 		Blockers      int `json:"blockers"`
+		Unresolvable  int `json:"unresolvable"`
+		VerifyFailed  int `json:"verify_failed"`
 		Warnings      int `json:"warnings"`
 		NotApplicable int `json:"not_applicable"`
 		Fixed         int `json:"fixed"`
+		Planned       int `json:"planned"`
 	} `json:"summary"`
-	OK bool `json:"ok"`
+	DryRun bool `json:"dry_run"`
+	OK     bool `json:"ok"`
 }
 
 // locateRepoScript 按"已安装的 skill -> 仓库 scripts/ -> 相对可执行文件"三处找脚本。
@@ -134,7 +147,10 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	}
 
 	args := []string{script, "--json"}
-	if !doctorFix {
+	if doctorPlan {
+		// --plan 等价于 deploy_scan.py 的 --dry-run: 只报计划, 不落地。
+		args = append(args, "--dry-run")
+	} else if !doctorFix {
 		args = append(args, "--check")
 	}
 	if doctorStrict {
@@ -169,6 +185,8 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 			mark = "＋"
 		case "na":
 			mark = "·"
+		case "plan":
+			mark = "→"
 		default:
 			mark = "✗"
 			if r.Required && r.Gate {
@@ -176,10 +194,14 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 			}
 		}
 		line := fmt.Sprintf("  %s %-34s %s", mark, r.Label, r.Detail)
-		if r.Status == "missing" && r.Hint != "" {
+		if (r.Status == "missing" || r.Status == "plan") && r.Hint != "" {
 			line += fmt.Sprintf("  → %s", r.Hint)
 		}
 		fmt.Fprintln(out, line)
+		// 安装器报成功但复验没过 —— 与"压根没装"是两件事, 得说清楚。
+		if r.Verified != nil && !*r.Verified {
+			fmt.Fprintf(out, "        → 复验详情: %s\n", orDefault(r.Verify, "无"))
+		}
 	}
 
 	// Go 侧才能做的: CDP 可达性
@@ -213,8 +235,18 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	fmt.Fprintf(out, "== 结果: %s (必需缺口 %d · 提示 %d · 本平台不适用 %d · 本次补齐 %d) ==\n",
-		boolLabel(fail == 0), fail, res.Summary.Warnings, res.Summary.NotApplicable, res.Summary.Fixed)
+	if res.DryRun {
+		fmt.Fprintf(out, "== 计划: 待补 %d 项 (必需缺口 %d · 复验未过 %d) —— 本次未做任何修改 ==\n",
+			res.Summary.Planned, res.Summary.Blockers, res.Summary.VerifyFailed)
+		fmt.Fprintln(out, "   真正执行: `medit doctor --fix`")
+		if res.Summary.Unresolvable > 0 {
+			return fmt.Errorf("doctor: %d 项必需能力没有任何自动通道, 得人工安装", res.Summary.Unresolvable)
+		}
+		return nil
+	}
+	fmt.Fprintf(out, "== 结果: %s (必需缺口 %d · 提示 %d · 本平台不适用 %d · 本次补齐 %d · 复验未过 %d) ==\n",
+		boolLabel(fail == 0), fail, res.Summary.Warnings, res.Summary.NotApplicable,
+		res.Summary.Fixed, res.Summary.VerifyFailed)
 	if fail > 0 {
 		fmt.Fprintln(out, "   修复: `medit doctor --fix` (缺什么装什么)")
 		return fmt.Errorf("doctor: %d 项必需能力未就绪", fail)

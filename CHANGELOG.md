@@ -48,6 +48,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.36] - 2026-09-12 (部署方式参考 hermes-agent / openclaw: 预演、按需补齐、以及"装完必须复验")
+
+回应"参考 hermes-agent 仓库和 openclaw 仓库的部署方式, 自动检测自动安装缺失的工具、依赖、包"。
+
+读了两个仓库的安装器实现 —— `hermes-agent` 的 `scripts/install.sh` /
+`hermes_cli/dep_ensure.py` / `hermes_cli/managed_uv.py`, 与 `openclaw` 的 `install.sh` /
+`install-cli.sh` / `install.ps1`(见其 `docs/install/installer.md`)—— 把可迁移的机制
+落进 `scripts/deploy_scan.py` 的能力矩阵。
+
+### Added
+
+- **`--dry-run`**(借自 openclaw): 打印**真会执行的那条命令**, 不落地任何修改。缺失项标成
+  新的 `plan` 状态。`bootstrap_device.py --dry-run` 与 `medit doctor --plan` 是同一件事。
+- **`--only KEY[,KEY]` + `--list`**(借自 hermes `--ensure node,browser`): 只补点名的能力,
+  让别的入口按需回调同一引擎。`deps_auto.py` 也透传 `--dry-run` / `--only`。
+- **装后复验**: 每次安装后**立刻重新探测**, 只有复验通过才算补齐。安装器报成功而复验失败时
+  记成"仍缺失"、单独计入 `summary.verify_failed`、并在 `medit doctor` 里打印复验详情。
+  这条正对着 Word 通道那个真实故障 —— `save as` 返回 rc=0 却**没有任何产出**
+  (hermes: "installer reported success but binary not found" → exit 1;
+  openclaw: 残留 `lifecycle-pending` 标记必须判失败)。
+- **私有前缀兜底**(借自 openclaw `install-cli.sh` 的 rootless 思路): `npm install -g` 撞权限时
+  自动退回 `$VIA54_HOME/tools/node`(默认 `~/.via54medit`), 不 sudo、不污染系统 `node_modules`;
+  探测也会查这个前缀, 否则装好的会被判成"没装"而每次重装。
+- **部署戳记** `$VIA54_HOME/.deploy_stamp.json`(借自 hermes `.install_method`): 记下每个能力
+  **实际用了哪条通道**, 下次沿用同一条。复验没过的**不记** —— 否则下次会去沿用一条已知失败的通道。
+- **阶段协议** `--stage env|deps|compat`(借自 hermes `--stage` / `emit_stage_json`)+ 可选
+  `--json` 进度帧;`bootstrap_device.py` 借此分步显示进度。
+- **退出码语义**(借自 openclaw 对非法取值退 2): `0` 就绪 / `1` 仍有必需缺口 / `2` **用法错误**。
+  拼错能力键或阶段名不该被读成"这台机器环境有问题"。
+- **环境变量镜像所有开关**(借自 openclaw `OPENCLAW_*`): `VIA54_DRY_RUN` / `VIA54_ONLY` /
+  `VIA54_SKIP_HEAVY` / `VIA54_STRICT` / `VIA54_JSON` / `VIA54_STAGE` / `VIA54_HOME` /
+  `VIA54_ALLOW_BREAK_SYSTEM`。命令行优先。
+- **新增 `git` 能力**(必需, 参照 hermes 的 `check_git`): `git pull` 是"更新版本后自动补齐"
+  自身的运行前提, 此前完全不在依赖清单里; 现按平台自动安装, macOS 走 `xcode-select --install` 提示。
+- `make deploy-plan` / `make deploy-only KEY=ocr`;CI 增加 `--dry-run --skip-heavy` 冒烟步骤。
+
+### Fixed
+
+- **`deps_auto.ensure_env()` 自 v5.4.34 起一调用就 `KeyError: 'ok'`** ——
+  `collect()` 没给 `ok` 键, 而 `_render()` 要读它。这等于 **`via54_auto.py` 管线第 [0] 步
+  (环境自检)从 v5.4.34 起就是坏的**, 当时没有任何测试覆盖这条路径, 所以一直没被发现。
+  现在 `collect()` 一定产出 `ok`, `_render()` 用 `.get()` 兜底, 并补了入口级回归测试。
+- **我自己引入又自己抓到的假阴性**: 给"进程内 `import`"套探测超时。Paddle 首次导入会
+  编译/初始化(那条 `No ccache found ... recompiling all source files` 警告就是它), 超过小上界
+  就被误报"没装"; 更糟的是被 `join` 超时掐断的 daemon 线程会继续在后台把导入跑完, 让同进程里
+  **后续**探测得到不同结果 —— 本机实测到**同一条命令两次一个 `missing` 一个 `ok`**。
+  现在: 线程级超时**只给跨 GUI/授权边界的探测**(Office 的 AppleEvent, 不设界会把部署挂死),
+  进程内 import 一律不设界。
+- **`_probe_tool` 的版本开关必须逐个工具声明**: `pdftoppm --version` 会被当成文件名报
+  I/O Error, 只有 `-v` 可用(实测)。工具探测也从"文件在不在"升级为**真跑一次版本命令** ——
+  一个 exit 非零的二进制不算就绪(openclaw 的经验, 也是 fresh macOS 上 CLT 垫片的实情)。
+- **`medit doctor` 的 JSON 契约**: 差点把 `channel`(JSON 里是**对象**)用 Go 的 `string` 去接,
+  那会让 `json.Unmarshal` 整份失败、doctor 报"输出不是合法 JSON"。已避免并留下注释;
+  同时把 `verify_failed` / `unresolvable` / `planned` / `verified` 接上。
+- OCR 探测不再吞异常: 失败时带出 `异常类型: 原因`, 而不是只说一句 `paddleocr=False` ——
+  "没装"和"装了但 ABI 不匹配"需要完全不同的处置。
+
+### 测试
+
+`test_deploy_scan` **28 → 77** 项(`make test-py` = 73 + 24 + 77, 全绿);
+`go vet` / `go test ./...` 干净。新增覆盖: dry-run 绝不落地、`--only` 只动点名项、
+**"安装器报成功但没产出"必须报成缺失**(`_LyingRecorder`)、探测超时**不得污染后续探测**、
+npm 私有前缀兜底与戳记沿用、PEP 668 默认不越界、退出码 2、阶段帧、git 能力、入口不崩。
+
+`--dry-run` 与 `--stage` 的实际输出已在本机核对;`medit doctor --plan` 在真机构建后跑通。
+
 ## [5.4.35] - 2026-09-12 (CI 修红: 我把 POSIX 假设写进了新加的 CI 步骤 —— 断言下移到脚本, 不再依赖 shell)
 
 v5.4.34 推送后 CI 的 `python (windows-latest)` **失败**, 原因是**我自己刚写下的那类问题**:

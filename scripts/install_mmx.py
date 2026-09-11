@@ -9,10 +9,14 @@
 因此安装动作改为: 探测 node/npm → ``npm install -g mmx-cli`` → 校验 ``mmx --version``。
 缺 node/npm 时按平台给出安装途径 (brew / apt / winget / choco), 而不是假装装上了。
 
+**v5.4.36**: 探测与安装都交给 ``deploy_scan`` —— 包括"全局装不动就退回私有前缀
+``$VIA54_HOME/tools/node``"(openclaw ``install-cli.sh`` 的 rootless 思路) 与"装完必须
+复验可执行文件"。本文件不再自己拼路径, 否则从私有前缀装的会被自己的探测判成"没装"，
+于是每次都重装一遍。
+
 想一次把整套环境(含 OCR 等)都过一遍, 用 ``python3 scripts/deploy_scan.py``。
 """
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,19 +25,19 @@ import deploy_scan as ds                                        # noqa: E402
 
 
 def check_mmx_installed():
-    return bool(shutil.which("mmx") or shutil.which("mmx-cli"))
+    return bool(ds._which("mmx") or ds._which("mmx-cli"))
 
 
 def install_mmx_cli():
     """经 npm 安装。返回 (ok, detail)。"""
-    if not (shutil.which("node") and shutil.which("npm")):
+    if not (ds._which("node") and ds._which("npm")):
         ok, msg = ds.system_install({"brew": "node", "apt-get": "nodejs",
                                      "dnf": "nodejs", "pacman": "nodejs",
                                      "winget": "OpenJS.NodeJS.LTS", "choco": "nodejs"})
         if not ok:
             return False, ("本机没有 node/npm, 且自动安装未成功: %s "
                            "(装好 Node.js 后再跑 `npm install -g mmx-cli`)" % msg)
-        if not (shutil.which("node") and shutil.which("npm")):
+        if not (ds._which("node") and ds._which("npm")):
             # 刚装完可能还没进当前进程的 PATH
             return False, "Node.js 已安装, 但当前会话看不到 npm —— 请重开终端后重跑本脚本"
     return ds.npm_install("mmx-cli")
@@ -52,13 +56,14 @@ def verify_and_configure():
     api_key = os.environ.get("MINIMAX_API_KEY", "")
     print("==========================================")
     print(" via54Medit Vision 引擎部署状态")
+    print(" 私有前缀(装不动全局时的兜底): %s" % ds.NODE_PREFIX)
     print("==========================================")
     print(" 默认 Vision Provider: mmx (VISION_PROVIDER=mmx)")
     if installed:
-        path = shutil.which("mmx") or shutil.which("mmx-cli")
+        path = ds._which("mmx") or ds._which("mmx-cli")
         ok, out = ds._run([path, "--version"], timeout=60)
         print(" mmx-cli: 已就绪 %s  (%s)" % (out.splitlines()[0].strip() if ok and out else "", path))
-        up = ds._run([shutil.which("npm"), "view", "mmx-cli", "version"], timeout=120)
+        up = ds._run([ds._which("npm") or "npm", "view", "mmx-cli", "version"], timeout=120)
         if up[0] and up[1] and up[1].strip().splitlines()[0] not in (out or ""):
             print(" 提示: npm 上最新版为 %s, 升级: npm install -g mmx-cli" % up[1].strip().splitlines()[0])
     else:

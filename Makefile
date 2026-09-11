@@ -158,8 +158,14 @@ test-py:	## 跑 Python 测试 (遥测 + 仓库卫生 + 禁止区校验 + 部署�
 deploy-check:	## 深度扫描本机环境/依赖/工具 (只报不改)
 	python3 scripts/deploy_scan.py --check
 
+deploy-plan:	## 预演: 打印将要执行的安装命令, 不做任何修改 (--dry-run)
+	python3 scripts/deploy_scan.py --dry-run
+
 deploy-fix:	## 深度扫描 + 按平台补齐缺口
 	python3 scripts/deploy_scan.py
+
+deploy-only:	## 只补一个能力, 例: make deploy-only KEY=ocr
+	python3 scripts/deploy_scan.py --only $(KEY)
 
 render-doctor:	## 渲染通道真出图就绪自检 (正式跑管线前建议先跑它)
 	python3 scripts/render_doctor.py
