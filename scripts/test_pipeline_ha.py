@@ -3,7 +3,7 @@
 test_pipeline_ha.py — via54Medit 全链路高可用性 (High Availability) 与 5 步双重对齐流水线回归测试
 
 测试覆盖:
-  1. PPT 渲染引擎高可用 (多引擎探测、优雅降级、异常隔离)
+  1. PPT 渲染只走 PowerPoint (2026-09-04 规范; 2026-09-11 用户重申"禁用其它通道")
   2. 统一多模态视觉 Provider (MiniMax mmx / SenseNova / GLM 容错与模拟应答)
   3. 统一 LLM Provider (DeepSeek / MiniMax / SenseNova / GLM)
   4. 幻灯片作用域隔离验证 (杜绝跨 Slide 候选句污染)
@@ -19,6 +19,7 @@ import sys
 import tempfile
 import shutil
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,12 +47,37 @@ from hl_lib import (
 
 
 class TestPipelineHA(unittest.TestCase):
+    #: 缓存"本机 PowerPoint 能否真正渲染出页面"的探测结果 (None = 还没探过)
+    _ppt_render_ok = None
+
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp(prefix="via54_ha_test_")
         self.pptx_path = os.path.join(self.tmp_dir, "test_presentation.pptx")
         self.pdf_path = os.path.join(self.tmp_dir, "P12-1.pdf")
         self._create_mock_pptx()
         self._create_mock_pdf()
+
+    def _require_powerpoint_render(self):
+        """依赖**真实 PowerPoint 渲染**的用例先过这道闸。
+
+        为什么需要: 自 v5.4.24 起 PPT 渲染只走 PowerPoint、不 fallback。本机若 PowerPoint
+        自动化被模态对话框挡住(实测 `save ... as PDF` 报 AppleEvent -1712), 渲染就是 0 页 ——
+        那**是环境故障, 不是管线回归**。让它以"跳过 + 写明原因"呈现, 比伪装成断言失败诚实,
+        也不会把 PowerPoint 自身的问题误记到 Step1/2/5 的账上。
+
+        探测只做一次(结果缓存): 真渲染一次, 用 PPT_RENDER_TIMEOUT=8 保证失败时很快返回。
+        """
+        if TestPipelineHA._ppt_render_ok is None:
+            out = os.path.join(self.tmp_dir, "_ppt_probe")
+            env = dict(os.environ, PPT_RENDER_TIMEOUT="8")
+            with mock.patch.dict(os.environ, env, clear=True):
+                n, _ = ppt_render_engine.render_ppt_slides_auto(self.pptx_path, out)
+            TestPipelineHA._ppt_render_ok = n > 0
+        if not TestPipelineHA._ppt_render_ok:
+            self.skipTest(
+                "本机 PowerPoint 渲染不出页面 (AppleEvent -1712 —— 多半是 PowerPoint 弹了"
+                "模态对话框)。这几条用例要真实 PPT 渲染, 故跳过; 这是环境问题, 不是回归。"
+                "修法见 ppt_render_engine._MACOS_BLOCKED_HINT。")
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -118,14 +144,63 @@ class TestPipelineHA(unittest.TestCase):
         doc.save(self.pdf_path)
         doc.close()
 
-    def test_01_ppt_render_engine_fallback(self):
-        """验证 PPT 渲染引擎在不同配置下的高可用性与优雅降级"""
+    def test_01_ppt_render_engine_uses_powerpoint_only(self):
+        """PPT 渲染只走 PowerPoint 一条通道 (2026-09-04 规范; 2026-09-11 用户重申)。
+
+        本条替换了原先的 ``test_01_ppt_render_engine_fallback`` —— 它把渲染通道指向
+        python-pptx, 期望"优雅降级"渲染出 3 页。python-pptx / LibreOffice / WPS 三条
+        通道已在 v5.4.25 物理删除, 那条断言与规范正面冲突 (v5.4.25 发布时它就被改红了,
+        属本轮补修 —— 换通道的测试不该留着)。
+        现在钉住的是: 渲染循环确实调用 PowerPoint 的实现, 且不降级到别处。
+        """
         out_render = os.path.join(self.tmp_dir, "rendered_slides")
-        os.environ["RENDER_ENGINE"] = "python_pptx"
-        count, engine = ppt_render_engine.render_ppt_slides_auto(self.pptx_path, out_render)
-        self.assertGreaterEqual(count, 3, "应该成功渲染至少 3 页幻灯片")
+        os.makedirs(out_render, exist_ok=True)
+
+        def _fake_powerpoint(pptx_path, odir, *a, **kw):
+            """替身: 形状与真实 PowerPoint 渲染实现一致 (产出 3 张 slide_NNN.png)。"""
+            for i in range(1, 4):
+                Image.new("RGB", (32, 18), "white").save(
+                    os.path.join(odir, "slide_%03d.png" % i))
+            return 3
+
+        # 按平台取 PowerPoint 那条通道 —— 两边的 kind/progid 不同, 但都只有 PowerPoint。
+        if os.name == "nt":
+            spec = ("PowerPoint", "com", "PowerPoint.Application")
+            seam = "render_via_com"
+        else:
+            spec = ("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")
+            seam = "render_via_macos_powerpoint"
+
+        # _build_engine_list 是 render_ppt_slides_auto 真正调用的接缝 (第 340 行),
+        # 所以这层 mock 是生效的 —— 不是打在无效接缝上。
+        # 注: patch.object 传了 new 时返回值就是 new 本身, 故这里显式用 MagicMock 以便断言。
+        fake = mock.MagicMock(side_effect=_fake_powerpoint)
+        with mock.patch.object(ppt_render_engine, "_build_engine_list",
+                               lambda: [spec]), \
+                mock.patch.object(ppt_render_engine, seam, fake):
+            count, engine = ppt_render_engine.render_ppt_slides_auto(
+                self.pptx_path, out_render)
+
+        self.assertTrue(fake.called, "没有走 PowerPoint 渲染实现 —— 通道被换掉了")
+        self.assertEqual(count, 3, "应该成功渲染 3 页幻灯片")
+        self.assertIn("PowerPoint", engine, "引擎名必须标明 PowerPoint")
         self.assertTrue(os.path.exists(os.path.join(out_render, "slide_001.png")))
         self.assertTrue(os.path.exists(os.path.join(out_render, "slide_002.png")))
+
+    def test_01b_ppt_render_never_switches_channel(self):
+        """PowerPoint 不可用时**直接失败**, 不退化成别的渲染方式。"""
+        out_render = os.path.join(self.tmp_dir, "no_channel")
+        os.makedirs(out_render, exist_ok=True)
+
+        def _boom():
+            raise RuntimeError("PowerPoint 不可用")
+
+        for seam in ("_build_engine_list", "detect_engines"):
+            with mock.patch.object(ppt_render_engine, seam, side_effect=_boom):
+                count, engine = ppt_render_engine.render_ppt_slides_auto(
+                    self.pptx_path, out_render)
+        self.assertEqual((count, engine), (0, "none"),
+                         "拿不到 PowerPoint 就该返回 0 张, 不得降级到其它通道")
 
     def test_02_slide_scoped_isolation(self):
         """验证 Slide 作用域隔离：P12-1 仅匹配 Slide 12 的论点，不被 Slide 15 污染"""
@@ -201,6 +276,7 @@ class TestPipelineHA(unittest.TestCase):
 
     def test_06_step1_unified_render_engine(self):
         """Step 1 验证: PPT、PDF 与图片统一分页渲染"""
+        self._require_powerpoint_render()
         out_r = os.path.join(self.tmp_dir, "step1_renders")
         # 1. PPT 渲染
         res_ppt = unified_render_engine.render_source_file(self.pptx_path, os.path.join(out_r, "ppt"))
@@ -221,6 +297,7 @@ class TestPipelineHA(unittest.TestCase):
 
     def test_07_step2_visual_claim_extractor(self):
         """Step 2 验证: 提取引用字段与局部视觉区域裁切"""
+        self._require_powerpoint_render()
         out_r = os.path.join(self.tmp_dir, "step1_renders", "ppt")
         unified_render_engine.render_source_file(self.pptx_path, out_r)
         p2_img = os.path.join(out_r, "page_002.png")
@@ -263,6 +340,7 @@ class TestPipelineHA(unittest.TestCase):
 
     def test_09_step5_dual_alignment_pipeline(self):
         """Step 5 验证: 5步端到端总流水线与双重对齐高精标注"""
+        self._require_powerpoint_render()
         out_5step = os.path.join(self.tmp_dir, "step5_full_run")
         shutil.copy2(self.pdf_path, os.path.join(self.tmp_dir, "P2-1.pdf"))
         summary = dual_alignment_pipeline.run_5step_highlight_pipeline(

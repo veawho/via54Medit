@@ -260,13 +260,13 @@ save theDoc in POSIX file "{output_dir}/_ppt_export.pdf" as save as PDF
 ❌ save as theDoc file format format PDF  # 多余 format
 ```
 
-**双引擎入口**:
+**入口 (只有 PowerPoint 一条通道)**:
 ```bash
-# 默认 applescript (强制 PowerPoint, 避免授权)
-python render_ppt_slides.py <pptx> --engine applescript
-# 备选 libreoffice
-python render_ppt_slides.py <pptx> --engine libreoffice
+# 只走 PowerPoint (2026-08-05 用户硬规则; 2026-09-11 重申"禁用其它通道")
+python render_ppt_slides.py <pptx>
 ```
+原先还有 `--engine libreoffice` 备选引擎, **已按规范删除** —— Keynote / LibreOffice / WPS
+打开后字体与布局和原版不一致, 不能当作渲染标准. 传入其它引擎名会直接报错, 不会静默换通道.
 
 ### AppleScript 1-tell-block 铁律 (v1.2.0 NEW)
 
@@ -382,7 +382,7 @@ os.makedirs(args.out_dir, exist_ok=True)
 
 ## 相关
 
-- **渲染脚本**: `scripts/render_ppt_slides.py` — 统一 PPT 渲染 (PowerPoint AppleScript + LibreOffice 双引擎, 同目录树输出, 含引用提取)
+- **渲染脚本**: `scripts/render_ppt_slides.py` — PPT 渲染 (**只走 PowerPoint AppleScript**, 同目录树输出, 含引用提取)
 - **GLM 文献批处理**: `scripts/glm_literature_processor.py` — 智谱 file-extract API + glm-4-flash 并行分析
 - **GLM 学术数据处理参考**: `references/glm-academic-data-processing.md` — 官方文档集成 + 模型对比 + Prompt 库
 - **引用提取算法参考**: `references/ppt-citation-extraction-algorithm.md` — 语义+序号切分算法 (解决页码误切)

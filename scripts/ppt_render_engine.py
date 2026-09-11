@@ -204,49 +204,109 @@ class RenderEngineError(RuntimeError):
         self.hint = hint
 
 
-def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
-    """macOS 下通过 AppleScript 控制原生 Microsoft PowerPoint 导出 PDF，再由 PyMuPDF 导出高清 PNG
+def export_ppt_to_pdf(pptx_path, pdf_path):
+    """用 PowerPoint 把整份 PPT 导出为 PDF —— **只走 PowerPoint 一条通道**。
 
-    先做一次快速预检(``probe_macos_powerpoint``), 不通过就**立刻报错**并给出可操作提示,
-    不再像以前那样在 open 上白等 300 秒。
+    这是本仓库唯一一条 "PPT → PDF" 的路径。Windows 走 PowerPoint COM, macOS 走原生
+    PowerPoint AppleScript。**不 fallback** Keynote / LibreOffice / WPS / python-pptx ——
+    原版 PPT 是 PowerPoint 做的, 那些渲染器打开后字体与布局不一致
+    (2026-08-05 用户硬规则; 2026-09-11 用户重申"只使用 PowerPoint 渲染, 禁用其它通道")。
+
+    拿不到 PowerPoint 或导出失败时抛 ``RenderEngineError``(带可操作 hint), 不返回半成品。
     """
-    import tempfile
-    import pymupdf as fitz
     abs_pptx = os.path.abspath(pptx_path)
-    os.makedirs(out_dir, exist_ok=True)
-    tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
-    tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
+    abs_pdf = os.path.abspath(pdf_path)
+    out_parent = os.path.dirname(abs_pdf)
+    if out_parent:
+        os.makedirs(out_parent, exist_ok=True)
+
+    if os.name == "nt":
+        return _export_ppt_to_pdf_com(pptx_path, abs_pdf)
+
+    if sys.platform != "darwin":
+        raise RenderEngineError(
+            "[render] 本平台没有 PowerPoint 通道 —— 规范要求只使用 PowerPoint 渲染、"
+            "禁用其它通道, 故不降级。")
+
     # 清理可能残留的卡死实例(模态对话框会阻塞 Apple 事件, 表现为 -9074/超时)
     subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)
     time.sleep(2.0)
-    try:
-        # (a) 快速预检: 先确认 Apple 事件通道通不通, 通了再花时间 open
-        ok, detail = probe_macos_powerpoint()
-        if not ok:
-            raise RenderEngineError(detail, _MACOS_BLOCKED_HINT)
 
-        # (b) 超时可用 PPT_RENDER_TIMEOUT 覆盖 (默认由 300 降到 60)
-        tmo = _macos_render_timeout()
-        script = f'''
-    with timeout of {int(tmo)} seconds
-    tell application "Microsoft PowerPoint"
-        launch
-        delay 3
-        open POSIX file "{abs_pptx}"
-        set thePres to active presentation
-        save thePres in POSIX file "{tmp_pdf}" as save as PDF
-        close thePres saving no
-    end tell
-    end timeout
-    '''
-        # subprocess 超时比 AppleScript 多 15s, 让 AppleScript 自己的 -1712 先报出来(信息更具体)
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
-                             timeout=tmo + 15)
-        if res.returncode != 0 or not os.path.exists(tmp_pdf):
-            err = (res.stderr or res.stdout).strip()[-200:]
-            raise RenderEngineError(
-                "PowerPoint AppleScript error: %s" % err,
-                _MACOS_BLOCKED_HINT if _is_apple_event_timeout(err) else "")
+    # (a) 快速预检: 先确认 Apple 事件通道通不通, 通了再花时间 open
+    ok, detail = probe_macos_powerpoint()
+    if not ok:
+        raise RenderEngineError(detail, _MACOS_BLOCKED_HINT)
+
+    # (b) 超时可用 PPT_RENDER_TIMEOUT 覆盖 (默认由 300 降到 60)
+    tmo = _macos_render_timeout()
+    script = f'''
+with timeout of {int(tmo)} seconds
+tell application "Microsoft PowerPoint"
+    launch
+    delay 3
+    open POSIX file "{abs_pptx}"
+    set thePres to active presentation
+    save thePres in POSIX file "{abs_pdf}" as save as PDF
+    close thePres saving no
+end tell
+end timeout
+'''
+    # subprocess 超时比 AppleScript 多 15s, 让 AppleScript 自己的 -1712 先报出来(信息更具体)
+    res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
+                         timeout=tmo + 15)
+    if res.returncode != 0 or not os.path.exists(abs_pdf):
+        err = (res.stderr or res.stdout).strip()[-200:]
+        raise RenderEngineError(
+            "PowerPoint AppleScript error: %s" % err,
+            _MACOS_BLOCKED_HINT if _is_apple_event_timeout(err) else "")
+    return abs_pdf
+
+
+def _export_ppt_to_pdf_com(pptx_path, pdf_path):
+    """Windows: 用 PowerPoint COM 导出 PDF (ppSaveAsPDF = 32)。"""
+    import win32com.client
+    _, _, progid = _build_engine_list()[0]   # 只会有 PowerPoint
+    app = win32com.client.DispatchEx(progid)
+    pres = None
+    try:
+        try:
+            app.Visible = False
+        except Exception:
+            pass
+        try:
+            app.DisplayAlerts = False
+        except Exception:
+            pass
+        pres = app.Presentations.Open(pptx_path, ReadOnly=True, Untitled=False, WithWindow=False)
+        pres.SaveAs(pdf_path, 32)
+    finally:
+        try:
+            if pres is not None:
+                pres.Close()
+        except Exception:
+            pass
+        try:
+            app.Quit()
+        except Exception:
+            pass
+    if not os.path.exists(pdf_path):
+        raise RenderEngineError("[render] PowerPoint COM 未产出 PDF: %s" % pdf_path)
+    return pdf_path
+
+
+def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
+    """macOS 下用**原生 PowerPoint** 把每页导出为 PNG (只走 PowerPoint 一条通道)。
+
+    先 ``export_ppt_to_pdf`` 拿到 PDF (内含快速预检: 通道不通就**立刻报错**并给出可操作提示,
+    不再像以前那样在 open 上白等 300 秒), 再由 PyMuPDF 把每页渲染成高清 PNG。
+    """
+    import tempfile
+    import pymupdf as fitz
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
+    tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
+    try:
+        export_ppt_to_pdf(pptx_path, tmp_pdf)
         doc = fitz.open(tmp_pdf)
         n = 0
         for i, page in enumerate(doc, start=1):
@@ -262,7 +322,7 @@ def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
 
 # ============ COM 真实渲染 ============
 def render_via_com(progid, pptx_path, out_dir, width_px=1600):
-    """用 PowerPoint/WPS COM 把每页 slide 导出为 PNG"""
+    """用 PowerPoint COM 把每页 slide 导出为 PNG (只走 PowerPoint 一条通道)"""
     import win32com.client
     app = win32com.client.DispatchEx(progid)
     pres = None

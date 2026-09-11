@@ -247,49 +247,45 @@ def expand_pptx(input_path: str, output_path: str, margin_pt: float = DEFAULT_MA
 
 def render_pptx_images(input_path: str, out_dir: str, dpi: int = DEFAULT_DPI) -> List[str]:
     """
-    把 PPT 每页渲染成 jpg
-    需要 libreoffice 或 unoconv
+    把 PPT 每页渲染成 jpg。
+
+    **只走 PowerPoint 一条通道** —— 2026-08-05 用户硬规则, 2026-09-11 用户重申:
+    "只使用 PowerPoint 渲染, 禁用其它通道"。原版 PPT 是 PowerPoint 做的,
+    Keynote / LibreOffice / WPS / python-pptx 打开后字体与布局和原版不一致,
+    不能当作渲染标准 (见 skills/.../references/v2.12.0-powerpoint-render-mandatory.md)。
+
+    所以这里**不再自己调 libreoffice**, 而是委托给
+    ``ppt_render_engine.render_ppt_slides_auto()`` —— 它只会在 PowerPoint
+    (Windows COM / macOS 原生 AppleScript) 之间选择, 拿不到 PowerPoint 就返回 0 张。
+    本函数随之返回 ``[]``: 宁可空, 也不换通道近似渲染。
     """
     out_dir_p = Path(out_dir)
     out_dir_p.mkdir(parents=True, exist_ok=True)
 
-    # 尝试 libreoffice
-    import subprocess, tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-        # 转 PDF 先
+    from ppt_render_engine import render_ppt_slides_auto
+
+    # PowerPoint 按像素宽度渲染; 由 dpi 折算 (幻灯片按 10 英寸宽计), 下限 1600px。
+    width_px = max(1600, int(dpi * 10))
+    count, engine = render_ppt_slides_auto(str(input_path), str(out_dir_p), width_px=width_px)
+    if count <= 0:
+        print("  [render] PowerPoint 未产出页面 —— 按规范不切换其它通道")
+        return []
+
+    # PowerPoint 产出的是 PNG; 转成原函数约定的 slide_NNN.jpg, 转完删掉 PNG。
+    from PIL import Image
+    out_files: List[str] = []
+    for i in range(1, count + 1):
+        png = out_dir_p / f"slide_{i:03d}.png"
+        if not png.exists():
+            continue
+        jpg = out_dir_p / f"slide_{i:03d}.jpg"
         try:
-            subprocess.run(
-                ["libreoffice", "--headless", "--convert-to", "pdf",
-                 "--outdir", tmp, input_path],
-                check=True, capture_output=True, timeout=120
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
-            print(f"  [render] libreoffice 失败: {e}")
-            print("  提示: 安装 libreoffice (brew install --cask libreoffice)")
-            return []
-
-        pdf_path = os.path.join(tmp, os.path.basename(input_path).replace('.pptx', '.pdf'))
-        if not os.path.isfile(pdf_path):
-            print(f"  [render] PDF 未生成: {pdf_path}")
-            return []
-
-        # PDF → jpg
-        import pymupdf as fitz
-        import io
-        from PIL import Image
-        doc = fitz.open(pdf_path)
-        out_files = []
-        for i in range(len(doc)):
-            try:
-                pix = doc[i].get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
-                img = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
-                out = out_dir_p / f"slide_{i+1:03d}.jpg"
-                img.save(out, "JPEG", quality=85)
-                out_files.append(str(out))
-            except Exception as e:
-                print(f"  [render] page {i+1} fail: {e}")
-        doc.close()
-        return out_files
+            Image.open(png).convert("RGB").save(jpg, "JPEG", quality=85)
+            out_files.append(str(jpg))
+            png.unlink()
+        except Exception as e:
+            print(f"  [render] page {i} PNG→JPG 失败: {e}")
+    return out_files
 
 
 # ════════════════════════════════════════════════════════════════

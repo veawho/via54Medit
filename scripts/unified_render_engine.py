@@ -3,8 +3,12 @@
 unified_render_engine.py — Step 1: 源文件全格式统一分页渲染器
 
 支持格式:
-  - PPT / PPTX : Microsoft PowerPoint COM (Windows) / macOS 原生 AppleScript / LibreOffice / python-pptx
+  - PPT / PPTX : **只用 Microsoft PowerPoint** —— Windows 走 COM, macOS 走原生 AppleScript。
+    按 2026-08-05 用户硬规则 (2026-09-11 重申) 禁用其它渲染通道: Keynote / LibreOffice /
+    WPS / python-pptx 会导致字体与布局和原版不一致, 故**不做默认也不做兜底**;
+    PowerPoint 不可用时直接失败。实际渲染委托给 ppt_render_engine.render_ppt_slides_auto()。
   - Word (DOC / DOCX) : Microsoft Word COM / macOS AppleScript / LibreOffice headless / docx2pdf
+    (不在上述规则范围内 —— 该规则针对 PPT, PowerPoint 无法渲染 Word 文档)
   - PDF : PyMuPDF (fitz) 高精度渲染
   - 图片 (PNG / JPG / JPEG / WEBP / TIFF / BMP) : 直接转换为标准 RGB PNG
 

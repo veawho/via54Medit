@@ -632,7 +632,7 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### 6 步规则核心要点 (摘要)
 
-- **Step 1**: 3 个目录 (PPT/PDF/Highlight), PPT 扩页保证内容可见; 新流程 `scripts/hl_v3_final/step1_export_slides.py`(soffice→PDF→JPG)
+- **Step 1**: 3 个目录 (PPT/PDF/Highlight), PPT 扩页保证内容可见; 新流程 `scripts/hl_v3_final/step1_export_slides.py`(PowerPoint→PDF→JPG —— 只走 PowerPoint, 不 fallback LibreOffice/Keynote)
 - **Step 2**: 视觉+文字提取 citation_marks, 输出 `_vision_report.json`; 新流程 `scripts/hl_v3_final/step2_extract_refs.py`(106 条全量回归)
 - **Step 3**: D 列引文 = 唯一真值, DOI 交叉校验, 5 维 L0 验真 + 5 维 L4 抽词; 新流程 `scripts/hl_v3_final/step3_download.py`(CrossRef/OpenAlex/Unpaywall/S2 四级降级 + 下载后校验)
 - **Step 4**: **v3 FINAL rect 模式**(opacity 0.45, RGB 255,217,0, 逐行精确 rect)—— 新交付唯一标准; v10.1 line 细线为旧模式(仅历史参考)

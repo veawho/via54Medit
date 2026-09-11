@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """Step 1: 新 PPT → 全页 PDF + 每页图片(导出 PPT 图片)
 用法: python3 step1_export_slides.py <ppt_path> <out_dir> [dpi]
-输出: <out_dir>/ppt_expanded.pdf, <out_dir>/images/slide_pp_NNN.jpg
-依赖: LibreOffice(soffice) 转 PDF + PyMuPDF 渲染"""
-import subprocess, sys, os, glob, tempfile, shutil
+输出: <out_dir>/<base>_expanded.pdf, <out_dir>/images/slide_pp_NNN.jpg
+
+渲染通道: **只走 Microsoft PowerPoint** —— 见同目录 ``ppt_to_pdf.py``。
+原版 PPT 是 PowerPoint 做的, Keynote / LibreOffice / WPS / python-pptx 打开后
+字体与布局和原版不一致, 按 2026-08-05 用户硬规则 (2026-09-11 重申) 禁用, **不 fallback**。
+本文件原先直接调用 LibreOffice 的 headless 转换, 已按规范改掉。
+"""
+import os
+import sys
+import glob
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ppt_to_pdf import export_ppt_to_pdf  # noqa: E402
+
 
 def export(ppt_path, out_dir, dpi=100):
     os.makedirs(out_dir, exist_ok=True)
@@ -11,23 +22,12 @@ def export(ppt_path, out_dir, dpi=100):
     os.makedirs(img_dir, exist_ok=True)
     for f in glob.glob(os.path.join(img_dir, 'slide_pp_*.jpg')):
         os.remove(f)
-    # 1) soffice → PDF
+
+    # 1) PowerPoint → PDF (唯一通道; 失败直接抛错, 不换渲染器)
     base = os.path.splitext(os.path.basename(ppt_path))[0]
     pdf_path = os.path.join(out_dir, f'{base}_expanded.pdf')
-    tmpdir = tempfile.mkdtemp()
-    try:
-        r = subprocess.run(['soffice', '--headless', '--convert-to', 'pdf',
-                            '--outdir', tmpdir, ppt_path],
-                           capture_output=True, text=True, timeout=300)
-        if r.returncode != 0:
-            print('soffice stderr:', r.stderr[-500:])
-            raise RuntimeError('soffice convert failed')
-        cand = glob.glob(os.path.join(tmpdir, '*.pdf'))
-        if not cand:
-            raise RuntimeError('soffice produced no pdf')
-        shutil.move(cand[0], pdf_path)
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    export_ppt_to_pdf(ppt_path, pdf_path)
+
     # 2) fitz 渲染每页为 jpg
     try:
         import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
@@ -44,6 +44,7 @@ def export(ppt_path, out_dir, dpi=100):
     print(f'PPT → {pdf_path} ({n} pages)')
     print(f'images → {img_dir} ({n} jpg)')
     return pdf_path, n
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:

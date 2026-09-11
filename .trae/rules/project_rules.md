@@ -41,3 +41,8 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
    - Python: use `/Users/david/.hermes/hermes-agent/venv/bin/python3` or system `python3`.
    - Go: use standard Go 1.22+.
    - DeepSeek API: use `DEEPSEEK_API_KEY`.
+5. **PPT 渲染: 只使用 Microsoft PowerPoint, 禁用其它通道 (2026-08-05 用户硬规则, 2026-09-11 重申)**:
+   - 原版 PPT 是 PowerPoint 做的。Keynote / LibreOffice / WPS / python-pptx 打开后字体、布局、颜色都与原版不一致, 不能作为渲染标准。用户原话: "powerpoint 渲染作为默认... 并默认必须用 PowerPoint 渲染"。
+   - 因此 **不做默认也不做兜底**: 拿不到 PowerPoint 就**报错** (或返回 0 页并打印原因), 绝不静默换渲染器。
+   - 唯一实现: `scripts/hl_v3_final/ppt_to_pdf.py` (PPT→PDF, 技能包自包含) 与 `scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
+   - 不变量由 `tests/test_repo_hygiene.py::TestPowerPointOnlyRender` 看守; 权威说明见 `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.12.0-powerpoint-render-mandatory.md`。

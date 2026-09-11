@@ -267,5 +267,116 @@ class TestFitzImportForm(unittest.TestCase):
         self.assertEqual(getattr(mod.fitz, "__name__", ""), "pymupdf")
 
 
+class TestPowerPointOnlyRender(unittest.TestCase):
+    """PPT 渲染只允许 PowerPoint 一条通道。
+
+    规则出处 (2026-08-05 用户硬规则, 2026-09-11 用户重申):
+      "powerpoint 渲染作为默认, 原因是 keynote 和 libreoffice 打开后视觉和 PowerPoint
+       不一致, 以 PowerPoint 为准, 并默认必须用 PowerPoint 渲染"
+    权威说明: ``skills/via54medit-algorithm-driven-upgrade-v2/references/
+    v2.12.0-powerpoint-render-mandatory.md``。
+
+    为什么值得设成不变量: v5.4.24/v5.4.25 只把 ``scripts/ppt_render_engine.py`` 收口了,
+    但**同一个仓库里还有别的 PPT 渲染入口**没跟着改 (``ppt_expand.render_pptx_images``、
+    技能包里的 ``render_ppt_slides.py``、``step1_export_slides.py``), 于是"禁用其它通道"
+    实际上没禁干净 —— 用户为此重申过一次。这条测试就是为了让那种漏改**当场红**,
+    而不是等下一个人去逐个文件读。
+
+    扫描范围: ``scripts/`` 与 ``skills/`` 下的**非测试** Python 文件
+    (测试文件会为"验证某通道已消失"而故意写出通道名, 属正常引用)。
+    """
+
+    SCAN_DIRS = ("scripts", "skills")
+
+    #: 扫描时跳过的文件名前缀 —— 它们故意写出通道名做反向断言。
+    SKIP_PREFIX = ("test_", "conftest")
+
+    #: 允许出现的文件 -> 理由。每条都必须写明, 不许无理由放行。
+    ALLOWED = {
+        os.path.join("scripts", "unified_render_engine.py"):
+            "命中的是 **Word** (DOC/DOCX) → PDF 那条路径, 不是 PPT —— PowerPoint 无法渲染 "
+            "Word 文档, 故 PPT 规则不适用, LibreOffice 在这里是 Word 渲染的实现之一。"
+            "若要求 Word 也一并收口, 删掉 render_docx_to_images() 的 LibreOffice 分支 "
+            "并同步删掉本条目。",
+    }
+
+    #: 以可执行名调用其它渲染器 —— 这是"换通道"最直接的形态。
+    _OTHER_RENDERER = re.compile(r"""["'](?:soffice|libreoffice)["']""")
+    #: LibreOffice 的转换开关 (出现即意味着走它转文档)。
+    _CONVERT_FLAG = re.compile(r"--convert-to")
+    #: 已删除的通道函数名 —— 连名字都不该再出现。
+    _GONE_NAMES = ("render_via_soffice", "render_via_python_pptx",
+                   "_find_soffice", "render_ppt_libreoffice")
+    #: RENDER_ENGINE 只允许这两个取值。
+    _ENGINE_ENV = re.compile(r"""RENDER_ENGINE["']\s*[:=]\s*["']([^"']+)["']""")
+    _ALLOWED_ENGINE_VALUES = {"powerpoint", "ppt"}
+
+    def _iter_py(self):
+        for top in self.SCAN_DIRS:
+            for root, dirs, files in os.walk(os.path.join(REPO, top)):
+                dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+                for fn in files:
+                    if not fn.endswith(".py") or fn.startswith(self.SKIP_PREFIX):
+                        continue
+                    path = os.path.join(root, fn)
+                    yield os.path.relpath(path, REPO), path
+
+    def _scan(self):
+        offenders = []
+        for rel, path in self._iter_py():
+            if rel.replace(os.sep, "/") in {k.replace(os.sep, "/") for k in self.ALLOWED}:
+                continue
+            try:
+                with open(path, encoding="utf-8") as f:
+                    lines = f.read().split("\n")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(lines, 1):
+                hit = None
+                if self._OTHER_RENDERER.search(line):
+                    hit = "调用了其它渲染器可执行文件"
+                elif self._CONVERT_FLAG.search(line):
+                    hit = "用了 LibreOffice 的转换开关"
+                else:
+                    for name in self._GONE_NAMES:
+                        if name in line:
+                            hit = f"出现已删除的通道函数 {name}"
+                            break
+                if hit:
+                    offenders.append(f"{rel}:{i}  [{hit}]  {line.strip()}")
+        return offenders
+
+    def test_no_other_render_channel_in_code(self):
+        offenders = self._scan()
+        self.assertEqual(
+            offenders, [],
+            "这些位置仍在走非 PowerPoint 的渲染通道。按 2026-08-05 用户硬规则, "
+            "PPT 只能由 PowerPoint 渲染 (其它渲染器字体/布局与原版不一致)。"
+            "改法: 委托给 ppt_render_engine.render_ppt_slides_auto() / "
+            "hl_v3_final/ppt_to_pdf.py; 若确属例外, 加进 ALLOWED 并写明理由:\n  "
+            + "\n  ".join(offenders))
+
+    def test_render_engine_env_has_no_other_channel_value(self):
+        """代码里不得再设置指向其它通道的 RENDER_ENGINE 取值。"""
+        bad = []
+        for rel, path in self._iter_py():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    text = f.read()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(text.split("\n"), 1):
+                m = self._ENGINE_ENV.search(line)
+                if m and m.group(1).lower() not in self._ALLOWED_ENGINE_VALUES:
+                    bad.append(f"{rel}:{i}  {line.strip()}")
+        self.assertEqual(bad, [], "RENDER_ENGINE 只允许 powerpoint: \n  " + "\n  ".join(bad))
+
+    def test_allowlist_has_no_zombie_entries(self):
+        """例外清单不该留僵尸条目 —— 文件改名/删除后条目要跟着清。"""
+        stale = [rel for rel in self.ALLOWED
+                 if not os.path.exists(os.path.join(REPO, rel))]
+        self.assertEqual(stale, [], f"ALLOWED 里这些文件已不存在: {stale}")
+
+
 if __name__ == "__main__":
     unittest.main()

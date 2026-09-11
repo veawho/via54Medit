@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""统一 PPT 渲染 SOP — 双引擎 (PowerPoint AppleScript + LibreOffice)
+"""统一 PPT 渲染 SOP — **只走 Microsoft PowerPoint 一条通道**
 
-核心原则: 输出到 PPT 同目录树下的 _ppt_renders/ (避免沙盒授权)
+核心原则:
+  1. 只用 PowerPoint 渲染 —— 原版 PPT 是 PowerPoint 做的, Keynote / LibreOffice /
+     WPS / python-pptx 打开后字体与布局不一致, 不能当作渲染标准
+     (2026-08-05 用户硬规则; 2026-09-11 用户重申"只使用 PowerPoint 渲染, 禁用其它通道")。
+     本文件原先带 `--engine libreoffice` 备选引擎, 已按规范删除。
+  2. 输出到 PPT 同目录树下的 _ppt_renders/ (避免沙盒授权)
 
 用法:
-    python3 render_ppt_slides.py <pptx_path> [--engine applescript|libreoffice]
+    python3 render_ppt_slides.py <pptx_path>
 
 输出:
     <ppt_dir>/_ppt_renders/
@@ -37,19 +42,6 @@ def render_ppt_applescript(pptx_path, output_dir):
         raise RuntimeError(f'PowerPoint AppleScript 失败: {r.stderr[:500]}')
     if not os.path.exists(pdf_path):
         raise RuntimeError('PowerPoint 导出 PDF 未生成')
-    return pdf_path
-
-
-def render_ppt_libreoffice(pptx_path, output_dir):
-    """LibreOffice 引擎 (备选)"""
-    pdf_path = os.path.join(output_dir, '_ppt_export.pdf')
-    cmd = ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', output_dir, pptx_path]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    if r.returncode != 0:
-        raise RuntimeError(f'LibreOffice 失败: {r.stderr[:500]}')
-    expected = os.path.join(output_dir, os.path.basename(pptx_path).replace('.pptx', '.pdf'))
-    if os.path.exists(expected) and expected != pdf_path:
-        os.rename(expected, pdf_path)
     return pdf_path
 
 
@@ -119,15 +111,21 @@ def write_citation_table(unique_refs, output_dir):
     return csv_path
 
 
-def render(pptx_path, output_dir, engine='applescript'):
-    """统一入口"""
+def render(pptx_path, output_dir, engine='powerpoint'):
+    """统一入口。
+
+    ``engine`` 只接受 PowerPoint 那一个值 —— 其它渲染通道已按规范禁用并删除
+    (``--engine`` 参数保留只是为了拦住旧调用并给出明确报错, 而不是静默换通道)。
+    """
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f'[引擎] {engine}')
-    if engine == 'applescript':
-        pdf_path = render_ppt_applescript(pptx_path, output_dir)
-    else:
-        pdf_path = render_ppt_libreoffice(pptx_path, output_dir)
+    if engine not in ('powerpoint', 'applescript'):
+        raise RuntimeError(
+            f'不支持的渲染通道 {engine!r} —— 按规范只使用 PowerPoint 渲染、禁用其它通道 '
+            f'(Keynote / LibreOffice / WPS / python-pptx 会与原版视觉不一致)。')
+
+    print('[引擎] PowerPoint (macOS 原生 AppleScript)')
+    pdf_path = render_ppt_applescript(pptx_path, output_dir)
     print(f'[PDF]  {os.path.getsize(pdf_path):,} bytes')
 
     slides = pdf_to_jpgs(pdf_path, output_dir)
@@ -152,10 +150,11 @@ def render(pptx_path, output_dir, engine='applescript'):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='PPT 渲染（相对目录 + 双引擎）')
+    parser = argparse.ArgumentParser(description='PPT 渲染（相对目录, 只走 PowerPoint）')
     parser.add_argument('pptx', help='PPT 路径')
-    parser.add_argument('--engine', choices=['applescript', 'libreoffice'], default='applescript',
-                       help='渲染引擎 (默认 applescript, 避免授权)')
+    parser.add_argument('--engine', choices=['powerpoint', 'applescript'], default='powerpoint',
+                       help='渲染引擎 —— 只有 PowerPoint 一条通道; '
+                            '其它通道 (libreoffice / keynote / wps / python-pptx) 已按规范禁用')
     args = parser.parse_args()
 
     ppt_dir = os.path.dirname(os.path.abspath(args.pptx))

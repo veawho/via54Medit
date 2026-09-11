@@ -7,9 +7,10 @@ deps_auto.py — 环境自检 + 自动接入系统软件/依赖/包 (部署新�
   - PyMuPDF (fitz)   — PDF 解析/highlight
   - python-pptx      — PPT 结构提取
   - Pillow           — 图片处理
-  - pywin32          — Windows PowerPoint/WPS COM (仅 Windows)
-  - (可选) 系统 PPT 引擎: PowerPoint/WPS/soffice 自动探测见 ppt_render_engine.py
-  - (可选) 系统二进制: soffice / pdftotext / lark-cli 探测并给出各平台安装提示
+  - pywin32          — Windows PowerPoint COM (仅 Windows)
+  - (可选) 系统 PPT 渲染引擎: **只用 PowerPoint** —— 见 ppt_render_engine.py。
+    Keynote / LibreOffice / WPS / python-pptx 均为**禁用通道**, 不做默认也不做兜底。
+  - (可选) 系统二进制: pdftoppm / pdftotext / lark-cli 探测并给出各平台安装提示
   - requirements.txt: 存在时优先整表安装 (可复现)
 
 自动安装失败时不中断 (打印提示, 由上层降级路径接管)。
@@ -70,7 +71,7 @@ def _check_system_tools():
     found = []
     missing = []
     for name, hint in [
-        ("soffice", "LibreOffice (PPT 真实渲染): macOS `brew install --cask libreoffice`, Linux `apt install libreoffice`"),
+        ("pdftoppm", "poppler-utils (PPT 导出的 PDF → JPG): macOS `brew install poppler`, Linux `apt install poppler-utils`"),
         ("pdftotext", "poppler-utils (PDF 文本提取): macOS `brew install poppler`, Linux `apt install poppler-utils`"),
         ("lark-cli", "飞书 CLI 集成: 设置 $LARK_CLI 指向可执行文件"),
     ]:
