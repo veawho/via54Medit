@@ -48,6 +48,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.7] - 2026-09-11 (新增: 关键事件外部告警通道)
+
+落实 5.4.6 建议的最后一条 —— 把描述符占用接入外部告警通道。
+
+### Added
+- **飞书告警通道 `telemetry/alerter.py`**: `send_alert(title, lines, key, level)` 复用既有的飞书交互卡片链路 (`FeishuSyncClient` + `im/v1/messages`); 卡片按 `level` 着色 (`critical` 红 / `warning` 橙 / `info` 蓝), 落款带花名与主机名。通道是通用的, 后续其它关键事件 (如 `auto_sync` 构建失败) 可直接复用。
+- **描述符告警接入守护进程**: 占用达软上限 80% 时, 除落日志外再推一条飞书告警。`key` 按 10% 分档 (`fd-80` / `fd-90` / `fd-100`), 随占用升高逐步升级, `≥90%` 升为 `critical`。
+- **新 CLI `alert` 子命令**: 默认展示通道状态与最近发送记录; `--test` 发测试告警 (绕过开关与限流) 验证通道; `--enable` / `--disable` 开关; `--min-interval N` 调整静默期。
+- **配置新增 `alerts` 段**: `enabled` 默认 `true`, `min_interval_minutes` 默认 `60`。`load_config()` 是深合并, 旧配置文件缺该段时自动取默认值, 无需迁移。
+
+### 设计取舍
+- **绝不反噬调用方**: 所有对外函数吞掉异常并返回 `(False, 说明)`。告警通道坏掉不能把守护进程带崩, 也不能让"发不出告警"本身变成新的故障。
+- **按 key 限流且跨重启生效**: 状态落盘 `~/.medit/alerts_state.json` (0600)。否则守护进程被 `KeepAlive` 反复拉起时, 每次启动都会重发一遍。
+- **失败快速重试、成功长期静默**: 成功后静默 `min_interval_minutes`; 失败只等 10 分钟再试 —— 免得一次网络抖动把告警静音整整一小时。无论成败都记一次尝试: 否则"每次都抛异常"会让限流形同虚设, 5 秒滴答就重试一次, 反而变成另一种刷屏。
+
+### 验证
+- test_telemetry **46/46 passed** (新增 5 项: 配置默认与合并、限流窗口、开关与限流下不发请求、卡片结构与容错、FD 观测触发告警并按占用分档升级)。
+- **真机端到端**: `medit-telemetry alert --test` 投递成功 (Message ID `om_x100b650ee6c194acc12028aa5dda989`); 另按守护进程的真实调用形态演练一次真实告警卡片, 同样投递成功。凭据齐备 (app_id / app_secret / open_id), 接收人 Devin。
+
+### 说明
+- 目前只有描述符占用接了告警。`auto_sync` 构建失败仍以非零退出码与日志体现, 可用同一通道后续接入。
+
 ## [5.4.6] - 2026-09-11 (加固: 日志轮转/限流、描述符观测与上限、配置权限)
 
 承接 5.4.5 自检报告的遗留项 (P2 / P3), 一并收口。
