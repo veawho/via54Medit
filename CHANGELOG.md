@@ -48,6 +48,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.32] - 2026-09-11 (分发可用性: CI 在 ubuntu / windows 上已经红了六次 —— 修掉 + 补上"本机就能发现"的守卫)
+
+回应"确认当前版本是否可以分发并部署到其他设备(winOS / macOS)"。
+查证方式是读 GitHub Actions 的**真实结论**(``gh run list``), 而不是只看本机。
+
+### 结论先摆出来
+
+| 平台 | 结论 |
+| --- | --- |
+| ``go (ubuntu / macos / windows)`` | ✅ 三个平台全过(含 ``-race``) |
+| ``python (macos-latest)`` | ✅ 通过 |
+| ``python (ubuntu-latest)`` | ❌ **失败** |
+| ``python (windows-latest)`` | ❌ **失败** |
+
+**即: 当前版本还不能分发** —— Python 侧在 Linux 与 Windows 上是红的。
+而且这不是新问题: 从 **v5.4.26 一路红到 v5.4.31, 连续六次提交**都没被发现。
+
+### 为什么我没发现(我自己的流程漏洞)
+
+我每轮都用 ``make test-py`` / ``test_tma_pipeline`` 验证, 但那些**只在本机 macOS 上跑**;
+我从未查过一次 CI 的真实结论。macOS 全绿把跨平台失败完整地盖住了。
+
+### Fixed — 根因: 我的测试带平台假设
+
+有两个用例测的是 **darwin 分支的逻辑**(预检、超时、AppleScript 里嵌的秒数), 却直接在宿主上跑:
+
+- ``test_timeout_error_appends_hint_and_embeds_configurable_timeout`` 与
+  ``test_preflight_failure_fails_fast_with_hint``: 在 Linux/Windows 上, ``export_ppt_to_pdf``
+  会先命中"本平台没有桌面版 PowerPoint 通道"那条分支, 于是断言 ``-1712`` / ``预检失败`` 失败。
+- ``test_powerpoint_pref_never_falls_back_to_other_channels``: **只伪装了 ``sys.platform``**,
+  没伪装 ``os.name``。Windows 上 ``os.name == "nt"`` → 走 COM 分支 → 抛 RuntimeError → ERROR。
+
+修法: 新增 ``_as_macos()`` helper(**同时**伪装 ``os.name`` 与 ``sys.platform``), 三个用例改用它。
+比"非 macOS 就跳过"更好 —— 这样**每个平台都会真的跑一遍这些分支**。
+
+### Added — 两条防回归守卫(让"本机绿、CI 红"不再可能)
+
+- ``test_render_engine_suite_passes_on_non_macos``: 起子进程把 ``sys.platform`` 伪装成 ``linux``
+  再跑一遍 ``TestRenderEngine``。**已验证它能精确复现 CI 的报错**: 把某个用例改回不伪装平台,
+  它立刻红, 且错误行与 CI ubuntu job **一字不差**。
+  (为何不模拟 Windows: 本机把 ``os.name`` 改成 ``"nt"`` 会让 asyncio 去 import Windows 专属的
+   ``_overlapped`` 而崩 —— 这条路走不通, 已在用例注释里写明。)
+- ``test_as_macos_fakes_os_name_too_not_just_platform``: 直接检查 helper 源码里确实同时改了
+  ``os.name``; 这条在**任何**平台上都成立(Windows 那侧无法在本机做行为验证)。
+
+### Fixed — 顺带三处与分发相关的错误说明 / 缺口
+
+- **``requirements.txt``**: 注释还在写 "pywin32 … (PowerPoint/**WPS** COM 渲染)" 与
+  "**LibreOffice (soffice): PPT 真实渲染**", 都与现行规范矛盾(会误导部署者去装 LibreOffice)。
+  已改为: PPT/Word 的版式只由微软引擎产出(桌面版或 ``RENDER_ENGINE=graph``), Python 侧
+  **不需要** LibreOffice; 系统二进制里把 PowerPoint/Word 列为**非可选**。
+- **CI 的导入探测清单漏了整条渲染链路**: 补上 ``unified_render_engine`` / ``render_doctor`` /
+  ``graph_render`` / ``bootstrap_device``(并把 ``hl_v3_final`` 入路径)。以前这些模块在
+  Windows/Linux 上能否导入, CI 根本没查。另加注: ``render_doctor`` 的**真出图探针故意不进 CI**
+  (跑者镜像里没有桌面 Office, 必然报不可用), 那一步在真机上跑。
+- **Windows 控制台编码**: 新增/改动的入口 (``render_doctor.py`` / ``graph_render.py`` /
+  ``unified_render_engine.py``) 补齐 ``sys.stdout.reconfigure(encoding="utf-8")`` ——
+  Windows 上把输出重定向到文件/管道时默认 cp936, 而脚本打的 ``✓ ✗ ⚠️`` 等字符不在 GBK 里,
+  会直接 UnicodeEncodeError。(仓库其它入口早有这个兜底, 是我这几个新文件漏了。)
+
+### 测试
+
+``test_tma_pipeline`` 118 → **120** 项; ``make test-py`` 73+24、``test_pipeline_ha`` 8 过 3 跳过、
+``hl_v3_final/test_hl_lib.py`` 36 过、禁止区校验 OK、镜像 ``--check`` 退出码 0。
+
+推送后**复查 CI 的真实结论**, 是本轮新增的收尾动作(此前从未做过)。
+
 ## [5.4.31] - 2026-09-11 (高可用复核: 我自己把 Word 通道弄坏了 → 修好 + 新增"真出图"就绪探针)
 
 回应"确保当前状态是你推理最佳路径后的高可用版本"。我按**可用性**重新审了一遍自己这几轮的改动,
