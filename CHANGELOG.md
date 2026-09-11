@@ -48,6 +48,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.16] - 2026-09-11 (清理: 下线 4 个版本后缀死脚本 + 修正指向不存在 CI 工作流的文档)
+
+承接 v5.4.15 之后的版本后缀脚本清查。19 个带 `_vN` 后缀的文件逐个判定后, 本轮下线 4 个,
+并顺带修掉两处「文档声明的东西其实不存在」。
+
+### Removed
+- **4 个已失效的版本后缀脚本** (共 1067 行), 判定依据与全部 19 个文件的逐条结论见
+  `docs/versioned-scripts-audit-2026-09-11.md`:
+  - `scripts/rerun_tma_highlight_v104.py` —— 后继者 `rerun_tma_highlight_v3_final.py` 的
+    docstring 已**指名取代**; 硬编码的输入 `_2_pdfs/` 与输出 `_3_highlight_v10_4/` 均已不在。
+  - `scripts/fix_zero_yellow_pnx.py` —— 与 v104 成对下线。它唯一的用途是
+    `from rerun_tma_highlight_v104 import _read_csv_kws`, 读写目录同 v104; 与 v104 分开删会
+    留下坏 import, 必须一起走。
+  - `scripts/tma_batch_redownload_v2.py` / `v3.py` —— 硬编码输入
+    `_3_highlight_v10_glm/_redownload_suggestions.json`, 该目录已不存在。
+
+  清查中**推翻了两条扫码式的直觉**, 记录在审计文档里: ① 后缀不代表版本链, 同族代码重合度
+  只有 17%–38%, 是同一问题的重写式反复尝试; ② 后缀有时是固有命名
+  （`literature_v8_process_pn_x_v313.py` 与无后缀"兄弟"重合仅 1.6%, `clinicaltrials_v2.md`
+  在仓库内根本没有 v1）。19 个里只有这 4 个能凭硬证据判定死亡, 其余 6 个属
+  「一次性任务已完成」而非「被取代」, 两者处置不同, 留给人工确认。
+
+### Fixed
+- **两处文档指向一个已被删除的 CI 工作流**:
+  - `AGENTS.md`: `CI: .github/workflows/rules_check.yml 自动跑 via54.py rules <project>` ——
+    该文件不存在。`.github/workflows/` 下只有 `ci.yml`（Go build/vet/race + Python 单测 +
+    工具链 import 探针）, **没有** rules 步骤。
+  - `docs/6_step_sop.md`: `| CI gate | .github/workflows/rules_check.yml | ✓ PR 自动跑 |` —— 同上。
+
+    `rules_check.yml` 在 `bc96e45`（`tmp: remove workflow for push test`）中删除后从未恢复。
+    两处已改为指向真实存在的 `ci.yml`, 并注明 `via54.py rules` 无 CI 集成、需本地手动跑。
+- **同一处的测试数字与通过率也是历史快照**: 原文写「69/69 通过（`test_via54_highlight_fix_v10.py`
+  40 + `test_via54_rules.py` 29）」, 实测是 **41 + 28**, 且前者有 4 个真实 TMA 用例因 `_2_pdfs/`
+  归档而自动 skip。实测 `via54_rules.py check` 对残留 TMA 目录只得 **2/7**（Step 1/3/4/5/6
+  输入目录缺失, **非规则回归**）。两处已改为可复现的表述并加日期标注说明。
+
+### 验证
+- `make test-py` **62 passed**; `test_via54_rules.py` **28/28 OK**;
+  `test_via54_highlight_fix_v10.py` **41/41 OK (skipped=4)**。
+- 删除后确认无残留坏 import: `scripts/` 下 249 个 `.py` 全部通过语法检查; `via54.py` 的
+  分发目标与 CI 引用的脚本均未受影响。
+- 版本号三处同步 `1.5.15` → `1.5.16` (`telemetry/__init__.py`、`pyproject.toml`、`setup.py`)。
+
+### 已知残留 (本轮未处理)
+- `scripts/hl_v3_final/` 下仍有约 20 处裸写 `import fitz`（弃用式导入）。v5.4.11 的修复本就
+  只承诺 `telemetry/` 两个模块, 这不是漏改; 但作为「唯一标准」的高亮工具链, 若要批量改为
+  `import pymupdf as fitz`（需 PyMuPDF 1.24+, 旧版回退）应另起一次带回归的改动。
+
 ## [5.4.15] - 2026-09-11 (清理: 冗余 .gitkeep + deps_auto.py 的 BOM)
 
 二次核查（扫查盲区）确认无功能性缺陷之后, 顺手清掉两项装饰性问题。
