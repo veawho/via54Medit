@@ -50,6 +50,13 @@ param (
     [Parameter(Mandatory=$false)]
     [switch]$NoReminder,
 
+    # 目标日遇周末/法定节假日时是否顺延到下一个工作日 (默认开启)
+    [Parameter(Mandatory=$false)]
+    [switch]$Defer,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoDefer,
+
     [Parameter(Mandatory=$false)]
     [switch]$Silent,
 
@@ -125,6 +132,8 @@ if ($Weekly) { $pyArgs += "--weekly"; $pyArgs += $Weekly }
 if ($Monthly) { $pyArgs += "--monthly"; $pyArgs += $Monthly }
 if ($Reminder) { $pyArgs += "--reminder"; $pyArgs += $Reminder }
 if ($NoReminder) { $pyArgs += "--no-reminder" }
+if ($Defer) { $pyArgs += "--defer" }
+if ($NoDefer) { $pyArgs += "--no-defer" }
 if ($NoStartup) { $pyArgs += "--no-startup" }
 if ($NoLauncher) { $pyArgs += "--no-launcher" }
 if ($Uninstall) { $pyArgs += "--uninstall" }

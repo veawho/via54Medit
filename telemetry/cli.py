@@ -262,12 +262,18 @@ def cmd_holiday(args):
     try:
         from .reminders import reminder_status
 
-        upcoming = reminder_status(load_config()).get("upcoming") or []
+        st = reminder_status(load_config())
+        print("• 顺延规则:   %s" % ("遇周末/法定节假日顺延到下一个工作日"
+                                   if st.get("defer_non_workday") else "按固定日期发送(不顺延)"))
+        upcoming = st.get("upcoming") or []
         if upcoming:
             print("• 排程与提醒日:")
             for item in upcoming:
+                defer = ""
+                if item.get("deferred"):
+                    defer = "  ⏩ 原定 %s, 因%s顺延" % (item["raw"], item["reason"])
                 print(f"    - 下次{item['label']}: {item['target']}  →  提醒日 "
-                      f"{item['remind_date']}（{item['remind_status']}）")
+                      f"{item['remind_date']}（{item['remind_status']}）{defer}")
     except Exception:                                       # noqa: BLE001
         pass
     print("=======================================================")
@@ -357,6 +363,15 @@ def cmd_config(args):
         print("[Config] 已关闭「别关机」提醒 (可随时用 --set-reminder '18:00' 重新开启)")
         modified = True
 
+    if args.defer or args.no_defer:
+        # 两个开关合一个布尔: --defer 显式开, --no-defer 显式关
+        enabled = not args.no_defer
+        cfg["schedule"]["defer_non_workday"] = enabled
+        print("[Config] 顺延规则已%s: %s" % (
+            "开启" if enabled else "关闭",
+            "遇周末/法定节假日顺延到下一个工作日" if enabled else "按固定日期发送(不顺延)"))
+        modified = True
+
     if args.add_watch_dir:
         abs_p = os.path.abspath(args.add_watch_dir)
         if abs_p not in cfg["watcher"]["watch_dirs"]:
@@ -389,10 +404,14 @@ def cmd_config(args):
         st = reminder_status(cfg)
         print(f"• 别关机提醒:      {'已开启' if st['enabled'] else '已关闭'}"
               f"  (推送日的前一个工作日 {st['time']} 提醒)")
+        print(f"• 顺延规则:        {'遇周末/法定节假日顺延到下一个工作日' if st['defer_non_workday'] else '按固定日期发送(不顺延)'}")
         for item in st["upcoming"]:
             flag = "" if item["authoritative"] else "  ⚠️ 仅按周末推算"
+            defer = ""
+            if item["deferred"]:
+                defer = "  ⏩ 原定 %s, 因%s顺延" % (item["raw"], item["reason"])
             print(f"    - 下次{item['label']}: {item['target']}  →  提醒日 {item['remind_date']}"
-                  f"（{item['remind_status']}）{flag}")
+                  f"（{item['remind_status']}）{defer}{flag}")
     except Exception as e:                                  # noqa: BLE001
         print(f"• 别关机提醒:      状态读取失败 ({e})")
     print(f"• 主动监控目录:    {len(cfg['watcher']['watch_dirs'])} 个:")
@@ -609,6 +628,9 @@ def main():
     p_cfg.add_argument("--set-reminder", default="",
                        help="开启/修改「别关机」提醒时刻 (推送日的前一个工作日)，例: '18:00'")
     p_cfg.add_argument("--no-reminder", action="store_true", help="关闭「别关机」提醒")
+    p_cfg.add_argument("--defer", action="store_true",
+                       help="开启顺延: 目标日遇周末/法定节假日时改到下一个工作日 (默认已开启)")
+    p_cfg.add_argument("--no-defer", action="store_true", help="关闭顺延, 按固定日期发送")
     p_cfg.add_argument("--add-watch-dir", default="", help="添加主动监控目录路径")
     p_cfg.set_defaults(func=cmd_config)
 

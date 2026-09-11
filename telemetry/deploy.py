@@ -404,6 +404,13 @@ def setup_configuration(args) -> dict:
             except Exception:
                 print(f"    ⚠️ 提醒时刻格式有误 ({reminder_time!r}), 保持 {rem.get('time')}")
 
+        # 顺延规则 (遇周末/法定节假日改到下一个工作日)
+        if getattr(args, "defer", False) or getattr(args, "no_defer", False):
+            enabled = not args.no_defer
+            cfg["schedule"]["defer_non_workday"] = enabled
+            print("    • 顺延规则: %s" % ("遇周末/法定节假日顺延到下一个工作日"
+                                          if enabled else "按固定日期发送(不顺延)"))
+
         if args.add_watch_dir:
             wdir = os.path.abspath(args.add_watch_dir)
             if wdir not in cfg["watcher"]["watch_dirs"]:
@@ -430,6 +437,9 @@ def setup_configuration(args) -> dict:
               f" (按法定节假日推算)")
     else:
         print("    • 别关机提醒:    已关闭")
+    print("    • 顺延规则:      %s" % (
+        "遇周末/法定节假日顺延到下一个工作日"
+        if cfg["schedule"].get("defer_non_workday", True) else "按固定日期发送(不顺延)"))
     return cfg
 
 
@@ -523,6 +533,9 @@ def main():
     parser.add_argument("--monthly", default="", help="每月定时报告时间，如: '1 10:30' 或 'last 18:00' (默认 每月1日 10:30)")
     parser.add_argument("--reminder", default="", help="「别关机」提醒时刻，如 '18:00' (默认 18:00, 在推送日的前一个工作日)")
     parser.add_argument("--no-reminder", action="store_true", help="关闭推送日前一个工作日的「别关机」提醒")
+    parser.add_argument("--defer", action="store_true",
+                        help="目标日遇周末/法定节假日时顺延到下一个工作日 (默认已开启)")
+    parser.add_argument("--no-defer", action="store_true", help="关闭顺延, 按固定日期发送")
     parser.add_argument("--add-watch-dir", default="", help="追加主动监控的工作区目录")
     parser.add_argument("--no-startup", action="store_true", help="不注册 Windows Startup 开机自启")
     parser.add_argument("--no-launcher", action="store_true", help="不创建桌面伴随启动器")

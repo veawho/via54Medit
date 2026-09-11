@@ -82,6 +82,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "weekly": json.loads(json.dumps(DEFAULT_WEEKLY_SCHEDULE)),
         "monthly": json.loads(json.dumps(DEFAULT_MONTHLY_SCHEDULE)),
         "reminder": json.loads(json.dumps(DEFAULT_REMINDER_SCHEDULE)),
+        # 目标日落在周末或法定节假日时, 顺延到下一个工作日(补班的周六算工作日)。
+        # 判断依据是 holidays 模块的日历(来源为国务院公告)。设为 false 则按固定日期发。
+        "defer_non_workday": True,
     },
     "watcher": {
         "poll_interval_seconds": 30,

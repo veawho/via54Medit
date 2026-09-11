@@ -1742,40 +1742,82 @@ class TestScheduleDefaults(unittest.TestCase):
         self.assertEqual(cfg["schedule"]["reminder"]["time"], "18:00")
 
 
+#: 2026 年法定节假日报文(完整) —— 摘自 国办发明电〔2025〕7 号
+#: 《国务院办公厅关于2026年部分节假日安排的通知》
+#: https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm
+#: 对应的 holiday-cn 报文。逐条核对过: 33 天放假 + 6 天补班。
+#:
+#: ⚠️ 这里必须是**完整**的一年, 不能只挑测试"用到的"几天: 顺延逻辑会往后找"下一个工作日",
+#: 日历缺了几天就会被当成工作日, 于是顺延结果全错 —— 这正是本文件里的测试两次假红的原因。
+_HOLIDAY_CN_2026 = {
+    "year": 2026,
+    "papers": ["https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"],
+    "days": [
+        {"name": "元旦", "date": "2026-01-01", "isOffDay": True},
+        {"name": "元旦", "date": "2026-01-02", "isOffDay": True},
+        {"name": "元旦", "date": "2026-01-03", "isOffDay": True},
+        {"name": "元旦", "date": "2026-01-04", "isOffDay": False},
+        {"name": "春节", "date": "2026-02-14", "isOffDay": False},
+        {"name": "春节", "date": "2026-02-15", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-16", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-17", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-18", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-19", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-20", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-21", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-22", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-23", "isOffDay": True},
+        {"name": "春节", "date": "2026-02-28", "isOffDay": False},
+        {"name": "清明节", "date": "2026-04-04", "isOffDay": True},
+        {"name": "清明节", "date": "2026-04-05", "isOffDay": True},
+        {"name": "清明节", "date": "2026-04-06", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-01", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-02", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-03", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-04", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-05", "isOffDay": True},
+        {"name": "劳动节", "date": "2026-05-09", "isOffDay": False},
+        {"name": "端午节", "date": "2026-06-19", "isOffDay": True},
+        {"name": "端午节", "date": "2026-06-20", "isOffDay": True},
+        {"name": "端午节", "date": "2026-06-21", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-09-20", "isOffDay": False},
+        {"name": "中秋节", "date": "2026-09-25", "isOffDay": True},
+        {"name": "中秋节", "date": "2026-09-26", "isOffDay": True},
+        {"name": "中秋节", "date": "2026-09-27", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-01", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-02", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-03", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-04", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-05", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-06", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-07", "isOffDay": True},
+        {"name": "国庆节", "date": "2026-10-10", "isOffDay": False},
+    ],
+}
+
+
+def _cal2026(holidays_mod):
+    """由上面的报文 fixture 生成 2026 日历。
+
+    **从报文派生**而不是手写第二份日期: 手写的那份两次漏掉国庆连休中间几天, 于是测试假红。
+    日历本就是从报文解析出来的, 测试里也该保持同一条链路。
+    """
+    off, work = {}, {}
+    for day in _HOLIDAY_CN_2026["days"]:
+        (off if day["isOffDay"] else work)[day["date"]] = day["name"]
+    return holidays_mod.HolidayCalendar(
+        year=2026, off_days=off, work_days=work, source="holiday-cn",
+        authoritative=True, papers=_HOLIDAY_CN_2026["papers"])
+
+
 class TestHolidayCalendar(unittest.TestCase):
     """法定节假日日历 —— 提醒日按它推算, 所以它算错, 提醒就会提醒错日子。
 
     全部离线: 网络取数用真实报文(裁剪)打桩, 不依赖外网。
     """
 
-    #: 摘自 国办发明电〔2025〕7 号《国务院办公厅关于2026年部分节假日安排的通知》
-    #: (https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm) 对应的
-    #: holiday-cn 报文, 为控制篇幅只保留测试用到的条目。
-    HOLIDAY_CN_2026 = {
-        "year": 2026,
-        "papers": ["https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"],
-        "days": [
-            {"name": "元旦", "date": "2026-01-01", "isOffDay": True},
-            {"name": "元旦", "date": "2026-01-04", "isOffDay": False},
-            {"name": "春节", "date": "2026-02-14", "isOffDay": False},
-            {"name": "春节", "date": "2026-02-15", "isOffDay": True},
-            {"name": "春节", "date": "2026-02-23", "isOffDay": True},
-            {"name": "春节", "date": "2026-02-28", "isOffDay": False},
-            {"name": "中秋节", "date": "2026-09-25", "isOffDay": True},
-            {"name": "中秋节", "date": "2026-09-27", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-09-20", "isOffDay": False},
-            # 国庆连休 10-01 ~ 10-07 必须整段齐全: 只写头尾会让中间的日期被当成
-            # 工作日, 于是"前一个工作日"算出错误结果(这正是本用例第一次跑挂的原因)。
-            {"name": "国庆节", "date": "2026-10-01", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-02", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-03", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-04", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-05", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-06", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-07", "isOffDay": True},
-            {"name": "国庆节", "date": "2026-10-10", "isOffDay": False},
-        ],
-    }
+    #: 完整 2026 报文见模块级 ``_HOLIDAY_CN_2026`` —— 只留一份, 避免手写第二份日期又漏几天。
+    HOLIDAY_CN_2026 = _HOLIDAY_CN_2026
 
     def setUp(self):
         from telemetry import holidays
@@ -1933,17 +1975,11 @@ class TestReminder(unittest.TestCase):
                 "weekly": {"enabled": True, "day_of_week": 0, "time": "10:30"},
                 "monthly": {"enabled": True, "day_of_month": 1, "time": "10:30"},
                 "reminder": {"enabled": True, "time": "18:00"},
+                "defer_non_workday": True,
             },
         }
         # 用真实 2026 日历(国办发明电〔2025〕7 号), 避免依赖外网
-        self.cal2026 = holidays.HolidayCalendar(
-            year=2026,
-            off_days={"2026-10-01": "国庆节", "2026-10-02": "国庆节", "2026-10-05": "国庆节",
-                      "2026-09-25": "中秋节", "2026-09-26": "中秋节", "2026-09-27": "中秋节",
-                      "2026-02-16": "春节", "2026-01-01": "元旦"},
-            work_days={"2026-09-20": "国庆节后补班", "2026-10-10": "国庆节后补班",
-                       "2026-02-28": "春节后补班"},
-            source="holiday-cn", authoritative=True)
+        self.cal2026 = _cal2026(holidays)
 
     def setUpPatches(self):
         p = mock.patch.object(self.holidays, "calendar_for", return_value=self.cal2026)
@@ -1967,12 +2003,13 @@ class TestReminder(unittest.TestCase):
         from datetime import datetime
 
         self.setUpPatches()
+        # 10-01 是国庆假期 -> 顺延到假期后第一个工作日 10-08
         got = self.reminders.next_occurrence(self.cfg, datetime(2026, 9, 9), "monthly")
-        self.assertEqual(got, datetime(2026, 10, 1, 10, 30))
+        self.assertEqual(got, datetime(2026, 10, 8, 10, 30), "遇法定假期应顺延")
 
         cfg = {"schedule": {"monthly": {"enabled": True, "day_of_month": -1, "time": "10:30"}}}
         got = self.reminders.next_occurrence(cfg, datetime(2026, 9, 9), "monthly")
-        self.assertEqual(got, datetime(2026, 9, 30, 10, 30), "月末最后一天")
+        self.assertEqual(got, datetime(2026, 9, 30, 10, 30), "月末最后一天是工作日, 不顺延")
 
     def test_disabled_schedule_has_no_occurrence(self):
         from datetime import datetime
@@ -1998,7 +2035,11 @@ class TestReminder(unittest.TestCase):
         self.assertEqual(self.reminders.due_reminders(self.cfg, datetime(2026, 9, 12, 18, 0)), [])
 
     def test_national_day_merges_weekly_and_monthly_into_one(self):
-        """2026-09-30 同时是"10-01 月报"与"10-05 周报"的前一个工作日 —— 必须合并成一次。"""
+        """2026-09-30 同时是「10-01 月报」与「10-05 周报」的前一个工作日 —— 必须合并成一次。
+
+        两条都被顺延到 10-08(国庆假期后第一个工作日), 因此这一天的提醒是"假期前最后一次
+        提醒", 文案不能说"今晚别关机"(中间隔着整段假期)。
+        """
         from datetime import datetime
 
         self.setUpPatches()
@@ -2006,10 +2047,43 @@ class TestReminder(unittest.TestCase):
         self.assertEqual(sorted(i["kind"] for i in due), ["monthly", "weekly"])
         self.assertEqual(len({self.reminders.reminder_key(i["remind_date"]) for i in due}), 1,
                          "同一天只能有一个幂等 key, 否则会发两张卡")
+        self.assertTrue(all(i["deferred"] for i in due), "两条都应标记为已顺延")
+
         lines = "\n".join(self.reminders.build_reminder_lines(due))
         self.assertIn("月报", lines)
         self.assertIn("周报", lines)
-        self.assertEqual(lines.count("今晚请不要关机"), 1)
+        self.assertIn("2026-10-08", lines, "应写明顺延后的实际推送日")
+        self.assertIn("原定 `2026-10-01`", lines)
+        self.assertIn("原定 `2026-10-05`", lines)
+        self.assertEqual(lines.count("请在 `2026-10-08` 之前确保设备开机联网"), 1)
+        self.assertNotIn("今晚请不要关机", lines,
+                         "推送日与提醒日隔着整段假期, 不该说「今晚不要关机」")
+
+    def test_next_day_push_keeps_the_tonight_wording(self):
+        """提醒日与推送日只差一天时, 才说"今晚请不要关机"。"""
+        from datetime import datetime
+
+        self.setUpPatches()
+        # 周报目标改为周三 -> 2026-09-16(周三) 的前一个工作日是 09-15(周二), 只差一天
+        cfg = {"schedule": {"weekly": {"enabled": True, "day_of_week": 2, "time": "10:30"},
+                            "reminder": {"enabled": True, "time": "18:00"},
+                            "defer_non_workday": True}}
+        due = self.reminders.due_reminders(cfg, datetime(2026, 9, 15, 18, 0))
+        self.assertEqual([i["kind"] for i in due], ["weekly"])
+        lines = "\n".join(self.reminders.build_reminder_lines(due))
+        self.assertIn("今晚请不要关机", lines)
+
+    def test_reminder_day_follows_the_deferred_date(self):
+        """提醒日必须按**顺延后**的日期算, 否则会出现"提醒明天推、实际推到假期后"。"""
+        from datetime import datetime
+
+        self.setUpPatches()
+        due = self.reminders.due_reminders(self.cfg, datetime(2026, 9, 30, 18, 0))
+        for item in due:
+            self.assertEqual(item["remind_date"].isoformat(), "2026-09-30")
+            self.assertEqual(item["gap_days"], 8)
+        # 假期期间(10-01)不该提醒
+        self.assertEqual(self.reminders.due_reminders(self.cfg, datetime(2026, 10, 1, 18, 0)), [])
 
     def test_reminder_line_shows_correct_weekday(self):
         """回归: 星期文案曾差一位(周四显示成"三"、周一显示成"周")。"""
@@ -2087,6 +2161,230 @@ class TestReminder(unittest.TestCase):
             # 同一天再检查一次: 进程内拦掉, 不再发
             daemon._check_reminder(self.cfg, datetime(2026, 9, 11, 18, 5))
             self.assertEqual(sent.call_count, 1)
+
+
+class TestDeferral(unittest.TestCase):
+    """推送遇周末/法定节假日顺延到下一个工作日。
+
+    为什么要它: 排程是"到点触发"的, 而目标日可能正好是周末或连休(2026 年周报目标 10-05
+    是国庆假期、月报目标 10-01 也是)。顺延判断必须查法定节假日日历 —— 只按周末算会把
+    连休中间的工作日误当成"该发就发", 也会漏掉"补班的周六其实是工作日"。
+    """
+
+    def setUp(self):
+        from telemetry import holidays, schedule
+
+        self.holidays, self.schedule = holidays, schedule
+        holidays.reset_cache()
+        self.cfg = {
+            "schedule": {
+                "weekly": {"enabled": True, "day_of_week": 0, "time": "10:30"},
+                "monthly": {"enabled": True, "day_of_month": 1, "time": "10:30"},
+                "defer_non_workday": True,
+            },
+        }
+        p = mock.patch.object(holidays, "calendar_for", return_value=_cal2026(holidays))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self.holidays.reset_cache()
+
+    def _eff(self, now, kind):
+        got = self.schedule.next_occurrence(self.cfg, now, kind)
+        return got.strftime("%Y-%m-%d %H:%M") if got else None
+
+    # ---- 顺延规则 ----
+
+    def test_weekly_on_a_holiday_monday_is_deferred(self):
+        from datetime import datetime
+
+        # 2026-10-05 是国庆假期(周一) -> 顺延到假期后第一个工作日 10-08(周四)
+        self.assertEqual(self._eff(datetime(2026, 10, 4), "weekly"), "2026-10-08 10:30")
+
+    def test_monthly_on_a_holiday_first_is_deferred(self):
+        from datetime import datetime
+
+        # 2026-10-01 国庆 -> 10-08
+        self.assertEqual(self._eff(datetime(2026, 9, 20), "monthly"), "2026-10-08 10:30")
+
+    def test_monthly_on_a_plain_weekend_is_deferred(self):
+        from datetime import datetime
+
+        # 2026-11-01 是周日 -> 顺延到 11-02(周一)
+        self.assertEqual(self._eff(datetime(2026, 10, 20), "monthly"), "2026-11-02 10:30")
+
+    def test_makeup_workday_saturday_is_not_deferred(self):
+        """调休补班的周六**是**工作日 —— 不能被误顺延。
+
+        2026-10-10(周六)与 09-20(周日)都是国务院公告里的补班日, 直接看 defer 的结果最清楚。
+        """
+        from datetime import datetime
+
+        for ds in ("2026-10-10", "2026-09-20"):
+            dt = datetime.strptime(ds + " 10:30", "%Y-%m-%d %H:%M")
+            eff, reason = self.schedule.defer(dt)
+            self.assertEqual(eff, dt, "%s 是补班日, 不该顺延" % ds)
+            self.assertEqual(reason, "")
+
+    def test_plain_weekend_is_deferred_by_defer(self):
+        from datetime import datetime
+
+        dt = datetime(2026, 10, 11, 10, 30)          # 周日
+        eff, reason = self.schedule.defer(dt)
+        self.assertEqual(eff.strftime("%Y-%m-%d"), "2026-10-12")
+        self.assertIn("周末", reason)
+        # 顺延只改日期, 时间不变
+        self.assertEqual((eff.hour, eff.minute), (10, 30))
+
+    def test_workday_target_is_untouched(self):
+        from datetime import datetime
+
+        # 2026-10-12 周一, 普通工作日 -> 不顺延
+        self.assertEqual(self._eff(datetime(2026, 10, 9), "weekly"), "2026-10-12 10:30")
+
+    def test_spring_festival_collapses_two_targets_into_one(self):
+        """春节整周连休会让相邻两个周一(02-16 与 02-23)顺延到同一天 —— 必须去重。
+
+        不去重的话提醒里会把"周报"列两遍; 守护进程那边则靠"当天只发一次"兜住。
+        """
+        from datetime import datetime
+
+        occ = [o for o in self.schedule.occurrences(self.cfg, datetime(2026, 2, 15))
+               if o["effective"].strftime("%m-%d") == "02-24"]
+        self.assertEqual(len(occ), 1, "同一天只应有一条周报")
+        self.assertEqual(occ[0]["raw"].strftime("%m-%d"), "02-16", "保留最早的原始目标日")
+        self.assertEqual([d.strftime("%m-%d") for d in occ[0]["also_from"]], ["02-23"])
+
+    def test_occurrences_are_sorted_and_unique(self):
+        from datetime import datetime
+
+        occ = self.schedule.occurrences(self.cfg, datetime(2026, 9, 12, 14, 0))
+        keys = [(o["kind"], o["effective"]) for o in occ]
+        self.assertEqual(len(keys), len(set(keys)), "同一(类型, 生效时刻)只能出现一次")
+        self.assertEqual(occ, sorted(occ, key=lambda x: x["effective"]))
+
+    def test_deferral_can_be_turned_off(self):
+        """关掉顺延后应按固定日期 —— 保留这个开关是为了可覆盖(例如日历数据不可用时)。"""
+        from datetime import datetime
+
+        cfg = {"schedule": dict(self.cfg["schedule"], defer_non_workday=False)}
+        got = self.schedule.next_occurrence(cfg, datetime(2026, 10, 4), "weekly")
+        self.assertEqual(got.strftime("%Y-%m-%d %H:%M"), "2026-10-05 10:30")
+        self.assertFalse(self.schedule.deferral_enabled(cfg))
+
+    # ---- 触发判定 ----
+
+    def test_push_fires_on_the_deferred_day_not_the_raw_day(self):
+        from datetime import datetime
+
+        # 原始目标日(假期)不触发
+        for raw_day in ("2026-10-05 10:30", "2026-10-01 10:30"):
+            n = datetime.strptime(raw_day, "%Y-%m-%d %H:%M")
+            for kind in ("weekly", "monthly"):
+                due, _why = self.schedule.push_due_now(self.cfg, n, kind)
+                self.assertFalse(due, "%s 是假期, 不该触发 %s" % (raw_day, kind))
+
+        # 顺延后的日子触发, 且说明里带上"原定"与原因
+        n = datetime(2026, 10, 8, 10, 30)
+        due, why = self.schedule.push_due_now(self.cfg, n, "weekly")
+        self.assertTrue(due)
+        self.assertIn("原定 2026-10-05", why)
+        self.assertIn("国庆", why)
+        due_m, why_m = self.schedule.push_due_now(self.cfg, n, "monthly")
+        self.assertTrue(due_m)
+        self.assertIn("原定 2026-10-01", why_m)
+
+    def test_push_does_not_fire_at_the_wrong_minute(self):
+        from datetime import datetime
+
+        for stamp in ("2026-10-08 10:29", "2026-10-08 10:31", "2026-10-09 10:30"):
+            n = datetime.strptime(stamp, "%Y-%m-%d %H:%M")
+            due, _ = self.schedule.push_due_now(self.cfg, n, "weekly")
+            self.assertFalse(due, "%s 不该触发" % stamp)
+
+    def test_push_due_now_is_safe_with_broken_config(self):
+        """畸形配置绝不能抛异常(守护进程每 5 秒调一次, 抛一次就整轮挂掉)。
+
+        注意语义: 缺 ``schedule`` 段时**退回默认排程**(周一 10:30), 因此 10-08 这天
+        作为 10-05 顺延后的生效日**仍会触发** —— 那是预期行为, 不是缺陷; 显式
+        ``enabled: False`` 才是不触发。
+        """
+        from datetime import datetime
+
+        n = datetime(2026, 10, 8, 10, 30)
+        for cfg in ({}, {"schedule": None}):
+            due, _why = self.schedule.push_due_now(cfg, n, "weekly")
+            self.assertTrue(due, "缺配置段应退回默认排程")
+        due, why = self.schedule.push_due_now(
+            {"schedule": {"weekly": {"enabled": False}}}, n, "weekly")
+        self.assertFalse(due)
+        self.assertEqual(why, "")
+        # 只关掉月报时, 周报仍按默认排程参与判断(各类型独立开关)
+        due, why = self.schedule.push_due_now(
+            {"schedule": {"monthly": {"enabled": False}}}, n, "monthly")
+        self.assertFalse(due)
+        self.assertEqual(why, "")
+        # 畸形时间/日期不抛异常即可(退回默认值)
+        for cfg in ({"schedule": {"weekly": {"time": "不是时间"}}},
+                    {"schedule": {"weekly": {"day_of_week": "abc"}}},
+                    {"schedule": {"monthly": {"day_of_month": "月末"}}}):
+            self.schedule.push_due_now(cfg, n, "weekly")
+            self.schedule.push_due_now(cfg, n, "monthly")
+
+    def test_deferral_without_calendar_data_still_works(self):
+        """日历降级(仅按周末)时顺延仍可用, 但要把"数据不权威"说出来。"""
+        from datetime import datetime
+
+        with mock.patch.object(self.holidays, "calendar_for",
+                              return_value=self.holidays.HolidayCalendar(
+                                  year=2026, source="weekend-only", authoritative=False,
+                                  note="离线且无缓存, 仅按周末判断")):
+            eff, reason = self.schedule.defer(datetime(2026, 10, 11, 10, 30))   # 周日
+            self.assertEqual(eff.strftime("%Y-%m-%d"), "2026-10-12")
+            self.assertIn("仅按周末判断", reason, "降级时要如实标注")
+
+    def test_daemon_does_not_push_on_the_holiday_but_pushes_after(self):
+        """守护进程视角: 假期当天不推, 顺延后的那一天推, 且当天只推一次。"""
+        from datetime import datetime
+
+        from telemetry.daemon import TelemetryDaemon
+
+        daemon = TelemetryDaemon.__new__(TelemetryDaemon)
+        daemon.last_weekly_sent = ""
+        daemon.last_monthly_sent = ""
+        daemon._last_reminder_key = ""
+        daemon._last_msg = ""
+        daemon._repeat = 0
+        daemon.log = lambda *a, **k: None
+        daemon.aggregator = mock.Mock()
+        daemon.aggregator.get_weekly_report.return_value = mock.Mock()
+        daemon.aggregator.get_monthly_report.return_value = mock.Mock()
+        daemon.db = mock.Mock()
+
+        fake_client = mock.Mock()
+        fake_client.user_open_id = "ou_x"
+        fake_client.sheet_token = ""
+        fake_client.push_to_user_chat.return_value = (True, "ok")
+        fake_client.sync_to_public_sheet.return_value = (True, "ok")
+        fake_bmgr = mock.Mock()
+        fake_bmgr.sync_weekly_report.return_value = (True, "ok")
+        fake_bmgr.app_token = ""
+
+        cfg = dict(self.cfg)
+        cfg["schedule"] = dict(self.cfg["schedule"],
+                               monthly=dict(self.cfg["schedule"]["monthly"], enabled=False),
+                               reminder={"enabled": False, "time": "18:00"})
+
+        with mock.patch("telemetry.daemon.FeishuSyncClient", return_value=fake_client), \
+                mock.patch("telemetry.bitable_sync.FeishuBitableManager", return_value=fake_bmgr), \
+                mock.patch("telemetry.reminders.due_reminders", return_value=[]):
+            daemon._check_schedule(cfg, datetime(2026, 10, 5, 10, 30))   # 假期当天
+            fake_client.push_to_user_chat.assert_not_called()
+            daemon._check_schedule(cfg, datetime(2026, 10, 8, 10, 30))   # 顺延后的日子
+            self.assertEqual(fake_client.push_to_user_chat.call_count, 1)
+            daemon._check_schedule(cfg, datetime(2026, 10, 8, 10, 30))   # 同一分钟内再滴答
+            self.assertEqual(fake_client.push_to_user_chat.call_count, 1, "当天只该推一次")
 
 
 class TestAutoSync(unittest.TestCase):

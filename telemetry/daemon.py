@@ -7,7 +7,7 @@ import time
 import json
 import signal
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
@@ -230,18 +230,24 @@ class TelemetryDaemon:
         self._update_heartbeat(cfg, now)
 
     def _check_schedule(self, cfg: Dict[str, Any], now: datetime):
-        time_str = now.strftime("%H:%M")
         today_str = now.strftime("%Y-%m-%d")
         month_str = now.strftime("%Y-%m")
+
+        # 触发条件一律走 schedule 模块 —— 那里是"遇周末/法定节假日顺延到下一个工作日"
+        # 的唯一实现, 提醒模块用的是同一份, 因此"提醒哪一天"与"实际哪一天推"不会分叉。
+        from .schedule import push_due_now
 
         # --- A. 周报排程 ---
         weekly_cfg = cfg.get("schedule", {}).get("weekly", {})
         if weekly_cfg.get("enabled", True):
             target_weekday = weekly_cfg.get("day_of_week", 0)  # 0=Monday
             target_time = weekly_cfg.get("time", DEFAULT_WEEKLY_SCHEDULE["time"])
-            if now.weekday() == target_weekday and time_str == target_time:
+            due, why = push_due_now(cfg, now, "weekly")
+            if due:
                 if self.last_weekly_sent != today_str:
                     self.last_weekly_sent = today_str
+                    if why:
+                        self.log(f"⏰ {why}")
                     self.log(f"⏰ 命中周报推送时间 ({WEEKDAY_NAMES[target_weekday]} {target_time})，启动自动推送与公共表同步...")
                     try:
                         rep = self.aggregator.get_weekly_report()
@@ -268,18 +274,15 @@ class TelemetryDaemon:
             target_day = monthly_cfg.get("day_of_month", 1)
             target_time = monthly_cfg.get("time", DEFAULT_MONTHLY_SCHEDULE["time"])
 
-            is_month_trigger = False
-            if target_day == -1:
-                # 判断是否是月末最后一天
-                tomorrow = now + timedelta(days=1)
-                if tomorrow.month != now.month:
-                    is_month_trigger = True
-            elif now.day == target_day:
-                is_month_trigger = True
-
-            if is_month_trigger and time_str == target_time:
+            # "是不是今天触发"以及"月末(-1)"与"顺延"都在 schedule.push_due_now 里,
+            # 这里不再自己算日期 —— 之前那段 is_month_trigger 与提醒模块各算一遍, 正是
+            # 顺延功能一上线就会分叉的地方。
+            due_m, why_m = push_due_now(cfg, now, "monthly")
+            if due_m:
                 if self.last_monthly_sent != month_str:
                     self.last_monthly_sent = month_str
+                    if why_m:
+                        self.log(f"⏰ {why_m}")
                     self.log(f"⏰ 命中月报推送时间 ({target_day}日 {target_time})，启动包含历史全量战报的月报推送...")
                     try:
                         rep = self.aggregator.get_monthly_report()
