@@ -5,8 +5,9 @@
 
 **处置结果**：v5.4.16 下线 4 个（能凭硬证据直接判定死亡）；v5.4.17 再下线 6 个
 （原标「待人工确认」，本轮从项目侧终态记录补齐了"任务是否已收尾"这一缺失信息）；
-v5.4.18 另清掉 2 个**无后缀**的同类 v1（不在 19 个范围内，但按同一判据已死，见文末）。
-**19 → 9**，剩余 9 个 = 4 个仍接线/仍活 + 4 个 v13 审计族（待定）+ 1 个固有命名（非迭代）。
+v5.4.18 另清掉 2 个**无后缀**的同类 v1（不在 19 个范围内，但按同一判据已死）；
+v5.4.19 清掉整个 v13 审计族（7 个，见文末「v13 家族」一节 —— 它在当前交付物上**枚举恒为空**）。
+**19 → 5**，剩余 5 个 = 4 个仍接线/仍活 + 1 个固有命名（非迭代，无替代品）。
 
 ## 判据（按证据强度排序）
 
@@ -40,10 +41,10 @@ v5.4.18 另清掉 2 个**无后缀**的同类 v1（不在 19 个范围内，但�
 | `scripts/rerun_leidafang_highlight_v10.py` | 同上 | **仍接线，不可删** |
 | `scripts/test_via54_highlight_fix_v10.py` | `AGENTS.md` 引用其测试数作为项目证据；实测 **41 项全过**，但其中 4 个真实 TMA 用例因硬编码的 `_2_pdfs` 已归档而**自动 skip** —— 即覆盖已缩水，而非失败 | **仍活，不可删**；`AGENTS.md` 的表述本轮已修正 |
 | `integrations/clinicaltrials_v2.md` | `_v2` 是固有名字，仓库内无 v1 | **非迭代残留，保留** |
-| `scripts/audit_all_highlights_v13.py` | 输出目录 `_audit_v13/`（8 项）存在，但停在 2026-08-12 | v13 审计族：跑完未再动，**保留待定** |
-| `scripts/audit_semantic_v13.py` | 同上 | 保留待定 |
-| `scripts/find_anchors_v13.py` | 输出目录 `_audit_v13_visual/`（108 项）存在，停在 2026-08-12 | 保留待定 |
-| `scripts/render_audit_visual_v13.py` | 同上 | 保留待定 |
+| `scripts/audit_all_highlights_v13.py` | 7 家族之一；原按扁平布局枚举 `{pn}_semantic_highlight.pdf` 且只认 Highlight(8)/Underline(9) 注记，而 v3 FINAL 是嵌套布局 + **Square(4)** 注记 → 枚举恒为空 | **已下线**（v5.4.19，逻辑已移植） |
+| `scripts/audit_semantic_v13.py` | `_audit_v13/INDEX.md` 自标 **deprecated**（Phase 3 GLM v1，后继 `audit_v13_full.py`）；同样枚举恒为空 | **已下线**（v5.4.19） |
+| `scripts/render_audit_visual_v13.py` | 同类；另有一处路径错误 `step3_pdf下载_106目录_合并DOI`（实际无 `_合并DOI`） | **已下线**（v5.4.19） |
+| `scripts/audit_v13_full.py` | 同类（Phase 3 GLM v2，家族里实际使用的那个）；枚举恒为空 | **已下线**（v5.4.19） |
 | `scripts/redownload_36_v2.py` | 无引用、无接线、无 CLI 参数；族内与 v3 重合 38.2%；输入 `/tmp/to_fix_36.json` 与写入的 `_2_pdfs/` 均已不在（后者已更名为 `step3_pdf下载_106目录/`） | **已下线**（v5.4.17） |
 | `scripts/redownload_36_v3.py` | 同上；其 `.bak_v3_` 回滚备份也已不存在 | **已下线**（v5.4.17） |
 | `scripts/redownload_27_v4.py` | 无引用、无接线、无 CLI 参数；输入 `/tmp/pdf_feishu_alignment_final.json` 已不在 | **已下线**（v5.4.17） |
@@ -94,7 +95,73 @@ v5.4.18 另清掉 2 个**无后缀**的同类 v1（不在 19 个范围内，但�
 （全仓仅 CHANGELOG 与本文件提及，属文档记录）、且它们的目标目录正是 v5.4.17 已确认收尾的那批
 （`_2_pdfs/` 已被 `step3_pdf下载_106目录/` 取代，106/106 有 PDF）。
 
-**至此 `scripts/` 下剩 9 个版本后缀文件** = 4 个仍接线/仍活 + 4 个 v13 审计族（待定）+ 1 个固有命名。
+**随后 v5.4.19 又清掉了整个 v13 审计族（7 个），`scripts/` 下版本后缀文件降至 5 个** —— 见下一节。
+
+## v13 家族（7 个，已下线 · v5.4.19）
+
+**范围先更正**：上一轮我按 `_vN\.py$` 盘点，只找到 4 个；实际上家族有 **7 个**（1696 行）——
+`audit_v13_full.py`（版本号后面还有 `_full`）、`fix_phase1_violations.py`、
+`redo_highlight_v13_glm_deprecated.py`（压根没有版本号）这 3 个被正则漏掉了。
+而 `_audit_v13/INDEX.md` 自己就把 7 个列全了 —— 说明这不是新发现，是我先前没顺着 INDEX 读下去。
+
+### 它在当前交付物上枚举恒为空（两个独立原因）
+
+7 个脚本**全部**靠同一句枚举输入：
+
+```python
+pn_x = sorted([f.replace('_semantic_highlight.pdf','')
+               for f in os.listdir(STEP4_DIR)
+               if f.endswith('_semantic_highlight.pdf')])
+```
+
+而 v3 FINAL 之后：
+
+| 维度 | v13 期望 | v3 FINAL 实际 |
+| --- | --- | --- |
+| 目录布局 | **扁平** `{STEP4_DIR}/{pn}_semantic_highlight.pdf` | **嵌套** `{STEP4_DIR}/{Pn-x}/{PN}_highlight.pdf`（90 目录 / 106 文件） |
+| 注记类型 | 只认 **Highlight(8)** / **Underline(9)** | **Square(4)**（`hl_lib`：stroke+fill=(1,0.85,0), opacity 0.45, 逐行） |
+
+实测证据：全 TMA 树里 `*_semantic_highlight.pdf` 数为 **0**（复刻上面那句 → 空列表）；
+`_step4_originals_backup/` 里还留着 4 个 `*_semantic_highlight.original.pdf`，是旧扁平布局的备份。
+**任一维度都会让它们"什么都看不到"，两个叠加就是彻底失效。**
+
+### 家族内不是一类东西
+
+| 组 | 脚本 | 行数 | 性质 |
+| --- | --- | --- | --- |
+| 只读（写 `/tmp`） | `audit_all_highlights_v13.py`、`audit_semantic_v13.py`、`audit_v13_full.py`、`render_audit_visual_v13.py` | 376 / 243 / 281 / 122 | Phase 1 结构 / Phase 2 渲染 / Phase 3 GLM |
+| **会原地改写最终交付目录** | `find_anchors_v13.py`、`fix_phase1_violations.py`、`redo_highlight_v13_glm_deprecated.py` | 255 / 182 / 237 | `shutil.move(tmp, f"{STEP4_DIR}/{pn}_semantic_highlight.pdf")` |
+
+第二组是唯一有风险的部分：`STEP4_DIR` 就是当前的 `step4_highlight_106目录_合并DOI`，
+一旦被喂进 anchor 列表就会往最终交付目录里写扁平文件、污染那 90 个目录的结构。
+它们已在 v5.4.19 的第一批删除中先行移除。INDEX.md 本身也把 `audit_semantic_v13.py` 与
+`redo_..._deprecated.py` 标为 deprecated。
+
+### 移植结果：`scripts/hl_v3_final/verify_forbidden_zones.py`
+
+v3 FINAL 规范第 153 行要求「禁止高亮: 标题、作者、文献信息、页眉页脚、引用编号、图表标题」，
+但 `hl_lib` 生成期**没有**这条检查（搜 `forbidden|forbid` 零命中）。为保证这项能力不随 v13 一起消失，
+把 Phase 1 逻辑移植进 v3 FINAL 工具链，并做了两处**必要的、有证据的**改造：
+
+1. **递归发现 + 认 4/8/9 注记** —— 否则新脚本会重蹈"看不到任何东西"。
+2. **规则按证据分级, 不照搬正则** —— 照搬的话它在当前交付物上会报 **26 条 / 1325 条注记**，
+   而逐条核对**没有一条是真实缺陷**：
+   - `(Professor|Prof\.|Dr\.|Doctor)` 命中正文 "several **doctors** in southern Italy"；
+   - `^[\w\s,]+(?:,?\s*MD|PhD){1,}` 命中基因名 "**AMD3**"；
+   - `(University|Hospital|...)` 命中 "in-**hospital** mortality"（已加 `(?<![\w-])` 修掉）；
+   - `^(?:[A-Z][a-z]+\s+){1,3}...\d{4}` 命中 "In the 1970s and **1980s**"（`\b(19|20)\d{2}\b`
+     不会命中 `1980s`——数字后紧跟 s 无词边界）；
+   - "页脚 = 任何 y0 > 92% 的注记" 命中正文（正文完全排得到 92% 以下）；
+   - "page0 顶部 30% + 含中文 = 中文作者区" —— 实测 P9-3 版面为**标题 13.9% / 作者 18.3% /
+     正文 22% 起**，规则把摘要正文判成了作者区。
+
+   故改为：**违规级**（页眉带 / 页脚附属物 / 强作者单位标记 / 参考文献条目 / 几何异常）
+   与**待人工判断级**（图表标题——规范有「除非图表即应证对象」的例外；page0 顶部带；
+   正文里的夹注）。**两级都会打印**，不静默丢弃任何东西；只有违规级影响退出码。
+
+最终实测：真 TMA step4 → **1325 条注记、0 违规、50 待人工判断**；
+正向对照（往真实 PDF 注入作者单位/页脚页码/页眉带三类）→ **3 条全部抓到、退出码 1**；
+`test_forbidden_zones.py` **24 项**，退回两处精度修正后对应 2 项立即失败。
 
 ## 顺带发现：文档引用了不存在的工作流
 

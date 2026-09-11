@@ -48,6 +48,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.19] - 2026-09-11 (移植: 把 v13 的禁止区校验补进 v3 FINAL, 随后下线整个 v13 家族)
+
+v3 FINAL 规范第 153 行要求「禁止高亮: 标题、作者、文献信息、页眉页脚、引用编号、图表标题」,
+但 `hl_lib` 的**生成期**并没有这条检查。该要求唯一的实现是 v13 审计族 —— 而那套脚本在当前
+交付物上**枚举恒为空**。本轮先把这项能力移植进 v3 FINAL 工具链, 再把 v13 家族整体下线。
+
+### Added
+- **`scripts/hl_v3_final/verify_forbidden_zones.py`** —— 禁止区校验, 补上 v3 FINAL 缺的这一环。
+  `--hl-dir <step4>` 递归发现 `*_highlight.pdf`; 退出码 0/1/2 (无违规/有违规/用法错误);
+  `--json` 输出完整明细。**不依赖 TMA 的 CSV 与 PPT JSON** —— 原脚本里 `csv_data`、
+  `FORBIDDEN_RULES`、`is_title_text()`、`page_text_blocks` 参数都是定义后从未使用的死代码,
+  移植时一并丢掉, 因此它可以对任意 step4 目录独立运行。
+- **`scripts/hl_v3_final/test_forbidden_zones.py`** —— 24 项单测, 正向(必须抓得到 9 类) +
+  负向(把移植中实测到的 6 个误报逐一钉住)。已接入 `make test-py` 与 CI。
+
+### Removed
+- **v13 审计族 7 个脚本**(共 1696 行)。分两批: 先删 3 个**会原地改写最终交付目录**的
+  (`find_anchors_v13.py`、`fix_phase1_violations.py`、`redo_highlight_v13_glm_deprecated.py`
+  —— 它们 `shutil.move` 到 `step4_highlight_106目录_合并DOI/{pn}_semantic_highlight.pdf`),
+  移植完成后再删 4 个只读的 (`audit_all_highlights_v13.py`、`audit_semantic_v13.py`、
+  `audit_v13_full.py`、`render_audit_visual_v13.py`)。
+
+  **范围更正**: 上一轮按 `_vN\.py$` 盘点只找到 4 个, 实际是 **7 个** —— `audit_v13_full.py`
+  (版本号后有 `_full`)、`fix_phase1_violations.py`、`redo_highlight_v13_glm_deprecated.py`
+  (无版本号) 被正则漏掉; 而 `_audit_v13/INDEX.md` 自己就把 7 个列全了。
+
+  **失效原因(两个独立维度, 任一都会让它们什么都看不到)**:
+  | | v13 期望 | v3 FINAL 实际 |
+  |---|---|---|
+  | 布局 | 扁平 `{pn}_semantic_highlight.pdf` | 嵌套 `{Pn-x}/{PN}_highlight.pdf` |
+  | 注记类型 | Highlight(8) / Underline(9) | **Square(4)** |
+
+  实测: 全 TMA 树里 `*_semantic_highlight.pdf` 数为 **0**; 复刻其枚举语句得到空列表。
+  `_step4_originals_backup/` 里还留着 4 个 `*.original.pdf`, 是旧扁平布局的备份。
+
+### 移植时的两处改造(都基于实测证据, 不是顺手改)
+- **递归发现 + 认 4/8/9 注记** —— 否则新脚本会重蹈"看不到任何东西"。
+- **规则按证据分级, 不照搬正则**。照搬的话它在当前交付物上会报 **26 条 / 1325 条注记**,
+  而逐条核对**没有一条是真实缺陷**:
+  - `(Professor|Prof\.|Dr\.|Doctor)` 命中正文 "several **doctors** in southern Italy";
+  - `^[\w\s,]+(?:,?\s*MD|PhD){1,}` 命中基因名 "**AMD3**";
+  - `(University|Hospital|...)` 命中 "in-**hospital** mortality" → 加 `(?<![\w-])`;
+  - `...\d{4}` 命中 "In the 1970s and **1980s**" → 改为 `\b(19|20)\d{2}\b`
+    (它不会命中 `1980s`: 数字后紧跟 s, 无词边界);
+  - "页脚 = 任何 y0 > 92%" 命中正文(正文排得到 92% 以下) → 改为要求文字**像版面附属物**;
+  - "page0 顶部 30% + 含中文 = 中文作者区" → 实测 P9-3 版面是标题 13.9% / 作者 18.3% /
+    正文 **22% 起**, 规则把摘要正文判成了作者区 → 降为"待人工判断"。
+
+  改后分两级, **两级都打印, 不静默丢弃**: **违规级**(页眉带 / 页脚附属物 / 强作者单位标记 /
+  参考文献条目 / 几何异常) 影响退出码; **待人工判断级**(图表标题 —— 规范有「除非图表即应证对象」
+  的例外; page0 顶部带; 正文里的夹注) 只报告。
+
+### 验证
+- **真实 TMA step4**: 106 个 highlight PDF / **1325 条 Square 注记** (与 v3 FINAL 宣称的
+  1325/1325 一致) → **0 违规 / 50 待人工判断**, 退出码 0。
+- **正向对照(真实数据)**: 往真实 `P11-1_highlight.pdf` 注入作者单位、页脚页码、页眉带三类
+  注记 → **三类全部抓到, 退出码 1**; 未注入污染的干净目录仍为 0。
+- **退出码契约实测**: 干净 0 / 有违规 1 / 目录不存在 2 / 无 highlight 2。
+- **负向对照**: 把两处精度修正退回 → 对应 2 项测试立即 FAIL, 证明它们是真防护。
+- `make test-py` **62 + 24** 项全过; 技能分发包镜像由 `sync_skill_bundle.py` 补齐后 `--check` 退出码 0
+  (新增文件时 `tests/test_repo_hygiene.py` 的镜像不变量**先报错拦下**, 正是设计意图)。
+- 版本号三处同步 `1.5.18` → `1.5.19`。
+
+### 索引
+- `scripts/` 下版本后缀文件 **9 → 5** (4 个仍接线/仍活 + 1 个固有命名)。
+  判定依据与全部文件的逐条结论见 `docs/versioned-scripts-audit-2026-09-11.md`。
+
 ## [5.4.18] - 2026-09-11 (收尾: 下线 2 个无后缀的同类 v1 脚本)
 
 承接 5.4.17 的「已知残留」第 2 条。上一轮已确认这两个**按同一判据也已死**,
