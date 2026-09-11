@@ -48,6 +48,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.22] - 2026-09-11 (修复: test_tma_pipeline 那条"打了失效接缝"的渲染测试)
+
+5.4.21 顺带发现 `test_tma_pipeline` 有 1 项失败。本轮查明: **失败的是测试本身写错了接缝**,
+顺带把整套测试从 **302 秒压到 0.17 秒**。
+
+### Fixed
+- **`TestRenderEngine.test_render_auto_falls_back_when_com_fails` 的 mock 打在了失效的接缝上。**
+  它 mock 的是 ``detect_engines()``, 但 ``render_ppt_slides_auto()`` 实际调的是
+  ``_build_engine_list()`` —— 而后者**只在 `RENDER_ENGINE=auto` 时才委派**给
+  ``detect_engines()``(2026-09-04 规范: 默认 powerpoint 且禁用自动切换)。
+  于是 mock 完全不生效, 测试实际去跑**真引擎**:
+
+  | 环境 | 实际走的路径 | 结果 |
+  | --- | --- | --- |
+  | 本机 macOS(装了 PowerPoint) | `macos_ppt` AppleScript | 卡 300s 后返回 0 页 → **FAIL** |
+  | CI macos-latest(无 PowerPoint) | `python_pptx` 兜底 | PASS |
+  | CI ubuntu-latest(自带 LibreOffice) | `soffice` | PASS |
+  | CI windows-latest(无 PowerPoint) | `_build_engine_list` 抛错被吞成 `(0,"none")` | **FAIL(实测代码路径复现)** |
+
+  修法: 显式 `RENDER_ENGINE=auto`(使 mock 生效) + 保持原来的断言, 于是它**在所有平台都确定性地
+  测到它声称要测的东西** —— COM 全失败时降级到 python-pptx。
+
+### Added
+- `test_auto_mode_mock_seam_is_effective` —— 直接把"mock 是否真的生效"钉住:
+  mock 返回哨兵引擎名, 断言返回的 engine 就是它。**这是对本次这类 bug 的直接防护** ——
+  seam 一旦被改错, 测试立刻失败, 而不是悄悄去跑真引擎、耗时几分钟再报一个误导性的错。
+- `test_default_pref_does_not_silently_switch_engine` —— 默认偏好下引擎不可用时应
+  返回 `(0, "none")` 而**不静默降级**到低保真引擎(2026-09-04 用户规范)。
+- `test_engine_pref_default_is_powerpoint` —— 钉住默认偏好值。
+
+### 验证
+- `TestRenderEngine` 整类: **302.4s → 0.17s**, 7 项全过。
+- `test_tma_pipeline` 整体: **79 → 82 项**, **302.4s → 0.17s**, 全过(约快 1800 倍)。
+- **负向对照**: 把 `_build_engine_list()` 的 auto 分支改坏(不再委派 `detect_engines()`)
+  → `test_auto_mode_mock_seam_is_effective` 与 `test_render_auto_falls_back_when_com_fails`
+  **同时立刻失败**, 并打印"mock 没生效 —— seam 可能又被改错了"; 还原后恢复。
+- `make test-py` 67 + 24 全过; `gofmt` / `go vet` 干净; 镜像 `--check` 退出码 0;
+  TMA 规则校验仍 7/7。
+- 版本号三处同步 `1.5.21` → `1.5.22`。
+
+### 已知残留(未处理, 需决策)
+- **macOS 原生 PowerPoint 渲染路径本身是坏的**(测试修好后不再暴露它, 但产品问题仍在)。
+  用三段最小探针隔离:
+
+  | 探针 | 结果 |
+  | --- | --- |
+  | `launch` + `get version` | **0.4s 成功** (PowerPoint 16.112.1 是活的) |
+  | `open POSIX file <pptx>` | **10.1s 后 -1712 "AppleEvent 已超时"** |
+  | 紧接着 `get version` | **0.1s 成功**(仍然响应) |
+
+  即 PowerPoint 进程正常、Apple 事件通道正常, **卡在 `open` 这一步** —— 典型的模态对话框
+  阻塞(登录/激活/文件权限提示), 也印证了 `render_via_macos_powerpoint()` 里那句注释
+  "模态对话框会阻塞 Apple 事件, 表现为 -9074/超时"。
+
+  影响: 在装了 PowerPoint 的机器上(即本机), 默认偏好会走这条路径,
+  **`render_ppt_slides_auto()` 静默等 300 秒后返回 `(0, "none")`**, 调用方拿到 0 张幻灯片。
+
+  **本轮未改** —— 涉及渲染行为与超时的取值, 属 2026-09-04 偏好规范的领域, 需你定夺。可选:
+  (a) 加**快速预检**: 先 `launch`+`get version`(实测 0.4s), 不应答就立刻报错并给出可操作提示
+      ("请手动打开一次 PowerPoint 关掉对话框, 或改 `RENDER_ENGINE=libreoffice`"), 而不是等 300s;
+  (b) 把 300s 的 open/save 超时改为可用环境变量覆盖(默认下调, 如 60s);
+  (c) 什么都不改, 仅在文档里写明"装了 PowerPoint 但自动化被模态框挡住时会静默返回 0 张"。
+
 ## [5.4.21] - 2026-09-11 (清理: scripts/ + skills/ 的裸 import fitz 一并消除 (83 处 / 64 文件))
 
 承接 5.4.20 的「已知残留」。5.4.20 只清了 ``hl_v3_final/``, 本轮把 ``scripts/`` 与 ``skills/``
