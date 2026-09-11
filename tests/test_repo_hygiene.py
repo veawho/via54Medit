@@ -322,9 +322,9 @@ class TestRenderFidelity(unittest.TestCase):
     #: 已删除的引擎函数名 —— 连名字都不该再出现。
     _GONE_NAMES = ("render_via_soffice", "render_via_python_pptx",
                    "_find_soffice", "render_ppt_libreoffice")
-    #: RENDER_ENGINE (排版引擎) 只允许这两个取值。
+    #: RENDER_ENGINE (排版引擎) 只允许这几个取值 —— 都属于"微软自家引擎"。
     _ENGINE_ENV = re.compile(r"""RENDER_ENGINE["']\s*[:=]\s*["']([^"']+)["']""")
-    _ALLOWED_ENGINE_VALUES = {"powerpoint", "ppt"}
+    _ALLOWED_ENGINE_VALUES = {"powerpoint", "ppt", "graph"}
     #: RENDER_RASTERIZER (下游只光栅化) 的白名单。
     _ALLOWED_RASTERIZERS = {"pymupdf", "pdftoppm"}
 

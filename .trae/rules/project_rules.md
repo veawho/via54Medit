@@ -41,13 +41,18 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
    - Python: use `/Users/david/.hermes/hermes-agent/venv/bin/python3` or system `python3`.
    - Go: use standard Go 1.22+.
    - DeepSeek API: use `DEEPSEEK_API_KEY`.
-5. **PPT 渲染保真: 版式与文字必须来自 Microsoft PowerPoint (2026-08-05 用户硬规则; 2026-09-11 澄清判定标准)**:
+5. **PPT 渲染保真: 版式与文字必须来自微软的引擎 (2026-08-05 用户硬规则; 2026-09-11 两次澄清)**:
    - 用户原话 (2026-08-05): "powerpoint 渲染作为默认... 并默认必须用 PowerPoint 渲染"。
    - 用户澄清 (2026-09-11): "我是认为 PowerPoint 渲染出来的图片更符合原版, **如果有其他渲染图片并不会改变 PowerPoint 排版与文字的方式也可以集成**"。
+   - 用户指示 (2026-09-11): **接入 Microsoft Graph 通道**。
    - 所以判定标准是**会不会重新排版**, 不是"是不是 PowerPoint 这个程序":
-     - **不可替代**: PPTX→画面这一步 (版式/文字)。只允许 PowerPoint —— Windows COM / macOS 原生 AppleScript。
-     - **可以换**: 把 PowerPoint 导出的**固定版式**产物 (PDF/EMF/位图) 再栅格化成图片这一步 —— PDF 只解释绘制指令、不重排, 所以不算换通道。栅格化器见 `RENDER_RASTERIZER` (`pymupdf` 默认 / `pdftoppm` 强制 `-cropbox`)。
-     - **禁止**: 任何会重新排版的引擎 —— LibreOffice / Keynote / WPS / python-pptx / Aspose.Slides / Spire.Presentation / GroupDocs / Syncfusion。拿不到 PowerPoint 就**报错**, 不降级。
+     - **不可替代**: PPTX→画面这一步 (版式/文字)。只允许**微软自家引擎**, 由 `RENDER_ENGINE` 二选一:
+       `powerpoint`(默认, 桌面版 COM / macOS 原生) 或 `graph`(Microsoft Graph 的 `?format=pdf` 在线转换)。
+       两者之间**没有自动切换** —— 连"桌面版失败就自动切 graph"也不行, 必须显式指定。
+     - **可以换**: 把导出的**固定版式**产物 (PDF/EMF/位图) 再栅格化成图片这一步 —— PDF 只解释绘制指令、不重排, 所以不算换通道。栅格化器见 `RENDER_RASTERIZER` (`pymupdf` 默认 / `pdftoppm` 强制 `-cropbox`)。
+     - **禁止**: 任何会重新排版的引擎 —— LibreOffice / Keynote / WPS / python-pptx / Aspose.Slides / Spire.Presentation / GroupDocs / Syncfusion。选定引擎拿不到就**报错**, 不降级。
    - 首选 PowerPoint **直接出位图** (Windows `Slide.Export`), 因为还绕开"PDF 字体未内嵌 → 栅格化替换字形"的风险; 走 PDF 时会打印未内嵌字体的保真警告。
-   - 实现位置: `scripts/hl_v3_final/ppt_to_pdf.py` (PPT→PDF, 技能包自包含) 与 `scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
+   - Graph 通道与桌面版有**已知差异**(Office 在线引擎的字体替换 / 符号占位 / 部分对象行为), 故它只是"没有桌面版时的显式替代"。
+   - 实现位置: `scripts/hl_v3_final/graph_render.py` (Graph 客户端) 与 `ppt_to_pdf.py` (PPT→PDF, 技能包自包含)、`scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
+   - 自检: `python3 scripts/hl_v3_final/graph_render.py --check`。
    - 不变量由 `tests/test_repo_hygiene.py::TestRenderFidelity` 看守; 判定标准与各方案结论表见 `docs/ppt-render-fidelity.md`, 规则出处见 `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.12.0-powerpoint-render-mandatory.md`。

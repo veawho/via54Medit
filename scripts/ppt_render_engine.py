@@ -2,30 +2,34 @@
 """
 ppt_render_engine.py — PPT → 图片 渲染 (部署新系统即用)
 
-渲染策略 (2026-08-05 用户硬规则; 2026-09-11 用户澄清**判定标准**):
+渲染策略 (2026-08-05 用户硬规则; 2026-09-11 用户两次澄清):
 
-  **版式与文字必须来自 PowerPoint** —— Windows 走 PowerPoint COM, macOS 走原生
-  PowerPoint (AppleScript)。这一步不可替代: PPTX 只是描述性格式, 第三方引擎会各自重排
-  OOXML, 字体回退 / 断行 / autofit / SmartArt 都与原版分叉。
+  **版式与文字必须来自微软的引擎**。这一步不可替代: PPTX 只是描述性格式, 第三方引擎会各自
+  重排 OOXML, 字体回退 / 断行 / autofit / SmartArt 都与原版分叉。可用的两个引擎:
+
+    * ``powerpoint``(**默认**) —— 桌面版 PowerPoint: Windows 走 COM, macOS 走原生 AppleScript。
+      保真上限最高; 能直出位图 (Windows `Slide.Export`) 就不必绕 PDF, 也就绕开了
+      "字体未内嵌"的风险。
+    * ``graph``(**显式选择**) —— Microsoft Graph 的 ``?format=pdf`` 转换(Office 在线渲染)。
+      同样出自微软, 适合"本机没有桌面版 PowerPoint"(Linux/CI)或桌面版故障时的**显式**替代;
+      与桌面版有**已知差异**(在线引擎的字体替换 / 符号占位 / 部分对象行为), 见
+      ``docs/ppt-render-fidelity.md``。
 
   **判定标准是"会不会重新排版", 不是"是不是 PowerPoint 这个程序"** —— 用户 2026-09-11:
   "我是认为 PowerPoint 渲染出来的图片更符合原版, 如果有其他渲染图片并不会改变 PowerPoint
-   排版与文字的方式也可以集成"。所以:
-    * 首选 PowerPoint **直接出位图** (Windows `Slide.Export`) —— 保真上限最高, 且绕开
-      "字体未内嵌"的风险;
-    * 也可 PowerPoint 导出 PDF 后**再栅格化** (macOS) —— PDF 是固定版式, 栅格化器只解释
-      绘制指令、不重排, 因此这一步换工具**不算换通道**。
-  栅格化器由 ``RENDER_RASTERIZER`` 选: ``pymupdf``(默认) / ``pdftoppm``(强制 ``-cropbox``)。
-  完整判定标准与各方案结论表: ``docs/ppt-render-fidelity.md``。
+   排版与文字的方式也可以集成"。所以把固定版式的 PDF **再栅格化**那一步(只解释绘制指令、
+  不重排)换工具**不算换通道**: 由 ``RENDER_RASTERIZER`` 选 ``pymupdf``(默认) / ``pdftoppm``
+  (强制 ``-cropbox``)。
 
   **会重新排版的一律禁止**: LibreOffice / Keynote / WPS / python-pptx / Aspose / Spire /
-  GroupDocs / Syncfusion。拿不到 PowerPoint 就**直接失败**, 不降级。
+  GroupDocs / Syncfusion。选定的引擎拿不到就**直接失败**, 不降级。
   (2026-09-11 二次勘误: 本文档上一版写成"禁用任何其它图片生成方式", 那**比规则本身更严**;
    规则的标准是保真, 不是程序名。)
 
 关于引擎偏好 RENDER_ENGINE:
-  * 只认 ``powerpoint``(默认); 其它取值一律报错。
-  * WPS / LibreOffice / python-pptx 等**会重新排版**的通道以及 "auto 自动降级" 已整体删除。
+  * 只认 ``powerpoint``(默认) / ``graph``; 其它取值一律报错。
+  * WPS / LibreOffice / python-pptx 等**会重新排版**的通道以及 "auto 自动降级" 已整体删除 ——
+    所以**没有**"拿不到桌面版就自动切到 graph"这种事, 必须自己显式指定。
 
 用法:
   from ppt_render_engine import render_ppt_slides_auto, detect_engines
@@ -33,9 +37,9 @@ ppt_render_engine.py — PPT → 图片 渲染 (部署新系统即用)
 """
 import os, sys, subprocess, time
 
-# 排版引擎: **只使用 PowerPoint** (2026-08-05 用户硬规则)
+# 排版引擎: **只用微软的引擎** —— 桌面版 PowerPoint, 或显式选定的 Microsoft Graph。
 #   WPS / LibreOffice / python-pptx 等会**重新排版**, 故整体删除 —— 既不做默认, 也不做兜底。
-#   注意区分: "换排版引擎"禁止; "把 PowerPoint 已排好的固定版式栅格化"允许
+#   注意区分: "换排版引擎"禁止; "把已排好的固定版式栅格化"允许
 #   (见下方 RENDER_RASTERIZER 与 docs/ppt-render-fidelity.md)。
 COM_ENGINES = [
     ("PowerPoint", "PowerPoint.Application"),
@@ -43,15 +47,33 @@ COM_ENGINES = [
 
 
 def _engine_pref():
-    """环境变量 RENDER_ENGINE 只认 ``powerpoint``(默认); 其它取值由 _build_engine_list 报错。"""
+    """环境变量 RENDER_ENGINE: ``powerpoint``(默认) 或 ``graph``; 其它取值由 _build_engine_list 报错。"""
     return os.environ.get("RENDER_ENGINE", "powerpoint").strip().lower()
 
 
-# 偏好引擎 → 引擎标识
+# 偏好引擎 → 引擎标识。
+# 两个取值**都是微软的引擎**, 区别只在"桌面版"还是"在线版":
+#   * powerpoint —— 桌面版 PowerPoint(Windows COM / macOS 原生)。**默认**, 保真上限最高。
+#   * graph      —— Microsoft Graph 的 ``?format=pdf`` 转换(Office 在线渲染)。**必须显式选择**,
+#                   它不是自动降级目标; 且与桌面版有已知差异(见 docs/ppt-render-fidelity.md)。
 _PREF_MAP = {
     "powerpoint": ("PowerPoint", "com", "PowerPoint.Application"),
     "ppt": ("PowerPoint", "com", "PowerPoint.Application"),
+    "graph": ("Microsoft Graph (Office 在线渲染)", "graph", "graph.microsoft.com"),
 }
+
+#: Graph 客户端实现放在权威工具链 ``hl_v3_final/`` 里 —— 与 ``ppt_to_pdf.py`` 同一先例:
+#: 那个目录会被 ``sync_skill_bundle.py`` 镜像到技能分发包, 于是技能包也能用上 Graph 通道,
+#: 不必在这里再抄一份。
+_HL_V3_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hl_v3_final")
+
+
+def _graph_module():
+    """按需加载 Graph 客户端(不在这里重复实现)。"""
+    if _HL_V3_DIR not in sys.path:
+        sys.path.insert(0, _HL_V3_DIR)
+    import graph_render
+    return graph_render
 
 
 def _progid_available(progid):
@@ -150,8 +172,10 @@ _MACOS_BLOCKED_HINT = (
     "PowerPoint 多半是弹了模态对话框(登录 / 激活 / 文件访问权限)挡住了 Apple 事件。"
     "请手动打开一次 PowerPoint, 关掉该对话框后再重试。"
     "若仍然卡住, 需排查 PowerPoint 自身状态(是否已激活、是否允许被自动化控制), "
-    "而不是绕过它 —— 按规范版式必须来自 PowerPoint, 不会自动改用别的排版引擎。"
+    "而不是换成会重新排版的第三方引擎。"
     "自动化超时可用 PPT_RENDER_TIMEOUT(秒) 调整。"
+    "另一条路: 若本机确实用不了桌面版 PowerPoint, 可**显式**设 RENDER_ENGINE=graph "
+    "改用微软的在线渲染引擎(Office 在线; 与桌面版有已知差异, 见 docs/ppt-render-fidelity.md)。"
 )
 
 
@@ -219,17 +243,19 @@ class RenderEngineError(RuntimeError):
 
 
 def export_ppt_to_pdf(pptx_path, pdf_path):
-    """用 PowerPoint 把整份 PPT 导出为 PDF —— **版式与文字由 PowerPoint 产出**。
+    """用**微软的引擎**把整份 PPT 导出为 PDF (桌面版 PowerPoint, 或显式选定的 Microsoft Graph)。
 
-    这是本仓库唯一一条 "PPT → PDF" 的路径。Windows 走 PowerPoint COM, macOS 走原生
-    PowerPoint AppleScript。**不 fallback** Keynote / LibreOffice / WPS / python-pptx ——
-    那些引擎会各自重排 OOXML, 字体与布局和原版不一致 (2026-08-05 用户硬规则;
-    2026-09-11 用户澄清判定标准 = 保真, 不是程序名 —— 见 docs/ppt-render-fidelity.md)。
+    Windows 走 PowerPoint COM, macOS 走原生 PowerPoint AppleScript; 两者都拿不到时,
+    **只有**显式设置 ``RENDER_ENGINE=graph`` 才会改走 Microsoft Graph 的在线转换。
+
+    **不 fallback** 到 Keynote / LibreOffice / WPS / python-pptx —— 那些引擎会各自重排 OOXML,
+    字体与布局和原版不一致 (2026-08-05 用户硬规则; 2026-09-11 用户澄清判定标准 = 保真,
+    不是程序名 —— 见 docs/ppt-render-fidelity.md)。
 
     注意: 本函数**只负责定版式**。把产出的 PDF 再栅格化成图片是另一回事, 那一步不重排,
     因此可以换工具 (``_RASTERIZERS``)。
 
-    拿不到 PowerPoint 或导出失败时抛 ``RenderEngineError``(带可操作 hint), 不返回半成品。
+    拿不到可用引擎或导出失败时抛 ``RenderEngineError``(带可操作 hint), 不返回半成品。
     """
     abs_pptx = os.path.abspath(pptx_path)
     abs_pdf = os.path.abspath(pdf_path)
@@ -237,13 +263,18 @@ def export_ppt_to_pdf(pptx_path, pdf_path):
     if out_parent:
         os.makedirs(out_parent, exist_ok=True)
 
+    # 显式选定在线引擎时才走 Graph(它不是自动降级目标)。
+    if _engine_pref() == "graph":
+        return _graph_module().export_ppt_to_pdf_via_graph(pptx_path, abs_pdf)
+
     if os.name == "nt":
         return _export_ppt_to_pdf_com(pptx_path, abs_pdf)
 
     if sys.platform != "darwin":
         raise RenderEngineError(
-            "[render] 本平台没有 PowerPoint 通道 —— 版式规定必须由 PowerPoint 产出、"
-            "不用别的排版引擎, 故不降级。")
+            "[render] 本平台没有桌面版 PowerPoint 通道 —— 版式规定必须由微软引擎产出、"
+            "不用会重排的第三方引擎, 故不降级。"
+            "可显式设 RENDER_ENGINE=graph 走微软的在线渲染引擎。")
 
     # 清理可能残留的卡死实例(模态对话框会阻塞 Apple 事件, 表现为 -9074/超时)
     subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)
@@ -425,35 +456,58 @@ def _rasterize_pdf(pdf_path, out_dir, dpi):
     return _rasterize_with_pymupdf(pdf_path, out_dir, dpi)
 
 
+def _pdf_to_slides(tmp_pdf, out_dir, dpi):
+    """固定版式 PDF → ``slide_NNN.png``, 含**字体是否内嵌**的保真检查。
+
+    这一步与"是谁排的版"无关: 它只把已经排好的页面光栅化, 不重排。
+    """
+    missing = _non_embedded_fonts(tmp_pdf)
+    if missing:
+        print("  [render] ⚠️ 导出的 PDF 里有未内嵌字体: %s" % ", ".join(missing[:6]), flush=True)
+        print("  [render]    栅格化时这些字体会被替代品替换, 字形可能和原版不同 —— "
+              "建议在源应用里嵌入字体后重导 "
+              "(保真度说明见 docs/ppt-render-fidelity.md)", flush=True)
+    return _rasterize_pdf(tmp_pdf, out_dir, dpi)
+
+
+def _export_then_rasterize(pptx_path, out_dir, dpi, tmp_prefix):
+    """``export_ppt_to_pdf`` → 字体检查 → 栅格化。桌面版与在线版两条路共用。"""
+    import tempfile
+    os.makedirs(out_dir, exist_ok=True)
+    tmp_dir = tempfile.mkdtemp(prefix=tmp_prefix)
+    try:
+        tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
+        export_ppt_to_pdf(pptx_path, tmp_pdf)
+        return _pdf_to_slides(tmp_pdf, out_dir, dpi)
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def render_via_macos_powerpoint(pptx_path, out_dir, dpi=150):
-    """macOS: 用**原生 PowerPoint** 定版式, 再把固定版式的 PDF 栅格化成 PNG。
+    """macOS: 用**原生 PowerPoint**(桌面版) 定版式, 再把固定版式的 PDF 栅格化成 PNG。
 
     两步的职责必须分清 (判定标准见 ``docs/ppt-render-fidelity.md``):
 
       1. ``export_ppt_to_pdf`` —— 版式与文字由 PowerPoint 产出, **不可替代**。内含快速预检:
          通道不通就**立刻报错**并给出可操作提示, 不再像以前那样在 open 上白等 300 秒。
-      2. ``_rasterize_pdf`` —— 只把已排好的页面光栅化, **不重排**, 所以这一步换工具不算换通道
+      2. ``_pdf_to_slides`` —— 只把已排好的页面光栅化, **不重排**, 所以这一步换工具不算换通道
          (默认 PyMuPDF; ``RENDER_RASTERIZER=pdftoppm`` 可选)。
-
-    导出后还会查一次**字体是否内嵌**: 有未内嵌字体就打印保真警告, 因为栅格化会替换字形。
     """
-    import tempfile
-    os.makedirs(out_dir, exist_ok=True)
-    tmp_dir = tempfile.mkdtemp(prefix="ppt_mac_")
-    tmp_pdf = os.path.join(tmp_dir, "slides.pdf")
-    try:
-        export_ppt_to_pdf(pptx_path, tmp_pdf)
-        missing = _non_embedded_fonts(tmp_pdf)
-        if missing:
-            print("  [render] ⚠️ PowerPoint 导出的 PDF 里有未内嵌字体: %s"
-                  % ", ".join(missing[:6]), flush=True)
-            print("  [render]    栅格化时这些字体会被替代品替换, 字形可能和原版不同 —— "
-                  "建议在 PowerPoint 里嵌入字体后重导 "
-                  "(保真度说明见 docs/ppt-render-fidelity.md)", flush=True)
-        return _rasterize_pdf(tmp_pdf, out_dir, dpi)
-    finally:
-        import shutil
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    return _export_then_rasterize(pptx_path, out_dir, dpi, "ppt_mac_")
+
+
+def render_via_graph(pptx_path, out_dir, dpi=150):
+    """用 **Microsoft Graph**(Office 在线渲染) 定版式, 再本地栅格化成 PNG。
+
+    为什么走 PDF 而不是 jpg: 官方对 ``pptx→jpg`` 只给**第一张幻灯片**(见
+    docs/ppt-render-fidelity.md), 整份只有 ``format=pdf`` 这条路走得起。
+    版式仍由**微软的引擎**产出(符合"版式必须来自微软引擎"), PDF→PNG 那一步不重排。
+
+    与桌面版 PowerPoint 有**已知差异**(在线引擎的字体替换、符号占位、部分对象行为),
+    所以它是 ``RENDER_ENGINE=graph`` 的**显式选项**, 既不是默认, 也不是降级目标。
+    """
+    return _export_then_rasterize(pptx_path, out_dir, dpi, "ppt_graph_")
 
 
 # ============ COM 真实渲染 ============
@@ -501,45 +555,55 @@ def render_via_com(progid, pptx_path, out_dir, width_px=1600):
 
 
 def _build_engine_list():
-    """构造待用**排版引擎**列表。**只会有 PowerPoint** —— Windows COM 或 macOS 原生。
+    """构造待用**排版引擎**列表。**只会有微软的引擎** —— 桌面版 PowerPoint 或 Microsoft Graph。
 
-    其它排版引擎已按规范删除, 故这里没有降级链: 拿不到 PowerPoint 就抛错。
+    它们之间**没有自动降级链**: 选哪个由 ``RENDER_ENGINE`` 决定, 拿不到就抛错。
     (下游只光栅化的工具不走这里 —— 它们是 ``_RASTERIZERS``。)
     """
     pref = _engine_pref()
     spec = _PREF_MAP.get(pref)
     if spec is None:
         raise RuntimeError(
-            "未知 RENDER_ENGINE=%r —— 按规范只支持 powerpoint(默认)。"
-            "其它排版引擎已删除。" % pref)
+            "未知 RENDER_ENGINE=%r —— 只支持 powerpoint(默认) / graph。"
+            "会重新排版的第三方引擎已删除。" % pref)
     name, kind, progid = spec
+    if kind == "graph":
+        # 显式选择的在线引擎: 只校验凭据, **不会**在失败时退到桌面版或别的引擎。
+        err = _graph_module().credentials_error()
+        if err:
+            raise RuntimeError("[render] RENDER_ENGINE=graph 但凭据不全。\n%s" % err)
+        return [(name, kind, progid)]
     if os.name == "nt":
         if not (_progid_available(progid) and _ensure_pywin32(progid) and _com_probe(progid)):
             raise RuntimeError(
-                "[render] PowerPoint (COM %s) 在本机不可用 —— 版式规定必须由 PowerPoint 产出、"
-                "不用别的排版引擎, 故不降级。请确认 PowerPoint 已安装并激活。" % progid)
+                "[render] PowerPoint (COM %s) 在本机不可用 —— 版式规定必须由微软引擎产出、"
+                "不用会重排的第三方引擎, 故不降级。请确认 PowerPoint 已安装并激活。" % progid)
         return [(name, kind, progid)]
     if sys.platform == "darwin" and _macos_powerpoint_available():
         return [("PowerPoint (macOS)", "macos_ppt", "com.microsoft.Powerpoint")]
     raise RuntimeError(
-        "[render] PowerPoint 在本机不可用 —— 版式规定必须由 PowerPoint 产出、"
-        "不用别的排版引擎, 故不降级。请确认 PowerPoint 已安装并激活; "
-        "macOS 还需在 系统设置 › 隐私与安全性 › 自动化 里允许其被控制。")
+        "[render] PowerPoint 在本机不可用 —— 版式规定必须由微软引擎产出、"
+        "不用会重排的第三方引擎, 故不降级。请确认 PowerPoint 已安装并激活; "
+        "macOS 还需在 系统设置 › 隐私与安全性 › 自动化 里允许其被控制。\n"
+        "[render] 若本机确实装不了/用不了桌面版 PowerPoint, 可**显式**设 "
+        "RENDER_ENGINE=graph 走微软的在线渲染引擎(Office 在线; 与桌面版有已知差异)。")
 
 
 def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
-    """用 PowerPoint 渲染全部 slide, 返回 (count, engine_name)。
+    """用微软的引擎渲染全部 slide, 返回 (count, engine_name)。
 
-    排版引擎恒为 PowerPoint (Windows COM / macOS 原生)。**不切换排版引擎**:
-    拿不到 PowerPoint 就返回 ``(0, "none")``, 不会改用会重排的引擎。
-    (但把 PowerPoint 产出的固定版式栅格化那一步可换工具, 见 ``_RASTERIZERS``。)
+    排版引擎由 ``RENDER_ENGINE`` 决定: 默认桌面版 PowerPoint (Windows COM / macOS 原生),
+    或**显式**指定 ``graph`` 走 Microsoft Graph 的在线渲染。**不自动切换**:
+    选定的引擎拿不到就返回 ``(0, "none")``, 不会改用会重排的第三方引擎。
+    (但把产出的固定版式栅格化那一步可换工具, 见 ``_RASTERIZERS``。)
     """
     os.makedirs(out_dir, exist_ok=True)
     try:
         engines = _build_engine_list()
     except Exception as e:
         print("  [render] %s" % str(e), flush=True)
-        print("  [render] 提示: 版式只由 PowerPoint 产出; 不会改用其它排版引擎", flush=True)
+        print("  [render] 提示: 版式只由微软引擎产出(powerpoint / graph); 不会改用其它引擎",
+              flush=True)
         return 0, "none"
     for idx, (name, kind, progid) in enumerate(engines):
         is_last = idx == len(engines) - 1
@@ -552,6 +616,12 @@ def render_ppt_slides_auto(pptx_path, out_dir, width_px=1600):
             elif kind == "macos_ppt":
                 print("  [render] 引擎=%s (AppleScript)" % name, flush=True)
                 n = render_via_macos_powerpoint(pptx_path, out_dir)
+                if n > 0:
+                    return n, name
+            elif kind == "graph":
+                print("  [render] 引擎=%s — 注意: **在线渲染**, 与桌面版有已知差异"
+                      % name, flush=True)
+                n = render_via_graph(pptx_path, out_dir)
                 if n > 0:
                     return n, name
             else:

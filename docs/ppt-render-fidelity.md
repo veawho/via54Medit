@@ -33,7 +33,7 @@ autofit、SmartArt、图表、效果等处与原版分叉。而 PDF 是**固定�
 | 方案 | 是否与 PowerPoint 一致 | 依据 |
 | --- | --- | --- |
 | **Microsoft PowerPoint**（Windows COM / macOS 原生 AppleScript） | ✅ 一致（它就是原版） | 桌面版真实排版引擎 |
-| Microsoft PowerPoint for the web / **Microsoft Graph `?format=jpg`** | ✅ 微软自家引擎（服务端） | Graph 官方支持 pptx→jpg（须指定 width/height）与 pptx→pdf；免装桌面版，但需 OAuth + 网络 |
+| Microsoft PowerPoint for the web / **Microsoft Graph `?format=` 转换** | ✅ 微软自家引擎（服务端）—— 但与**桌面版**有已知差异 | Graph 官方支持 pptx→jpg（须指定 width/height，且**只给第一页**）与 pptx→pdf（**整份**）；免装桌面版，但需 OAuth + 网络。已在 `RENDER_ENGINE=graph` 下接入，见 §3 |
 | LibreOffice / soffice | ❌ 不一致 | 官方社区实测：即使替代字体"度量相同"（Carlito ↔ Calibri），文字显示仍不同；中日文字体映射还会丢信息 |
 | WPS Office | ❌ 不一致 | 自研排版引擎 + 私有字体映射；中文被强制替换后行高/版式漂移，厂商未承诺一致 |
 | Apple Keynote | ❌ 不一致 | 用自己的排版引擎重新排布导入的 pptx，缺字体即替换 |
@@ -75,15 +75,41 @@ PowerPoint 导出 PDF 时若**没有内嵌字体**，栅格化器（poppler / Mu
 
 | 环节 | 约定 |
 | --- | --- |
-| 版式来源 | **只允许 PowerPoint**：Windows COM `PowerPoint.Application`；macOS 原生 AppleScript |
-| 首选出图方式 | PowerPoint 直接出位图（Windows `Slide.Export(PNG)`）> PowerPoint 导出 PDF → 固定版式栅格化（macOS） |
+| 版式来源 | **只允许微软自家引擎**，两个取值二选一（`RENDER_ENGINE`）：`powerpoint`（默认，桌面版）/ `graph`（Microsoft Graph 在线转换） |
+| 首选出图方式 | PowerPoint 直接出位图（Windows `Slide.Export`）> PowerPoint/Graph 导出 PDF → 固定版式栅格化（macOS / 无桌面版时） |
 | 栅格化器 | `RENDER_RASTERIZER` = `pymupdf`（默认）/ `pdftoppm`（强制 `-cropbox`）；其它取值直接报错 |
 | 禁止 | 任何**重新排版**的引擎：LibreOffice / soffice、Keynote、WPS、python-pptx、Aspose.Slides、Spire.Presentation、GroupDocs、Syncfusion |
 | 不采用 | Ghostscript / ImageMagick（虽不重排，但有已知外观缺陷） |
-| 未落地但合格 | Microsoft Graph `pptx→jpg`（微软自家引擎、免装桌面版；需 OAuth 与网络，等有需要再接） |
 | 不变量 | `tests/test_repo_hygiene.py::TestRenderFidelity` 看守"禁止重排引擎"这条线 |
 
-PowerPoint 不可用时**直接报错**，不降级 —— 因为降级就等于换一个排版引擎，正是要避免的事。
+选定的引擎拿不到时**直接报错**，**不自动切换**到另一个 —— 连"桌面版失败就自动切 Graph"也不行，
+必须由使用者显式指定。（当年 darwin 上自动降级到 soffice 的教训。）
+
+### 3.1 Microsoft Graph 通道（`RENDER_ENGINE=graph`）
+
+实现：`scripts/hl_v3_final/graph_render.py`。流程：
+
+```
+本地 pptx --PUT--> OneDrive/SharePoint (_via54medit_render_tmp/)
+         --GET .../content?format=pdf--> 302 → 预认证 URL → 下载整份 PDF
+         --> 本地栅格化 (pymupdf/pdftoppm) --> slide_NNN.png
+         --DELETE--> 清理临时上传 (GRAPH_KEEP_UPLOAD=1 可保留)
+```
+
+几个**踩过的坑 / 官方限制**（都已按此实现）：
+
+| 事项 | 结论 |
+| --- | --- |
+| 为什么不用 `format=jpg` | 官方 API 页未说明，社区实测**只返回第一张幻灯片**；整份只有 `format=pdf` 走得通 |
+| 必须先在云上 | 该 API 只作用于 `driveItem`，所以**必须先上传**本地文件 |
+| 响应形态 | 是 **302 Found**（不是 202 异步）；**跟随 `Location` 时不能带 `Authorization`** |
+| 权限 | 应用权限（app-only）最低 `Files.ReadWrite.All` 且需管理员同意；委派最低 `Files.Read` |
+| 认证 | 客户端凭据：`login.microsoftonline.com/{tenant}/oauth2/v2.0/token`，`scope=https://graph.microsoft.com/.default`；也支持直接给现成令牌 |
+| 个人版 OneDrive | 只支持委派；**app-only 需要工作/学校租户**（Entra） |
+| 单次上传上限 | 250 MB，超过需 upload session（本模块未实现，会明确报错） |
+| 保真度 | 走 **Office 在线**引擎，与桌面版有差异：字体替换、符号占位、部分对象行为。所以它是**显式选项**，桌面版可用时优先桌面版 |
+
+自检：`python3 scripts/hl_v3_final/graph_render.py --check`（验证凭据 → 取令牌 → drive 可达）。
 
 ---
 
@@ -97,7 +123,12 @@ PowerPoint 不可用时**直接报错**，不降级 —— 因为降级就等于
 - Aspose 官方文档（渲染精度可能与 PowerPoint 有差异）：<https://docs.aspose.com/slides/net/convert-powerpoint-to-jpg/>
 - GroupDocs "pixel-perfect" 宣称与字体缺失报错同页：<https://tutorials.groupdocs.com/editor/java/presentation-documents/generate-svg-slide-previews-groupdocs-editor-java/>
 - Syncfusion PowerPoint→Image 官方文档：<https://help.syncfusion.com/document-processing/powerpoint/conversions/powerpoint-to-image/overview>
-- Microsoft Graph 格式转换（pptx→jpg / pptx→pdf）：<https://learn.microsoft.com/en-us/graph/api/driveitem-get-content-format>
+- Microsoft Graph 格式转换（pptx→jpg / pptx→pdf；含权限表与 302 响应）：<https://learn.microsoft.com/en-us/graph/api/driveitem-get-content-format>
+- Microsoft Graph 上传文件内容（`PUT .../content`，单次 250 MB 上限）：<https://learn.microsoft.com/en-us/graph/api/driveitem-put-content>
+- Microsoft Graph 创建上传会话（>250 MB 时必须；分片须为 320 KiB 整数倍）：<https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession>
+- 客户端凭据流（app-only 取令牌形态与 `/.default` scope）：<https://learn.microsoft.com/en-us/graph/auth-v2-service>
+- Web 版 PowerPoint 的功能行为差异（保真度差异的官方依据）：<https://support.microsoft.com/en-US/PowerPoint/how-certain-features-behave-in-web-based-powerpoint>
+- pptx→jpg 只返回第一页（官方 API 页未记载，社区实测）：<https://learn.microsoft.com/en-au/answers/questions/2073843/conversion-of-pptx-to-jpg-via-graph-api-only-retur>
 - PowerPoint 导出分辨率与 DPI 上限：<https://learn.microsoft.com/en-us/office/troubleshoot/powerpoint/change-export-slide-resolution>
 - pdftoppm(1) man page（默认 150 DPI、默认 MediaBox、`-cropbox`）：<https://manpages.debian.org/bookworm/poppler-utils/pdftoppm.1.en.html>
 - PyMuPDF FAQ（`get_pixmap()` 渲染语义、CropBox 与 MediaBox）：<https://pymupdf.readthedocs.io/en/latest/faq/index.html>

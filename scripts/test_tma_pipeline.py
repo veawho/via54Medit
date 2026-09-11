@@ -648,7 +648,7 @@ class TestRenderEngine(unittest.TestCase):
                 mock.patch.object(pre, "_macos_powerpoint_available", return_value=False):
             with self.assertRaises(RuntimeError) as cm:
                 pre._build_engine_list()
-        self.assertIn("必须由 PowerPoint 产出", str(cm.exception))
+        self.assertIn("必须由微软引擎产出", str(cm.exception))
         self.assertIn("不降级", str(cm.exception))
 
         # 渲染入口返回 0; 别的通道**在代码里已不存在**, 不可能被调用
@@ -667,8 +667,8 @@ class TestRenderEngine(unittest.TestCase):
         for gone in ("render_via_soffice", "render_via_python_pptx",
                      "_find_soffice", "_find_cjk_font", "_FONT_CANDIDATES"):
             self.assertFalse(hasattr(pre, gone), "其它渲染通道的 %s 仍在模块里" % gone)
-        self.assertEqual(set(pre._PREF_MAP), {"powerpoint", "ppt"},
-                         "偏好表里还有非 PowerPoint 取值")
+        self.assertEqual(set(pre._PREF_MAP), {"powerpoint", "ppt", "graph"},
+                         "偏好表里出现了不该有的取值(只剩微软自家的 powerpoint/graph)")
         self.assertEqual([p for _, p in pre.COM_ENGINES], ["PowerPoint.Application"],
                          "COM 引擎表里还有非 PowerPoint 项")
         with mock.patch.dict(os.environ, {"RENDER_ENGINE": "soffice"}):
@@ -685,21 +685,24 @@ class TestRenderEngine(unittest.TestCase):
                 pre._build_engine_list()
 
     def test_no_advice_to_switch_render_channels(self):
-        """仓库内不得出现"改用其它**排版引擎**"的引导表述。
+        """仓库内不得出现"改用其它**会重新排版的引擎**"的引导表述。
 
         这条是**给我自己上的锁**: v5.4.23 我把"改用其它渲染通道"写进了失败提示文案
-        和 CHANGELOG, 而那等于引导换掉 PowerPoint 的排版 —— 违反"版式必须由 PowerPoint 产出"。
+        和 CHANGELOG, 而那等于引导换掉微软的排版 —— 违反"版式必须由微软引擎产出"。
         光把它从代码里删掉不够 —— 要有一条测试防止再写回去。
 
-        注意区分 (2026-09-11 用户澄清判定标准): 禁的是"换**排版引擎**"的引导;
-        提及"只光栅化、不重排的下游工具"(PyMuPDF / pdftoppm)是允许的, 它们不改变版式。
-
-        允许的形态: 参数校验/文档里**客观列出** RENDER_ENGINE 的可选值(那是参数说明,
-        不是建议改用), 以及测试里为验证分支而显式设置的取值。
+        允许与禁止 (2026-09-11 用户两次澄清后):
+          * **允许**提到 ``RENDER_ENGINE=graph`` —— 它是 Microsoft Graph 的在线渲染,
+            同样出自微软, 属"版式来自微软引擎"; 用户已明确要求接入。
+          * **允许**提到只光栅化、不重排的下游工具 (PyMuPDF / pdftoppm)。
+          * **禁止**把 LibreOffice / soffice / Keynote / WPS / python-pptx /
+            Aspose / Spire / GroupDocs / Syncfusion 写成可选项 —— 它们都会重排。
         """
-        # 注意: 模式用**拼接**构造, 否则定义它的这两行自己就会命中(自我引用)。
+        # 注意: 模式用**拼接**构造, 否则定义它的这几行自己就会命中(自我引用)。
         _v = "RENDER_ENGINE="
-        banned = ("改用 " + _v, _v + "libreoffice", _v + "python_pptx", _v + "wps")
+        banned = tuple(_v + x for x in (
+            "libreoffice", "soffice", "keynote", "wps",
+            "python_pptx", "aspose", "spire", "groupdocs", "syncfusion"))
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         hits = []
         for dirpath, dirnames, filenames in os.walk(root):
@@ -708,6 +711,10 @@ class TestRenderEngine(unittest.TestCase):
                                         ".pytest_cache", ".venv"}]
             for fn in filenames:
                 if not fn.endswith((".py", ".md")):
+                    continue
+                # CHANGELOG 是**历史存档**: 里面如实记着当年删掉了哪些通道名, 不改写、也不该
+                # 被这条 lint 追着改(与 v5.4.16/v5.4.24 的处理方式一致 —— 保留发布记录本身)。
+                if fn == "CHANGELOG.md":
                     continue
                 path = os.path.join(dirpath, fn)
                 try:
@@ -722,7 +729,7 @@ class TestRenderEngine(unittest.TestCase):
                                                        i + 1, line.strip()[:110]))
         self.assertEqual(
             hits, [],
-            "出现了引导改用其它**排版引擎**的表述 —— 版式必须由 PowerPoint 产出:\n  "
+            "出现了引导改用其它**会重新排版的引擎**的表述 —— 版式必须由微软引擎产出:\n  "
             + "\n  ".join(hits))
 
     def test_hint_line_is_separate_from_truncated_message(self):
@@ -838,6 +845,335 @@ class TestRenderEngine(unittest.TestCase):
         self.assertEqual(n, 3)
         lines = [" ".join(str(a) for a in c.args) for c in mp.call_args_list]
         self.assertFalse(any("未内嵌字体" in l for l in lines), "不该有警告: %s" % lines)
+
+
+def _graph_fake(handler):
+    """把 ``graph_render._open`` 换成 ``handler(method, url, data, headers) -> (status, headers, body)``。
+
+    返回 ``(calls, patcher)``; ``calls`` 里按顺序记下每次请求, 供断言"发了什么、没发什么"。
+    所有 Graph 用例都打在这个接缝上 —— **不联网**。
+
+    注意打在 ``_open`` 而不是 ``_request``: 后者才是重试逻辑所在的那一层, 打高了就测不到
+    429 的退避重试(第一版就是这么写错的 —— 被 mock 掉的正是要验的东西)。
+    """
+    calls = []
+
+    def _fake_open(method, url, data=None, headers=None, timeout=None):
+        head = headers or {}
+        calls.append({"method": method, "url": url, "data": data, "headers": head})
+        return handler(method, url, data, head)
+
+    return calls, mock.patch.object(pre._graph_module(), "_open", side_effect=_fake_open)
+
+
+class TestGraphChannel(unittest.TestCase):
+    """Microsoft Graph 通道(Office 在线渲染) —— 显式选项, 不是降级目标。
+
+    设计要点 (依据 docs/ppt-render-fidelity.md):
+      * 只做 ``PPTX → PDF``(``?format=pdf``): 官方对 pptx→jpg **只给第一页**, 整份走不通;
+      * 转换前必须先把文件**上传**到 OneDrive/SharePoint(该 API 只作用于 driveItem);
+      * 转换结果走 **302 → Location**(预认证 URL, **不能**带 Authorization);
+      * 用完删掉临时上传(``GRAPH_KEEP_UPLOAD=1`` 可留);
+      * 它**不会**在桌面版 PowerPoint 失败时被自动启用 —— 必须显式 ``RENDER_ENGINE=graph``。
+    """
+
+    CREDS = {"GRAPH_TENANT_ID": "tid-1", "GRAPH_CLIENT_ID": "cid-1",
+             "GRAPH_CLIENT_SECRET": "sec-1", "GRAPH_DRIVE_ID": "DRIVE1"}
+
+    def _tmp_pptx(self, name="x.pptx", payload=b"PPTX-BYTES"):
+        tmp = tempfile.mkdtemp()
+        path = os.path.join(tmp, name)
+        with open(path, "wb") as fh:
+            fh.write(payload)
+        return tmp, path
+
+    def test_client_credentials_token_request_shape(self):
+        """app-only 取 token 必须打在正确的端点、带上正确的 grant_type 与 scope。"""
+        gr = pre._graph_module()
+        seen = {}
+
+        def handler(method, url, data, headers):
+            seen.update(method=method, url=url, body=data.decode(),
+                        ctype=headers.get("Content-Type", ""))
+            return 200, {}, b'{"access_token": "TOK-1"}'
+
+        env = dict(self.CREDS)
+        env.pop("GRAPH_DRIVE_ID")
+        with mock.patch.dict(os.environ, env, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                self.assertEqual(gr.acquire_token(), "TOK-1")
+
+        self.assertEqual(seen["method"], "POST")
+        self.assertIn("/tid-1/oauth2/v2.0/token", seen["url"])
+        self.assertIn("grant_type=client_credentials", seen["body"])
+        self.assertIn("client_id=cid-1", seen["body"])
+        self.assertIn("https%3A%2F%2Fgraph.microsoft.com%2F.default", seen["body"])
+        self.assertEqual(seen["ctype"], "application/x-www-form-urlencoded")
+
+    def test_existing_access_token_skips_token_endpoint(self):
+        """给了现成令牌就不该再去打 token 端点(委派令牌这条路要能用)。"""
+        gr = pre._graph_module()
+
+        def handler(method, url, data, headers):
+            raise AssertionError("不该请求 token 端点: %s" % url)
+
+        with mock.patch.dict(os.environ, {"GRAPH_ACCESS_TOKEN": "TOK-X"}, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                self.assertEqual(gr.acquire_token(), "TOK-X")
+
+    def test_full_flow_uploads_converts_downloads_and_cleans_up(self):
+        """完整链路: PUT 上传 → GET ``?format=pdf`` (302) → 跟随 Location 下载 → DELETE 清理。"""
+        _, pptx = self._tmp_pptx(payload=b"PPTX-BYTES")
+        out = os.path.join(os.path.dirname(pptx), "out.pdf")
+        preauth = "https://preauth.example/blob"
+        pdf_bytes = b"%PDF-1.4 fake deck"
+
+        def handler(method, url, data, headers):
+            if method == "PUT":
+                return 201, {}, b'{"id": "ITEM1"}'
+            if method == "DELETE":
+                return 204, {}, b""
+            if "format=pdf" in url:
+                return 302, {"Location": preauth}, b""
+            if url == preauth:
+                return 200, {}, pdf_bytes
+            raise AssertionError("没预料到的请求: %s %s" % (method, url))
+
+        with mock.patch.dict(os.environ, self.CREDS, clear=True), \
+                mock.patch.object(pre._graph_module(), "acquire_token", return_value="TOK-1"):
+            calls, patcher = _graph_fake(handler)
+            with patcher:
+                result = pre._graph_module().export_ppt_to_pdf_via_graph(pptx, out)
+
+        self.assertEqual(result, os.path.abspath(out))
+        with open(out, "rb") as fh:
+            self.assertEqual(fh.read(), pdf_bytes)
+
+        urls = [(c["method"], c["url"]) for c in calls]
+        put = [c for c in calls if c["method"] == "PUT"]
+        self.assertEqual(len(put), 1, "应当只上传一次: %s" % urls)
+        self.assertIn("/drives/DRIVE1/items/root:/_via54medit_render_tmp/x.pptx:/content",
+                      put[0]["url"])
+        self.assertEqual(put[0]["data"], b"PPTX-BYTES", "上传的应当是原文件字节")
+        self.assertTrue(any(u.endswith("/items/ITEM1/content?format=pdf") for _, u in urls),
+                        "转换必须用 format=pdf (jpg 只给第一页): %s" % urls)
+        self.assertEqual(urls[-1], ("DELETE", "https://graph.microsoft.com/v1.0/drives/DRIVE1/items/ITEM1"),
+                         "用完应当删掉临时上传")
+
+        # 预认证 URL **不能**带 Authorization —— 官方明确要求, 带了可能被拒
+        preauth_calls = [c for c in calls if c["url"] == preauth]
+        self.assertEqual(len(preauth_calls), 1)
+        self.assertEqual(preauth_calls[0]["headers"], {},
+                         "跟随 Location 时不能带 Authorization")
+
+    def test_cleanup_can_be_disabled(self):
+        """``GRAPH_KEEP_UPLOAD=1`` 时保留上传件(排查用)。"""
+        _, pptx = self._tmp_pptx()
+        env = dict(self.CREDS, GRAPH_KEEP_UPLOAD="1")
+
+        def handler(method, url, data, headers):
+            if method == "POST":
+                return 200, {}, b'{"access_token": "TOK"}'
+            if method == "PUT":
+                return 201, {}, b'{"id": "ITEM1"}'
+            if "format=pdf" in url:
+                return 302, {"Location": "https://preauth.example/x"}, b""
+            if url == "https://preauth.example/x":
+                return 200, {}, b"%PDF-1.4 x"
+            if method == "DELETE":
+                raise AssertionError("设了 GRAPH_KEEP_UPLOAD 不该删")
+            raise AssertionError("没预料到的请求: %s %s" % (method, url))
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                pre._graph_module().export_ppt_to_pdf_via_graph(
+                    pptx, os.path.join(os.path.dirname(pptx), "o.pdf"))
+
+    def test_missing_credentials_error_is_actionable(self):
+        """缺凭据时报错要能直接照着做 —— 列出环境变量与权限要求。"""
+        gr = pre._graph_module()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(gr.credentials_error())
+            _, pptx = self._tmp_pptx()
+            calls, patcher = _graph_fake(lambda *a: (_ for _ in ()).throw(AssertionError("不该发请求")))
+            with patcher:
+                with self.assertRaises(gr.GraphRenderError) as cm:
+                    gr.export_ppt_to_pdf_via_graph(pptx, os.path.join(os.path.dirname(pptx), "o.pdf"))
+            self.assertEqual(calls, [])
+        hint = cm.exception.hint
+        for token in ("GRAPH_ACCESS_TOKEN", "GRAPH_TENANT_ID", "GRAPH_CLIENT_ID",
+                      "GRAPH_CLIENT_SECRET", "Files.ReadWrite.All", "GRAPH_DRIVE_ID"):
+            self.assertIn(token, hint, "可操作说明里应提到 %s" % token)
+
+    def test_drive_id_resolved_via_me_drive_when_absent(self):
+        """没给 GRAPH_DRIVE_ID 且有令牌时, 自动取 /me/drive。"""
+        gr = pre._graph_module()
+
+        def handler(method, url, data, headers):
+            self.assertEqual(url, "https://graph.microsoft.com/v1.0/me/drive")
+            return 200, {}, b'{"id": "DRIVE-AUTO"}'
+
+        with mock.patch.dict(os.environ, {"GRAPH_ACCESS_TOKEN": "T"}, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                self.assertEqual(gr.resolve_drive_id("T"), "DRIVE-AUTO")
+
+    def test_app_only_without_drive_id_explains_me_drive_is_unavailable(self):
+        """app-only 没有 /me —— 报错要直接指向 GRAPH_DRIVE_ID。"""
+        gr = pre._graph_module()
+
+        def handler(method, url, data, headers):
+            raise gr._HttpError(400, None, "no /me for app-only")
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                with self.assertRaises(gr.GraphRenderError) as cm:
+                    gr.resolve_drive_id("T")
+        self.assertIn("GRAPH_DRIVE_ID", cm.exception.hint)
+
+    def test_non_pdf_payload_is_rejected(self):
+        """转换结果不是 PDF(例如返回了 HTML 错误页)时必须报错, 不能当成功写盘。"""
+        gr = pre._graph_module()
+        _, pptx = self._tmp_pptx()
+        out = os.path.join(os.path.dirname(pptx), "o.pdf")
+
+        def handler(method, url, data, headers):
+            if method == "POST":
+                return 200, {}, b'{"access_token": "TOK"}'
+            if method == "PUT":
+                return 201, {}, b'{"id": "ITEM1"}'
+            if "format=pdf" in url:
+                return 302, {"Location": "https://preauth.example/x"}, b""
+            if url == "https://preauth.example/x":
+                return 200, {}, b"<html>not a pdf</html>"
+            if method == "DELETE":
+                return 204, {}, b""
+            raise AssertionError("没预料到")
+
+        with mock.patch.dict(os.environ, self.CREDS, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                with self.assertRaises(gr.GraphRenderError):
+                    gr.export_ppt_to_pdf_via_graph(pptx, out)
+        self.assertFalse(os.path.exists(out), "失败时不该留下半成品")
+
+    def test_throttle_is_retried_honoring_retry_after(self):
+        """429 要按 Retry-After 重试, 而不是直接失败。"""
+        gr = pre._graph_module()
+        state = {"n": 0}
+
+        def handler(method, url, data, headers):
+            state["n"] += 1
+            if state["n"] == 1:
+                raise gr._HttpError(429, 0, "throttled")
+            return 200, {}, b'{"access_token": "TOK-2"}'
+
+        env = dict(self.CREDS)
+        env.pop("GRAPH_DRIVE_ID")
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(gr.time, "sleep", return_value=None) as sleeper:
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                self.assertEqual(gr.acquire_token(), "TOK-2")
+        self.assertTrue(sleeper.called, "应当 sleep 后再重试")
+
+    def test_oversized_file_says_upload_session_is_needed(self):
+        """超过 250 MB 单次上限时给明确说明, 而不是发一个注定失败的上传。"""
+        gr = pre._graph_module()
+        tmp = tempfile.mkdtemp()
+        big = os.path.join(tmp, "big.pptx")
+        with open(big, "wb") as fh:
+            fh.truncate(gr._MAX_SIMPLE_UPLOAD + 1)      # 稀疏文件, 不真占磁盘
+
+        def handler(method, url, data, headers):
+            raise AssertionError("不该真的发上传请求")
+
+        with mock.patch.dict(os.environ, self.CREDS, clear=True):
+            _, patcher = _graph_fake(handler)
+            with patcher:
+                with self.assertRaises(gr.GraphRenderError) as cm:
+                    gr.upload_item("T", "DRIVE1", big)
+        self.assertIn("upload session", str(cm.exception))
+
+    def test_graph_requires_explicit_engine_pref(self):
+        """选了 graph 但凭据不全 → 报错; 凭据齐全 → 引擎列表只有 graph。"""
+        with mock.patch.dict(os.environ, {"RENDER_ENGINE": "graph"}, clear=True):
+            with self.assertRaises(RuntimeError) as cm:
+                pre._build_engine_list()
+        self.assertIn("GRAPH_TENANT_ID", str(cm.exception))
+
+        env = dict(self.CREDS, RENDER_ENGINE="graph")
+        with mock.patch.dict(os.environ, env, clear=True):
+            engines = pre._build_engine_list()
+        self.assertEqual([k for _, k, _ in engines], ["graph"])
+
+    def test_graph_is_never_an_automatic_fallback(self):
+        """**没显式选 graph** 时, 即使桌面版 PowerPoint 不可用, 也绝不会去调 Graph。
+
+        这是"不静默换引擎"的核心断言 —— 当年 darwin 上自动降级到 soffice 的教训。
+        """
+        tmp = tempfile.mkdtemp()
+
+        def handler(method, url, data, headers):
+            raise AssertionError("未选 graph 却发了 Graph 请求: %s" % url)
+
+        env = {"GRAPH_ACCESS_TOKEN": "TOK", "GRAPH_DRIVE_ID": "D"}   # 凭据齐全, 但没选 graph
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(pre.sys, "platform", "darwin"), \
+                mock.patch.object(pre, "_macos_powerpoint_available", return_value=False):
+            calls, patcher = _graph_fake(handler)
+            with patcher:
+                n, engine = pre.render_ppt_slides_auto(
+                    os.path.join(tmp, "x.pptx"), os.path.join(tmp, "o"))
+        self.assertEqual((n, engine), (0, "none"), "拿不到桌面版就该失败")
+        self.assertEqual(calls, [], "未显式选择时不得触碰 Graph")
+
+        # 再加一层: 直接调 export_ppt_to_pdf 也不能因为"没选 graph"就自己走 Graph。
+        # (第一版只验了 render_ppt_slides_auto —— 它被 _build_engine_list 提前挡下,
+        #  其实没走到 export_ppt_to_pdf; 而且当时连源文件都没建, 负向对照两次都溜过去了。
+        #  教训: 否证型断言必须保证"若真走错分支, 一定会留下痕迹"。)
+        _, real_pptx = self._tmp_pptx()
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(pre.sys, "platform", "linux"):
+            calls2, patcher2 = _graph_fake(handler)
+            with patcher2:
+                with self.assertRaises(Exception):
+                    pre.export_ppt_to_pdf(real_pptx,
+                                          os.path.join(os.path.dirname(real_pptx), "o.pdf"))
+        self.assertEqual(calls2, [], "默认偏好下 export_ppt_to_pdf 不得走 Graph")
+
+    def test_graph_failure_does_not_fall_back_to_desktop(self):
+        """选了 graph 且它失败时 —— 直接失败, 不偷偷改用桌面版 PowerPoint。"""
+        gr = pre._graph_module()
+        tmp = tempfile.mkdtemp()
+        env = dict(self.CREDS, RENDER_ENGINE="graph")
+
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(gr, "export_ppt_to_pdf_via_graph",
+                                  side_effect=gr.GraphRenderError("模拟失败", "hint")), \
+                mock.patch.object(pre, "render_via_macos_powerpoint") as mac, \
+                mock.patch.object(pre, "render_via_com") as com:
+            n, engine = pre.render_ppt_slides_auto(
+                os.path.join(tmp, "x.pptx"), os.path.join(tmp, "o"))
+        self.assertEqual((n, engine), (0, "none"))
+        self.assertFalse(mac.called, "不该改用桌面版 macOS 渲染")
+        self.assertFalse(com.called, "不该改用桌面版 COM 渲染")
+
+    def test_graph_render_uses_pdf_then_local_rasterizer(self):
+        """graph 路径也必须复用本地栅格化 + 字体检查, 不自己造一套。"""
+        tmp = tempfile.mkdtemp()
+        env = dict(self.CREDS, RENDER_ENGINE="graph")
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(pre, "export_ppt_to_pdf",
+                                  return_value=os.path.join(tmp, "s.pdf")), \
+                mock.patch.object(pre, "_non_embedded_fonts", return_value=[]), \
+                mock.patch.object(pre, "_rasterize_pdf", return_value=4) as raster:
+            self.assertEqual(pre.render_via_graph(os.path.join(tmp, "x.pptx"), tmp), 4)
+        self.assertTrue(raster.called, "graph 路径应走 _rasterize_pdf")
 
 
 # ---------- T13: 自然语言一键全自动管线 (via54_auto) ----------

@@ -16,8 +16,11 @@
 所以标准是**保真**, 不是程序名:
   * **不可替代** —— PPTX→画面这一步 (版式/文字)。Keynote / LibreOffice / WPS /
     python-pptx 会各自重排 OOXML, 字体与布局和原版不一致, 一律不用。
+  * **两个引擎可选, 且都由微软提供** —— ``RENDER_ENGINE=powerpoint``(默认, 桌面版) 或
+    ``RENDER_ENGINE=graph``(Microsoft Graph 的 ``?format=pdf`` 在线转换)。后者需**显式指定**,
+    不是自动降级目标; 与桌面版有已知差异。
   * **可以换** —— 把这里产出的**固定版式 PDF** 再栅格化成图片那一步 (不重排)。
-  * 拿不到 PowerPoint 就**抛错**, 不产出近似渲染的替代品。
+  * 选定的引擎拿不到就**抛错**, 不产出近似渲染的替代品。
 完整结论表见仓库 ``docs/ppt-render-fidelity.md``; 规则出处见
 ``references/v2.12.0-powerpoint-render-mandatory.md``。
 
@@ -31,17 +34,34 @@ import subprocess
 import sys
 import time
 
+#: 同目录兄弟模块(graph_render / Graph 客户端)要能直接 import —— 技能包自包含。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 #: AppleScript 超时(秒); 可用环境变量 PPT_RENDER_TIMEOUT 覆盖。
 _DEFAULT_TIMEOUT = 60.0
 
+
+def _engine_pref():
+    """``RENDER_ENGINE``: ``powerpoint``(默认, 桌面版) 或 ``graph``(微软在线渲染)。"""
+    return os.environ.get("RENDER_ENGINE", "powerpoint").strip().lower()
+
+
+def _graph_module():
+    """按需加载 Graph 客户端(与同目录 graph_render.py 同一份实现)。"""
+    import graph_render
+    return graph_render
+
+
 #: PowerPoint 自动化被模态对话框挡住时给出的可操作提示。
-#: **只讲怎么把 PowerPoint 修好, 不提任何其它渲染通道** —— 规范是只走 PowerPoint。
+#: 只讲怎么把 PowerPoint 修好; 另外点明**另一条微软引擎**的路(不是换成会重排的第三方引擎)。
 _BLOCKED_HINT = (
     "PowerPoint 多半是弹了模态对话框(登录 / 激活 / 文件访问权限)挡住了 Apple 事件。"
     "请手动打开一次 PowerPoint, 关掉该对话框后再重试。"
     "若仍然卡住, 需排查 PowerPoint 自身状态(是否已激活、是否允许被自动化控制), "
-    "而不是绕过它 —— 按规范渲染只走 PowerPoint 这一条通道, 不会自动改用其它引擎。"
+    "而不是换成会重新排版的第三方引擎。"
     "自动化超时可用 PPT_RENDER_TIMEOUT(秒) 调整。"
+    "另一条路: 若本机确实用不了桌面版 PowerPoint, 可**显式**设 RENDER_ENGINE=graph "
+    "改用微软的在线渲染引擎(Office 在线; 与桌面版有已知差异, 见 docs/ppt-render-fidelity.md)。"
 )
 
 
@@ -89,7 +109,7 @@ def _is_apple_event_timeout(err):
 def export_ppt_to_pdf(pptx_path, pdf_path):
     """用 PowerPoint 把整份 PPT 导出为 PDF, 返回 PDF 绝对路径。
 
-    失败抛 ``PPTExportError`` (带可操作 hint), **不**改用其它渲染通道。
+    失败抛 ``PPTExportError`` (带可操作 hint), **不**改用会重排的第三方引擎。
     """
     abs_pptx = os.path.abspath(pptx_path)
     abs_pdf = os.path.abspath(pdf_path)
@@ -97,13 +117,18 @@ def export_ppt_to_pdf(pptx_path, pdf_path):
     if parent:
         os.makedirs(parent, exist_ok=True)
 
+    # 显式选定在线引擎时才走 Microsoft Graph(它不是自动降级目标)。
+    if _engine_pref() == "graph":
+        return _graph_module().export_ppt_to_pdf_via_graph(pptx_path, abs_pdf)
+
     if os.name == "nt":
         return _export_via_com(abs_pptx, abs_pdf)
 
     if sys.platform != "darwin":
         raise PPTExportError(
-            "本平台没有 PowerPoint 通道 —— 版式规定必须由 PowerPoint 产出、"
-            "不用别的排版引擎, 故不降级。")
+            "本平台没有桌面版 PowerPoint 通道 —— 版式规定必须由微软引擎产出、"
+            "不用会重排的第三方引擎, 故不降级。"
+            "可显式设 RENDER_ENGINE=graph 走微软的在线渲染引擎。")
 
     # 清掉可能卡死的残留实例(模态对话框会阻塞 Apple 事件, 表现为 -9074 / 超时)
     subprocess.run(["killall", "Microsoft PowerPoint"], capture_output=True, text=True)
