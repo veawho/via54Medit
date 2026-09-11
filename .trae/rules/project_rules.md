@@ -52,6 +52,7 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
      - **可以换**: 把导出的**固定版式**产物 (PDF/EMF/位图) 再栅格化成图片这一步 —— PDF 只解释绘制指令、不重排, 所以不算换通道。栅格化器见 `RENDER_RASTERIZER` (`pymupdf` 默认 / `pdftoppm` 强制 `-cropbox`)。
      - **禁止**: 任何会重新排版的引擎 —— LibreOffice / Keynote / WPS / python-pptx / Aspose.Slides / Spire.Presentation / GroupDocs / Syncfusion。选定引擎拿不到就**报错**, 不降级。
    - 首选 PowerPoint **直接出位图** (Windows `Slide.Export`), 因为还绕开"PDF 字体未内嵌 → 栅格化替换字形"的风险; 走 PDF 时会打印未内嵌字体的保真警告。
+   - **Word(DOC/DOCX) 适用同一条标准**: 版式只由 **Microsoft Word** 产出 (Windows COM / macOS 原生 AppleScript)。原先那两条会改版式的兜底已删除(LibreOffice headless 转 PDF、python-docx 抽段落拼"简易 PDF"); 拿不到 Word 就失败。
    - Graph 通道与桌面版有**已知差异**(Office 在线引擎的字体替换 / 符号占位 / 部分对象行为), 故它只是"没有桌面版时的显式替代"。
    - 实现位置: `scripts/hl_v3_final/graph_render.py` (Graph 客户端) 与 `ppt_to_pdf.py` (PPT→PDF, 技能包自包含)、`scripts/ppt_render_engine.py` (PPT→图片)。PPT→PDF/图片的入口都必须委托给它们。
    - 自检: `python3 scripts/hl_v3_final/graph_render.py --check`。

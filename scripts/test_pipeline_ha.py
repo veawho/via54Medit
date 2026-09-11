@@ -356,6 +356,34 @@ class TestPipelineHA(unittest.TestCase):
         self.assertTrue(p2_res["ok"], "双重对齐标注应成功")
         self.assertTrue(os.path.exists(p2_res["highlight_pdf"]), "高亮 PDF 应生成")
 
+    def test_10_docx_render_is_word_only(self):
+        """Word 源文件**只由 Microsoft Word 渲染** —— 不退回 LibreOffice / python-docx 拼页。
+
+        与 PPT 同一条保真标准(见 docs/ppt-render-fidelity.md): 会改版式的第三方路径一律不用。
+        v5.4.30 删掉了原来那两条兜底: LibreOffice headless 转 PDF、以及用 python-docx
+        抽段落拼一张"简易 PDF"(版式与原文档完全不同)。
+        """
+        src = open(unified_render_engine.__file__, encoding="utf-8").read()
+        self.assertNotIn("from docx import", src, "不该再用 python-docx 拼页充当渲染")
+
+        docx = os.path.join(self.tmp_dir, "x.docx")
+        with open(docx, "wb") as fh:
+            fh.write(b"PK\x03\x04 fake docx")
+        out = os.path.join(self.tmp_dir, "docx_out")
+
+        # 假装本机装了 LibreOffice: 旧实现会拿它去转 PDF, 新实现必须连碰都不碰
+        with mock.patch.object(unified_render_engine.sys, "platform", "linux"), \
+                mock.patch.object(unified_render_engine.os, "name", "posix"), \
+                mock.patch("shutil.which", return_value="/usr/bin/soffice"), \
+                mock.patch.object(unified_render_engine.subprocess, "run") as runner, \
+                mock.patch("builtins.print") as mp:
+            self.assertEqual(unified_render_engine.render_docx_to_images(docx, out), [])
+        self.assertFalse(runner.called,
+                         "没有 Word 时不得去调外部转换器 —— 那正是被删掉的 LibreOffice 兜底")
+        lines = [" ".join(str(a) for a in c.args) for c in mp.call_args_list]
+        self.assertTrue(any("Microsoft Word" in l for l in lines),
+                        "应说明缺的是 Microsoft Word 通道, 实际: %s" % lines)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

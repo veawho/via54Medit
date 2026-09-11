@@ -80,10 +80,12 @@ PowerPoint 导出 PDF 时若**没有内嵌字体**，栅格化器（poppler / Mu
 | 栅格化器 | `RENDER_RASTERIZER` = `pymupdf`（默认）/ `pdftoppm`（强制 `-cropbox`）；其它取值直接报错 |
 | 禁止 | 任何**重新排版**的引擎：LibreOffice / soffice、Keynote、WPS、python-pptx、Aspose.Slides、Spire.Presentation、GroupDocs、Syncfusion |
 | 不采用 | Ghostscript / ImageMagick（虽不重排，但有已知外观缺陷） |
-| 不变量 | `tests/test_repo_hygiene.py::TestRenderFidelity` 看守"禁止重排引擎"这条线 |
+| **Word（DOC/DOCX）** | **同一条标准**：版式只由 **Microsoft Word** 产出（Windows COM / macOS 原生 AppleScript）。原先那两条会**改版式**的兜底已删除 —— LibreOffice headless 转 PDF、以及用 python-docx 抽段落拼"简易 PDF"。拿不到 Word 就直接失败 |
+| 不变量 | `tests/test_repo_hygiene.py::TestRenderFidelity` 看守"禁止重排引擎"这条线（**豁免清单已为空**） |
 
 选定的引擎拿不到时**直接报错**，**不自动切换**到另一个 —— 连"桌面版失败就自动切 Graph"也不行，
 必须由使用者显式指定。（当年 darwin 上自动降级到 soffice 的教训。）
+**Word 源文件同理**：没有 Word 就不渲染，不拿 LibreOffice 或 python-docx 拼一个"看起来像"的版本。
 
 ### 3.1 Microsoft Graph 通道（`RENDER_ENGINE=graph`）
 

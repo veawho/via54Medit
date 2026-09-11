@@ -304,14 +304,11 @@ class TestRenderFidelity(unittest.TestCase):
     #: 扫描时跳过的文件名前缀 —— 它们故意写出引擎名做反向断言。
     SKIP_PREFIX = ("test_", "conftest")
 
-    #: 允许出现的文件 -> 理由。每条都必须写明, 不许无理由放行。
-    ALLOWED = {
-        os.path.join("scripts", "unified_render_engine.py"):
-            "命中的是 **Word** (DOC/DOCX) → PDF 那条路径, 不是 PPT —— PowerPoint 无法渲染 "
-            "Word 文档, 故本规则不适用, LibreOffice 在这里是 Word 渲染的实现之一。"
-            "若要求 Word 也一并收口, 删掉 render_docx_to_images() 的 LibreOffice 分支 "
-            "并同步删掉本条目。",
-    }
+    #: 允许出现的文件 -> 理由。**目前是空的 —— 规则已无任何豁免。**
+    #: v5.4.30 把最后一条豁免也收掉了: `unified_render_engine` 的 Word 路径原先允许用
+    #: LibreOffice, 现改为只走 Microsoft Word(版式保真的同一条标准)。留着这个机制是因为
+    #: 将来若有**真**合格的例外, 应该带理由进来, 而不是悄悄绕开检查。
+    ALLOWED = {}
 
     #: 会**重新排版**的引擎 —— 以可执行名/模块名出现即为"换排版引擎"。
     _REFLOW_ENGINE = re.compile(
@@ -441,18 +438,10 @@ class TestSourceHygiene(unittest.TestCase):
     #: 允许的控制字符(制表 / 换行 / 回车); 其余一律视为被写坏。
     _ALLOWED_CTRL = {9, 10, 13}
 
-    #: 已知例外 -> 理由。每条都必须写明, 不许无理由放行。
-    #: 注意: 这两条**不是"没问题"**, 而是"涉及已交付内容, 待用户确认后再改"。
-    CTRL_CHAR_ALLOWED = {
-        os.path.join("scripts", "hl_v3_final", "examples", "hl_p24-1.py"):
-            "P24-1 的证据原文里有 3 处 0x01。用 git 查过: **自 2026-08-18 首次入库就如此**, "
-            "不是后来被写坏的。按语义几乎肯定是 `≥`(LDH ≥2 times the ULN / rUPCR ≥1 mg/mg / "
-            "proteinuria ≥1 mg/mg)。但它属**已交付的临床证据文本**, 改写可能影响该例的重跑结果, "
-            "故未擅自改 —— 待用户确认。",
-        os.path.join("skills", "via54medit-literature-pipeline", "scripts",
-                     "hl_pnx_examples", "hl_p24-1.py"):
-            "同上(技能分发包里的镜像副本)。",
-    }
+    #: 已知例外 -> 理由。**目前是空的 —— 全仓已无控制字符**。
+    #: (v5.4.29 曾把 hl_p24-1.py 的 3 处 0x01 列在这里, v5.4.30 按语义改回 `≥` 后清空。)
+    #: 机制保留的理由: 真有例外时应该带理由进来, 而不是悄悄绕开检查。
+    CTRL_CHAR_ALLOWED = {}
 
     #: sys.path 里不该出现外机盘符路径(Windows 盘符或 UNC 前缀)。
     _FOREIGN_PATH = re.compile(r"""sys\.path\.(?:insert|append)\([^)]*(?:[A-Za-z]:[\\/]|\\\\)""")

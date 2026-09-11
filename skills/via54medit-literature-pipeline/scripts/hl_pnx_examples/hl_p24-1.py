@@ -8,8 +8,8 @@ PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P24-1_mai
 OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P24-1/P24-1_highlight.pdf"
 
 SENTENCES = [
-    "patients with any of the following features are at increased risk of nonrelapse mortality and should be stratiﬁed as high-risk TA-TMA: elevated sC5b-9, LDH 2 times the ULN, rUPCR 1 mg/mg, multiorgan dysfunction, concurrent grade II-IV acute graft-versus-host disease (GVHD), or infection (bacterial or viral)",
-    "soluble C5b-9 (sC5b-9) exceeding the ULN; and proteinuria (1 mg/mg random urine protein-to-creatinine ratio [rUPCR])",
+    "patients with any of the following features are at increased risk of nonrelapse mortality and should be stratiﬁed as high-risk TA-TMA: elevated sC5b-9, LDH ≥2 times the ULN, rUPCR ≥1 mg/mg, multiorgan dysfunction, concurrent grade II-IV acute graft-versus-host disease (GVHD), or infection (bacterial or viral)",
+    "soluble C5b-9 (sC5b-9) exceeding the ULN; and proteinuria (≥1 mg/mg random urine protein-to-creatinine ratio [rUPCR])",
 ]
 
 def scan():

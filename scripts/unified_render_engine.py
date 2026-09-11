@@ -7,8 +7,9 @@ unified_render_engine.py — Step 1: 源文件全格式统一分页渲染器
     按 2026-08-05 用户硬规则 (2026-09-11 重申) 禁用其它渲染通道: Keynote / LibreOffice /
     WPS / python-pptx 会导致字体与布局和原版不一致, 故**不做默认也不做兜底**;
     PowerPoint 不可用时直接失败。实际渲染委托给 ppt_render_engine.render_ppt_slides_auto()。
-  - Word (DOC / DOCX) : Microsoft Word COM / macOS AppleScript / LibreOffice headless / docx2pdf
-    (不在上述规则范围内 —— 该规则针对 PPT, PowerPoint 无法渲染 Word 文档)
+  - Word (DOC / DOCX) : **只用 Microsoft Word** —— Windows 走 COM, macOS 走原生 AppleScript。
+    同一条保真标准同样适用: 会改版式的 LibreOffice headless 与"python-docx 拼简易 PDF"
+    都已按规范删除, 拿不到 Word 就失败。
   - PDF : PyMuPDF (fitz) 高精度渲染
   - 图片 (PNG / JPG / JPEG / WEBP / TIFF / BMP) : 直接转换为标准 RGB PNG
 
@@ -19,7 +20,6 @@ import sys
 import shutil
 import tempfile
 import subprocess
-from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -56,78 +56,95 @@ def render_image_file_to_page(img_path: str, out_dir: str) -> List[str]:
     return [out_img]
 
 
+def _docx_to_pdf_macos(docx_path: str, pdf_path: str) -> bool:
+    """macOS: 用**原生 Microsoft Word** 把文档导出为 PDF。"""
+    scpt = f'''
+    tell application "Microsoft Word"
+        set myDoc to open file (POSIX file "{os.path.abspath(docx_path)}")
+        save as myDoc file name (POSIX file "{os.path.abspath(pdf_path)}") file format format PDF
+        close myDoc saving no
+    end tell
+    '''
+    try:
+        r = subprocess.run(["osascript", "-e", scpt], capture_output=True, timeout=90)
+    except Exception as e:
+        print(f"  [render] Word AppleScript 执行失败: {e}")
+        return False
+    if r.returncode != 0:
+        err = (r.stderr or b"").decode("utf-8", "replace")[:200]
+        print(f"  [render] Word AppleScript 失败: {err}")
+        return False
+    return os.path.exists(pdf_path)
+
+
+def _docx_to_pdf_com(docx_path: str, pdf_path: str) -> bool:
+    """Windows: 用 Word COM 导出 PDF (``wdFormatPDF`` = 17)。"""
+    try:
+        import win32com.client
+    except ImportError:
+        print("  [render] 缺 pywin32 —— 无法用 Word COM 导出 PDF。")
+        return False
+    try:
+        app = win32com.client.DispatchEx("Word.Application")
+        doc = None
+        try:
+            try:
+                app.Visible = False
+                app.DisplayAlerts = False
+            except Exception:
+                pass
+            doc = app.Documents.Open(os.path.abspath(docx_path), ReadOnly=True)
+            doc.SaveAs(os.path.abspath(pdf_path), 17)
+        finally:
+            try:
+                if doc is not None:
+                    doc.Close(False)
+            except Exception:
+                pass
+            try:
+                app.Quit()
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"  [render] Word COM 导出失败: {e}")
+        return False
+    return os.path.exists(pdf_path)
+
+
 def render_docx_to_images(docx_path: str, out_dir: str, dpi: int = 150) -> List[str]:
-    """将 Word (DOCX/DOC) 转换为 PDF 后渲染为分页图片"""
+    """把 Word (DOCX/DOC) 渲染为分页图片 —— **版式只由 Microsoft Word 产出**。
+
+    与 PPT 同一条判定标准(见 ``docs/ppt-render-fidelity.md``): 会**重新排版**的第三方引擎
+    一律不用。Word 的"源应用本体"就是 Microsoft Word, 所以:
+
+      * Windows -> Word COM 导出 PDF;
+      * macOS   -> 原生 Word AppleScript 导出 PDF;
+      * 其它平台 -> **直接失败**, 不退回 LibreOffice。
+
+    原先这里还有两条会**改版式**的路, 已按规范删除:
+      1. LibreOffice headless 转 PDF —— 换了个排版引擎;
+      2. 用 python-docx 抽段落拼一张"简易 PDF" —— 版式与原文档完全不同, 比前者更不准。
+    两者都是"近似渲染", 与"不改变原文档的版式与文字"冲突; 宁可失败也不产出近似品。
+    """
     os.makedirs(out_dir, exist_ok=True)
     tmp_pdf_dir = tempfile.mkdtemp(prefix="docx_render_")
-    
-    # 策略 1: LibreOffice 转 PDF
-    soffice_bin = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice_bin and sys.platform == "darwin":
-        cand = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
-        if os.path.exists(cand):
-            soffice_bin = cand
-            
-    if soffice_bin:
-        try:
-            r = subprocess.run([
-                soffice_bin, "--headless", "--convert-to", "pdf",
-                "--outdir", tmp_pdf_dir, docx_path
-            ], capture_output=True, timeout=90)
-            if r.returncode == 0:
-                pdfs = list(Path(tmp_pdf_dir).glob("*.pdf"))
-                if pdfs:
-                    res = render_pdf_to_images(str(pdfs[0]), out_dir, dpi=dpi)
-                    shutil.rmtree(tmp_pdf_dir, ignore_errors=True)
-                    return res
-        except Exception:
-            pass
-
-    # 策略 2: macOS Word AppleScript
-    if sys.platform == "darwin":
-        try:
-            tmp_pdf = os.path.join(tmp_pdf_dir, "doc.pdf")
-            scpt = f'''
-            tell application "Microsoft Word"
-                set myDoc to open file (POSIX file "{os.path.abspath(docx_path)}")
-                save as myDoc file name (POSIX file "{os.path.abspath(tmp_pdf)}") file format format PDF
-                close myDoc saving no
-            end tell
-            '''
-            r = subprocess.run(["osascript", "-e", scpt], capture_output=True, timeout=60)
-            if r.returncode == 0 and os.path.exists(tmp_pdf):
-                res = render_pdf_to_images(tmp_pdf, out_dir, dpi=dpi)
-                shutil.rmtree(tmp_pdf_dir, ignore_errors=True)
-                return res
-        except Exception:
-            pass
-
-    # 策略 3: python-docx 提取段落生成简易 PDF (兜底)
+    tmp_pdf = os.path.join(tmp_pdf_dir, "doc.pdf")
     try:
-        from docx import Document
-        doc = Document(docx_path)
-        pdf_doc = fitz.open()
-        page = pdf_doc.new_page(width=595, height=842)
-        y = 50
-        for p in doc.paragraphs:
-            txt = p.text.strip()
-            if not txt:
-                continue
-            if y > 780:
-                page = pdf_doc.new_page(width=595, height=842)
-                y = 50
-            page.insert_text(fitz.Point(50, y), txt[:120], fontsize=11)
-            y += 18
-        tmp_pdf = os.path.join(tmp_pdf_dir, "doc_fallback.pdf")
-        pdf_doc.save(tmp_pdf)
-        pdf_doc.close()
-        res = render_pdf_to_images(tmp_pdf, out_dir, dpi=dpi)
+        if os.name == "nt":
+            ok = _docx_to_pdf_com(docx_path, tmp_pdf)
+        elif sys.platform == "darwin":
+            ok = _docx_to_pdf_macos(docx_path, tmp_pdf)
+        else:
+            print("  [render] 本平台没有 Microsoft Word 通道 —— 版式必须由 Word 本体产出、"
+                  "不用会重排的第三方引擎, 故不降级。"
+                  "(请在 Windows/macOS 上渲染, 或先用 Word 另存为 PDF 再传入。)")
+            return []
+        if not ok or not os.path.exists(tmp_pdf):
+            print("  [render] Microsoft Word 未能导出 PDF —— 按规范不切换其它渲染方式。")
+            return []
+        return render_pdf_to_images(tmp_pdf, out_dir, dpi=dpi)
+    finally:
         shutil.rmtree(tmp_pdf_dir, ignore_errors=True)
-        return res
-    except Exception as e:
-        shutil.rmtree(tmp_pdf_dir, ignore_errors=True)
-        print(f"  [render] DOCX 渲染遇到错误: {e}")
-        return []
 
 
 def render_source_file(source_path: str, out_dir: str, dpi: int = 150) -> Dict[str, Any]:
@@ -192,7 +209,7 @@ def render_source_file(source_path: str, out_dir: str, dpi: int = 150) -> Dict[s
             "file_type": "docx",
             "page_count": len(page_imgs),
             "page_images": page_imgs,
-            "engine": "Word/LibreOffice"
+            "engine": "Microsoft Word"
         }
 
     # 4. 图片格式
