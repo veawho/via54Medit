@@ -48,6 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.6] - 2026-09-11 (加固: 日志轮转/限流、描述符观测与上限、配置权限)
+
+承接 5.4.5 自检报告的遗留项 (P2 / P3), 一并收口。
+
+### Fixed
+- **日志无轮转, 被重复错误刷爆**: 同一句错误在 5 秒滴答循环里逐条落盘 —— 现场 `daemon.log` 达 2.0 MB / 12223 行, 其中 12200 行是同一条 `[Errno 24]`。现同一消息只在首次与每 100 次补一条汇总 (进行中汇总 + 换消息时的累计汇总); 超过 5 MB 时保留一份 `.1` 备份并就地清空。刻意采用「复制 + 截断」而非「改名 + 新建」: launchd 的 `StandardOutPath` 只在启动时打开文件一次并长期持有该 fd, 改名会让它继续写旧 inode, 与按路径写新文件的进程分叉。
+- **描述符占用不可观测**: 新增 `fd_usage()` 与 `TelemetryDaemon._check_fd_health()`。占用达到软上限 80% 即告警 (文案按 10% 分档, 避免数值抖动被当成"新消息"绕开限流), 占用值同时写入心跳文件并由 `daemon --status` 展示。5.4.5 那类「资源耗尽但不崩溃」的故障中, 进程假死而 `KeepAlive` 无从感知, 这是唯一能提前暴露信号的手段。
+- **LaunchAgent 的描述符软上限过低**: launchd 默认只给 256, 对长期常驻的扫描进程余量太薄 (本次即在一上午内耗尽)。plist 模板新增 `SoftResourceLimits → NumberOfFiles = 4096`。顺带把 plist 的全部插值统一做 XML 转义 —— 用户名或路径含 `&` / `<` 时原会生成非法 plist。
+- **配置以 0644 明文落盘**: `~/.medit/telemetry_config.json` 内含飞书 `app_secret`, 却因常见 umask 022 而以 `-rw-r--r--` 落盘, 同机其它用户可读。`save_config()` 现在用 `os.open(..., 0o600)` 创建 (消除"先 0644 落盘再 chmod"之间的可读窗口) 并对既有文件显式 `chmod`, 目录一并收为 0700。
+- **`pdf_utils` 的首选分支是死代码**: pypdf 只是可选 extra (`medit-telemetry[pdf]`), 而 fitz 才是高亮 / 文档链路的硬依赖; 原先却把 pypdf 排在首位, 常规部署下该分支从不命中。改为「硬依赖优先, 可选依赖兜底」。
+
+### Changed
+- **单测不再触碰真实配置**: `test_deploy_configuration_setup` 原先会临时覆写真实配置、再在 `finally` 里还原; 一旦进程在两步之间被强杀 (Ctrl-C / 超时 / OOM), 用户的真实配置就会永久留在测试值上。现改为把配置路径重定向到临时目录, 并断言落盘权限为 0600。
+- **纯格式化**: `gofmt -w` 统一 35 个文件的文档注释缩进 (Go 1.19+ 规则), 独立成一次无逻辑改动的提交。
+
+### 验证
+- test_telemetry **41/41 passed** (新增 4 项: 日志重复限流、日志轮转、描述符观测、LaunchAgent plist 经 `plistlib` 解析并校验 `SoftResourceLimits`); 0 skipped。
+- 真机: `~/.medit` 已收为 `drwx------`、配置 `-rw-------`; 重新生成的 telemetry plist 含 4096 描述符软上限; `daemon --status` 显示描述符占用; 测试前后真实配置 mtime 不变。
+- `gofmt -l` 归零; `go vet` 干净; `CGO_ENABLED=1 go test -race ./...` 24 个包全绿。
+
+### 说明
+- **pypdf 未安装**: 该解释器由 uv 托管、受 PEP 668 约束, 依 5.4.4 定下的「不默认绕过」策略未强行写入。改以上面的次序调整根治 —— 首选分支不再依赖可选包; 确需该 extra 时仍可显式 `pip install "medit-telemetry[pdf]"`。
+
 ## [5.4.5] - 2026-09-11 (修复: 守护进程文件描述符泄漏 + 后台启动回归)
 
 ### Fixed
