@@ -48,6 +48,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.29] - 2026-09-11 (复核发现: 一处外机路径被写坏成控制字符 + 新增"源码卫生"不变量)
+
+回应"确保所有修正都已完成"做的全面复核。**复核本身又抓出一处同类缺陷**(与 v5.4.20 修掉的
+`strict_eval_ocr_locate.py` 同属"外机绝对路径"), 故补一轮。
+
+### Fixed
+
+- **`scripts/tma_download_round2.py:10`** —— 原有一行把**另一台机器 G: 盘上的目录**插进
+  `sys.path`, 但那两个 `\a` 转义**已经退化成真正的 BEL 控制字符 0x07**, 于是插进去的实际是
+  `'G:' + BEL + 'gent' + BEL + 'i' + ...` —— 一个既不存在也不可能存在的路径
+  (实测 `sys.path[0]` 打印出来就是那个带 0x07 的串)。
+  改为按本文件所在目录定位 (`os.path.dirname(os.path.abspath(__file__))`), 与 v5.4.20 对
+  `strict_eval_ocr_locate.py` 的处理一致 —— 同目录的 `tma_scihub.py` 才是它的真实来源。
+  复核过: 该行是全仓**唯一**残留, 且 `_sys` 别处没用到。
+  它一直没暴露: insert 本就多余(直接运行时 Python 已把脚本目录入路径), 而 CI 是先 insert
+  `scripts/` 再 import 它, 所以先命中了正路。
+
+### Added
+
+- **`tests/test_repo_hygiene.py::TestSourceHygiene`** —— 两条源码卫生不变量:
+  ① 源码里不得出现控制字符(制表 / 换行 / 回车除外) —— 这正是"转义被写坏"留下的痕迹;
+  ② `sys.path.insert/append` 里不得出现外机盘符路径(Windows 盘符 / UNC)。
+  另带例外清单 `CTRL_CHAR_ALLOWED` 的**僵尸检查**(改回正常字符后条目必须删掉)。
+  反向控制: 往干净文件塞一个 BEL → 当场红并报出 `文件: 0x07`。
+  **这两条一上线就抓到了另一起**(见下)。
+
+### 待你确认
+
+- **`scripts/hl_v3_final/examples/hl_p24-1.py`(及技能包镜像)里有 3 处 0x01**。
+  用 git 查过: **自 2026-08-18 首次入库就如此**, 不是后来被写坏的。
+  按语义几乎肯定是 `≥` —— 对应那 3 句是 "LDH ≥2 times the ULN"、"rUPCR ≥1 mg/mg"、
+  "proteinuria ≥1 mg/mg random urine protein-to-creatinine ratio"。
+  但它属**已交付的临床证据文本**, 改写可能影响该例重跑时的定位结果, 所以**我没擅自改**,
+  已列进 `CTRL_CHAR_ALLOWED` 并写明理由。**要我改回 `≥` 就说一声。**
+
+### 仍未处理 (复核确认仍然开放, 非本轮任务范围)
+
+- **macOS PowerPoint 自动化仍不可用**(`save … as PDF` → AppleEvent -1712), 属环境问题,
+  需人工关掉模态对话框 / 放行自动化权限; 排查记录见 v5.4.26。
+- **Graph 通道尚未对真实服务验证** —— 14 项测试全部 mock HTTP, 从未真连 Microsoft Graph;
+  待你提供凭据后跑 `graph_render.py --check` + 一次真实转换才算端到端验过。
+- **Word(DOC/DOCX)仍走 LibreOffice**(`unified_render_engine.render_docx_to_images()`),
+  按 PPT 范围处理、已在守卫白名单写明理由, 待你决定是否一并收口(见 v5.4.27)。
+- 3 篇文献(P12-3 UpToDate 占位 / P13-1 焦扬 / P31-6 AANEM 摘要)**需你提供原文**。
+- 若干脚本仍以 Windows 路径 `C:\Users\via54\Desktop\TMA_test` 作为 `TMA_PROJECT` 的**默认值**
+  (有环境变量兜底, 本机不设就会指错)—— 属历史遗留, 未在本轮范围内。
+- 多处脚本仍引用旧目录名 `_2_pdfs` / `_3_highlight_semantic_v14*` —— 同属历史遗留
+  (`docs/versioned-scripts-audit-2026-09-11.md` 那轮是**纯调查**, 未改动文件)。
+
+### 复核结论 (这一轮到底查了什么)
+
+- 仓库: 工作区干净 · HEAD = origin/main = `9126669` · 无领先/落后 · v5.4.24~v5.4.28 tag 均已推送。
+- 版本一致性: telemetry 三处 (1.5.29) + CHANGELOG 最新 + tag 三者对齐。
+- 测试: 73 + 24 + 109 全过; `make test-py` / `test_tma_pipeline`(CI 跑的那个) / `test_pipeline_ha`
+  (7 过 3 跳过 —— 跳过原因是本机 PowerPoint 环境) / `gofmt` / `go vet` / `go test ./...` / 镜像 `--check` 退出码 0。
+- **独立复核(刻意不依赖我自建的守卫测试)**: 全仓重扫非微软渲染器调用(只剩 Word 那条白名单项)、
+  裸 `import fitz`(全是 `except ImportError:` 回退或白名单项, 且白名单经查**不是**僵尸)、
+  已删脚本的残留引用(只存在于 CHANGELOG / 审计文档等历史记录里)、
+  `sys.path` 外机路径(修掉上面那处后为零)、控制字符(见"待你确认")。
+
 ## [5.4.28] - 2026-09-11 (接入 Microsoft Graph 通道: 微软自己的在线渲染引擎)
 
 用户指示: "接入 Microsoft Graph 通道"。它由**微软服务端(Office 在线)**渲染, 与桌面版同属微软,
