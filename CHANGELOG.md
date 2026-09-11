@@ -48,6 +48,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.31] - 2026-09-11 (高可用复核: 我自己把 Word 通道弄坏了 → 修好 + 新增"真出图"就绪探针)
+
+回应"确保当前状态是你推理最佳路径后的高可用版本"。我按**可用性**重新审了一遍自己这几轮的改动,
+结果抓出两个由我造成的真问题。
+
+### Fixed — 我把 Word 通道改成了不可用
+
+- **v5.4.30 删掉 LibreOffice 之后, Word 的 AppleScript 成了唯一路径, 而它本来就是坏的。**
+  实测: `set myDoc to open file (...)` 拿不到文档引用, 于是 `save as` 报 `-1708 / -2753`;
+  更糟的是文档没打开时 `save as` 会**返回成功却什么都不产出**(rc=0、无 stderr、目标文件不存在)——
+  只看返回码会把失败当成功。修法: 改用 `open POSIX file` → `set theDoc to active document` →
+  `save as ... file format format PDF`, 并**校验产物真的存在**。
+  以前 LibreOffice 先跑, 这条坏路径永远轮不到, 所以一直没暴露 —— 是**我删兜底的动作把它暴露出来的**。
+- **Word 通道补上"快速预检 + 有界超时"**, 与 PowerPoint 对称: `probe_macos_word()` 只做
+  launch + get version(秒回), 不通就立刻返回、不去白等; 主脚本包在 `with timeout of N seconds` 里,
+  子进程上界 = N+15; 超时可配(`WORD_RENDER_TIMEOUT` / `WORD_RENDER_PREFLIGHT_TIMEOUT`), 非法值回落默认。
+  **为什么必须有上界**: 实测本机 `open` 会被模态对话框挡住一直挂着 —— 没有上界就是把整条管线吊死。
+
+### Added — `scripts/render_doctor.py`: 回答"这台机器现在到底能不能出图"
+
+- 默认做**真出图探针**: 现场造一份最小 PPTX/DOCX(`_make_canary_pptx` / `_make_canary_docx`,
+  后者用 zipfile 手工构造, **不依赖 python-docx**), 用**生产函数**真的渲染一遍, 数产出的图片。
+- 判据分层: **必须就绪** = PPT 排版通道 + 栅格化器(任一不就绪 → 退出码 1);
+  **按需** = Word 通道(只在源文件是 DOC/DOCX 时需要, 不就绪只提示); **可选** = Graph(需凭据)。
+- `--quick` 只查依赖, 且**明确拒绝说"就绪"**。这一点是实测逼出来的: 同一时刻
+  `--quick` 报 "✓ PPT 排版通道 探测到 PowerPoint (macOS)" 退出码 0, 而真探针是 **0 张图**。
+  所以 `--quick` 的结语只能是"依赖看起来齐全 —— 但没做真出图探针, 不能据此认为能渲染"。
+- 本机实跑结果(**36 秒给出确定结论**): PPT 排版通道 ✗ 0 张图(AppleEvent -1712)、
+  Word 通道 ✗ 0 张图、栅格化器 ✓ pymupdf → 退出码 1。也就是说: **这台机器现在跑任何
+  PPT/Word 管线都会在渲染这步失败** —— 这是环境结论, 不是猜测。
+- 加了 `make render-doctor`。
+
+### Fixed — 两处"承诺了不存在的备选"
+
+- `scripts/bootstrap_device.py`: 原先打印"未检测到原生 Microsoft PowerPoint，**将使用
+  LibreOffice / python-pptx 备选渲染**" —— 备选早就删了, 这是在骗操作者。改为如实说明
+  "没有备选渲染引擎"、给出 Graph 这条显式路、指向 `render_doctor.py`, 并补上
+  "'探测到'不等于'能出图'"的提示。
+- `scripts/deps_auto.py`: `WINDOWS_DEPS` 里还写着 `PowerPoint/WPS COM 渲染` —— WPS 已删除,
+  改为 `PowerPoint/Word COM 渲染`。
+
+### 测试
+
+- `test_tma_pipeline` 109 → **118** 项, 新增 `TestWordChannel`(5) + `TestRenderDoctor`(4):
+  预检失败**只调一次** subprocess(证明不白等)、"报成功但没产出"判失败、脚本形态
+  (`active document` + `file format format PDF` + `with timeout of 9 seconds` + 子进程上界 24)、
+  超时非法值回落、代码里不再有 python-docx / docx2pdf / LibreOffice 开关;
+  探针的最小文档真能被 python-pptx / zipfile 打开、PPT 不可用时退出码 1、
+  **`--quick` 绝不说"就绪"**、全就绪时退出码 0。
+- 又抓到自己一次: 第一版把 `"WPS"` 当禁词扫全文, 结果被模块 docstring 里的**规则说明**
+  ("WPS / LibreOffice 已禁用")绊倒 —— 改为只查代码用法, 不查文档字符串。
+
+### 本轮没有、也不会做的事
+
+- **不会**因为"PowerPoint 不可用"就自动切到会重排的引擎 —— 可用性不能拿保真度换。
+  高可用在这里的含义是: **早发现、快失败、原因准、建议可执行、绝不产出错误结果**,
+  而不是"总能渲染"。要在这台机器上真跑出图, 只有两条路: 修好自动化权限, 或显式
+  `RENDER_ENGINE=graph`(需凭据)。
+
 ## [5.4.30] - 2026-09-11 (把最后两处开着的也收口: hl_p24-1 的 0x01 → ≥, Word 也只用 Word)
 
 回应"确保所有均已完成"。上一轮我留下两条要你点头的, 这一轮都关掉 —— 现在**守卫测试的豁免清单
