@@ -48,6 +48,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.30] - 2026-09-11 (把最后两处开着的也收口: hl_p24-1 的 0x01 → ≥, Word 也只用 Word)
+
+回应"确保所有均已完成"。上一轮我留下两条要你点头的, 这一轮都关掉 —— 现在**守卫测试的豁免清单
+已为空**, 规则没有例外了。
+
+### Fixed
+
+- **`hl_v3_final/examples/hl_p24-1.py`(及技能包镜像 `hl_pnx_examples/hl_p24-1.py`)3 处 0x01 → `≥`**。
+  那 3 处就在 P24-1 的高危分层应证句里("LDH ?2 times the ULN"、"rUPCR ?1 mg/mg"、
+  "proteinuria (?1 mg/mg ...)"), 语义只能是 `≥`。
+  这不是对交付内容的臆测改写: 该脚本是**可复现脚本**, 用途正是拿这几句去真实交付 PDF
+  (`step3_pdf下载_106目录/P24-1_main.pdf`) 里 `locate_sentence` 定位后重新高亮 ——
+  含控制字符的句子没法与 PDF 里的 `≥` 逐字对齐; 改成 `≥` 后该例才真正可复现。
+  校验: 两个文件各 3 个 `≥`、零控制字符; 全仓重扫确认**再无任何文件含控制字符**。
+
+### Changed — Word 也适用同一条保真标准 (最后一条豁免收掉)
+
+- **`scripts/unified_render_engine.py::render_docx_to_images()`** 由"三策略"改为**只走 Microsoft Word**:
+  Windows 用 Word COM 导出 PDF(`wdFormatPDF`), macOS 用原生 Word AppleScript; 新增
+  `_docx_to_pdf_com()` / `_docx_to_pdf_macos()` 两个私有实现。
+  删掉的两条兜底**都会改版式**:
+    1. LibreOffice headless 转 PDF —— 换了个排版引擎;
+    2. python-docx 抽段落拼一张"简易 PDF" —— 版式与原文档完全不同, 比前者更不准。
+  拿不到 Word 就**直接失败**并说明原因(顺带删掉因此不再使用的 `from pathlib import Path`)。
+  返回的 `engine` 标签由 `Word/LibreOffice` 改为 `Microsoft Word`。
+- **`TestRenderFidelity.ALLOWED` 清空** —— 原先给 Word 路径留的那条豁免不再需要;
+  "僵尸条目"检查会保证它不会被悄悄留着。
+- 文档同步: `docs/ppt-render-fidelity.md` §3 增 Word 行与说明; `.trae/rules/project_rules.md` 规则 5 增 Word 条。
+
+### 测试
+
+- `test_pipeline_ha.py` 新增 `test_10_docx_render_is_word_only`: 假装本机装了 LibreOffice,
+  断言 `render_docx_to_images()` **连碰都不碰外部转换器**、返回空并说明缺的是 Microsoft Word;
+  另断言源码里不再有 `from docx import`。→ 8 过 3 跳过。
+- 上一轮新增的两条源码卫生不变量, 这一轮各抓到一次**我自己的问题**, 都按它们的要求改了:
+  ① 例外清单因文件已修好而变成僵尸条目 → 清空; ② 我把 `--convert-to` 字面量写进了 docstring
+  被 lint 命中 → 改写措辞。(这正是设不变量的意义: 它对新写的代码同样生效。)
+- `make test-py` 73 + 24 / `test_tma_pipeline` 109 / `test_pipeline_ha` 8 过 3 跳过 /
+  `gofmt` / `go vet` / `go test ./...`(24 包) / 镜像 `--check` 全部通过。
+
+### 仍未完成 (只剩这三项 —— 都必须你出手)
+
+1. **Graph 凭据**未提供 → Graph 通道从未真连过微软服务(14 项测试全是 mock HTTP)。
+   自检命令: `python3 scripts/hl_v3_final/graph_render.py --check`。
+2. **macOS PowerPoint 自动化仍不可用**(`save … as PDF` → AppleEvent -1712), 属环境问题:
+   需人工打开 PowerPoint 关掉模态对话框, 并在 系统设置 › 隐私与安全性 › 自动化 里放行。
+3. **3 篇文献待你提供原文**: P12-3(UpToDate 占位) / P13-1(焦扬) / P31-6(AANEM 摘要)。
+
+另有两条**历史遗留**保持原样 —— 不是"未修", 而是**明确不改**: 若干 Windows 时代脚本仍以
+`C:\Users\via54\Desktop\TMA_test` 作为 `TMA_PROJECT` 的默认值(有环境变量兜底);
+多处脚本仍引用旧目录名 `_2_pdfs` / `_3_highlight_semantic_v14*`。改它们会改变这些脚本的既有
+行为, 而我没有它们的目标位置 —— 需要时再说。
+
 ## [5.4.29] - 2026-09-11 (复核发现: 一处外机路径被写坏成控制字符 + 新增"源码卫生"不变量)
 
 回应"确保所有修正都已完成"做的全面复核。**复核本身又抓出一处同类缺陷**(与 v5.4.20 修掉的
