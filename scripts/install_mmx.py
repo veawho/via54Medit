@@ -53,7 +53,6 @@ def verify_and_configure():
         else:
             print("  ✗ 安装失败: %s" % detail)
 
-    api_key = os.environ.get("MINIMAX_API_KEY", "")
     print("==========================================")
     print(" via54Medit Vision 引擎部署状态")
     print(" 私有前缀(装不动全局时的兜底): %s" % ds.NODE_PREFIX)
@@ -68,14 +67,19 @@ def verify_and_configure():
             print(" 提示: npm 上最新版为 %s, 升级: npm install -g mmx-cli" % up[1].strip().splitlines()[0])
     else:
         print(" mmx-cli: ✗ 仍需处理 —— npm install -g mmx-cli")
-    if api_key:
-        print(" MINIMAX_API_KEY: 已配置 (长度 %d)" % len(api_key))
-    else:
-        print(" MINIMAX_API_KEY: ✗ 未检测到 —— 部署脚本无法代填, 请自行配置:")
-        print("   export MINIMAX_API_KEY='...'")
-        print("   export MINIMAX_GROUP_ID='...(如适用)'")
+
+    # 凭据**只认 mmx 自己的状态**。以前这里读 MINIMAX_API_KEY, 是接错了对象:
+    # mmx 用 `mmx auth login` 把凭据写进 ~/.mmx/config.json, 与那个环境变量是两套;
+    # 照环境变量下结论会同时产生假警报(已认证却报"调用会失败")与假就绪(配了环境变量
+    # 但没登录, 报"已配置"而实际 401)。
+    auth_ok, auth_detail = ds._probe_mmx_auth()
+    print(" 凭据    : %s %s" % ("✓" if auth_ok else "✗", auth_detail))
+    if not auth_ok:
+        print(" 补法    : export MINIMAX_API_KEY=... 后重跑本脚本(部署流程会代登),")
+        print("           或交互式执行 `mmx auth login`(OAuth)")
+    print(" 复检    : python3 scripts/deploy_scan.py --verify-mmx")
     print("==========================================")
-    return installed
+    return installed and auth_ok
 
 
 if __name__ == "__main__":

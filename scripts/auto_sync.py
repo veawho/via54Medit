@@ -311,6 +311,38 @@ def pull_and_rebuild():
                 level="warning",
             )
 
+    # 3d. 视觉/OCR 通道复检。
+    #     放在拉取+重建之后的理由与上面那条一样: 代码刚变过。而"装上了"与"能跑"是两件事 ——
+    #     OCR 只 import 成功会被报成就绪, 但权重没下时首次调用会在业务路径上突然联网;
+    #     mmx 只装了二进制也会被报成就绪, 但没认证时调用直接 401。两者都不会让测试变红。
+    log("[auto_sync] 校验视觉/OCR 通道真能出结果 (deploy_scan.py --verify-ocr / --verify-mmx)...")
+    vis_script = REPO_DIR / "scripts" / "deploy_scan.py"
+    if not vis_script.exists():
+        log("  ~ 未找到 scripts/deploy_scan.py, 跳过视觉/OCR 复检")
+    else:
+        for flag, label in (("--verify-ocr", "OCR 真识别"),
+                            ("--verify-mmx", "mmx-cli")):
+            ok, out, err = run_cmd([sys.executable, str(vis_script), flag])
+            if ok:
+                log("  ✓ %s 正常" % label)
+                continue
+            detail = [ln.strip() for ln in (err or out).splitlines() if ln.strip()]
+            log("  ✗ %s 未通过: %s" % (label, detail[-1] if detail else "(无输出)"))
+            if label.startswith("OCR"):
+                notify(
+                    "定时同步巡检: OCR 真识别未通过",
+                    [
+                        f"**仓库**：`{REPO_DIR}`",
+                        "**后果**：纯图片页无法识别, 且失败点在 L2 那一步 —— "
+                        "而部署报告仍写着「已就绪」。",
+                        "**排查**：`python3 scripts/deploy_scan.py --verify-ocr`",
+                        "**补法**：`python3 scripts/deploy_scan.py --only ocr_models`"
+                        "（权重预热）或 `--only ocr`（重装带版本约束的包）",
+                    ],
+                    key="autosync-ocr-verify-failed",
+                    level="warning",
+                )
+
     # 4. 结论: 只有「构建没成功」才算部署未更新; 拉取问题单独表述, 不掩盖也不冒领
     if not build_ok:
         log("[auto_sync] ✗ 同步未完成: Go 二进制构建失败, 本地部署仍停留在旧版本。")

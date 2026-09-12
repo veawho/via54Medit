@@ -621,15 +621,19 @@ def _probe_office(app):
 
 
 def _probe_mmx():
-    path = _which("mmx") or _which("mmx-cli")
+    """mmx-cli 可执行文件本身是否可用。
+
+    **只判"二进制能用", 不判凭据** —— 凭据是另一件独立的事, 由 ``_probe_mmx_auth()``
+    按 mmx 自己的状态回答。旧版在这里用 ``MINIMAX_API_KEY`` 下结论, 结果既会误报
+    ("缺 key, 调用会失败" —— 而 mmx 早已认证且真能调通), 也会漏报。一件事一个人管。
+    """
+    path = _mmx_bin()
     if not path:
         return False, "未安装 (npm 包 mmx-cli)"
     ok, out = _run([path, "--version"], timeout=60)
     ver = out.splitlines()[0].strip() if ok and out else "版本未知"
     if not ok:
         return False, "%s 存在但执行失败(不该发生): %s" % (path, ver)
-    if not os.environ.get("MINIMAX_API_KEY"):
-        return True, "%s (缺 MINIMAX_API_KEY, 调用会失败)" % ver
     return True, ver
 
 
@@ -639,6 +643,10 @@ def _probe_ocr():
     这里刻意不加线程上界 —— paddle 首次导入会做编译/初始化, 被掐断只会得到假阴性
     (实测: 同一台机器两次运行一次 missing 一次 ok)。失败时把异常原因带出来,
     因为"socket 里没装"和"装了但 ABI 不匹配"需要完全不同的处置。
+
+    注意: "两个包都能导入"**只是入场券, 不是就绪**。真正能不能识别由
+    ``ocr_smoke_test()`` 回答, 权重是否已落地由 ``_probe_ocr_models()`` 回答 ——
+    只 import 成功就报"已就绪", 正是"装好了却跑不起来"的假就绪来源。
     """
     bad = []
     for mod in ("paddleocr", "paddle"):
@@ -648,6 +656,198 @@ def _probe_ocr():
     if bad:
         return False, "; ".join(bad)
     return True, "paddleocr 与 paddle 均可导入"
+
+
+#: OCR 权重缓存目录。PaddleOCR 3.x 的 PaddleX 后端把官方模型放在这里 ——
+#: **不是** ``~/.paddleocr``(那是 2.x 时代的路径, 实测在 3.x 上是空的, 照它判断会误报)。
+#:
+#: 根目录认 ``PADDLE_PDX_CACHE_HOME``: 这是 PaddleX 自己读的变量(实测于
+#: ``paddlex/utils/cache.py``: ``CACHE_DIR = os.environ.get("PADDLE_PDX_CACHE_HOME", ~/.paddlex)``)。
+#: 用别的名字当覆盖(如 PADDLE_PDX_MODELS_HOME)是无效的 —— 探针会看一个 PaddleX
+#: 根本不写的位置, 于是永远报"权重缺失"。
+OCR_MODELS_DIR = os.path.join(
+    os.path.expanduser(os.environ.get("PADDLE_PDX_CACHE_HOME") or "~/.paddlex"),
+    "official_models")
+
+#: 一次真实识别至少要用到的模型家族: det 出检测框, rec 认字。
+#: 其余(文本行方向/文档方向/UVDoc)由 PaddleOCR 按参数自行决定, 不在这里要求。
+_OCR_MODEL_NEEDLES = ("det", "rec")
+
+#: OCR 真识别探针的默认文本。**故意只用数字与拉丁字母**: 它不依赖系统中文字体
+#: (Pillow 默认字体没有 CJK 字形, 画出来是方框, 会让探针假失败), 而 ch 模型本来
+#: 就同时认中英文字符。用环境变量可覆盖。
+OCR_SMOKE_TEXT = os.environ.get("VIA54_OCR_SMOKE_TEXT", "OCR 12345")
+
+
+def _ocr_cached_model_families():
+    """本地已缓存的 OCR 模型家族名(无则空集)。"""
+    try:
+        return {n for n in os.listdir(OCR_MODELS_DIR)
+                if os.path.isdir(os.path.join(OCR_MODELS_DIR, n))}
+    except OSError:
+        return set()
+
+
+def _probe_ocr_models():
+    """权重是否已落地 —— 便宜的文件系统检查。
+
+    它回答的是"**首次真实调用要不要联网**"这件事: 包装好了但权重没下, 业务路径上
+    第一次 OCR 会突然去下载 ~170MB; 在受限网络或离线机器上就是直接失败 ——
+    而那时离"部署完成"已经很久了, 没人会把两件事联系起来。
+
+    真正"能不能识别"由 ``ocr_smoke_test()`` 回答; 这里刻意不加载模型(那是秒级开销,
+    而本函数会被管线第 [0] 步反复调用)。
+    """
+    fams = _ocr_cached_model_families()
+    if not fams:
+        return False, "未发现本地权重 (%s 不存在或为空)" % OCR_MODELS_DIR
+    missing = [n for n in _OCR_MODEL_NEEDLES if not any(n in f for f in fams)]
+    if missing:
+        return False, "权重不全: 缺 %s (已有: %s)" % (
+            "/".join("%s 家族" % m for m in missing), ", ".join(sorted(fams)))
+    return True, "%d 个模型家族已缓存 (%s)" % (len(fams), ", ".join(sorted(fams)))
+
+
+def _smoke_font(size=64):
+    """给真识别探针找一个大到能被检测器看见的字体。找不到就退回 Pillow 默认字体。"""
+    from PIL import ImageFont
+    for p in ("/System/Library/Fonts/Supplemental/Arial.ttf",
+              "/System/Library/Fonts/Helvetica.ttc",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+              r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\arial.ttf"):
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:                               # noqa: BLE001
+                continue
+    try:
+        return ImageFont.load_default(size=size)              # Pillow >= 10.1
+    except Exception:                                       # noqa: BLE001
+        return ImageFont.load_default()
+
+
+def ocr_smoke_test(timeout=300):
+    """**真跑一次识别** —— "能 import" 不等于 "能识别"。
+
+    这是 OCR 唯一的"真就绪"判据, 同时是部署时把权重**预热**下来的动作。三层意义:
+
+    1. **权重落地**: 真跑一次才会把 det/rec 权重下到本地(实测 ~170MB)。否则首次 L2
+       调用会在业务路径上突然要联网 —— 离线/受限网络下直接失败。
+    2. **API 形状**: 这里用的是与 ``scripts/paddleocr_pdf_page.py`` **同一套**调用
+       (``PaddleOCR(use_textline_orientation=True, lang='ch').predict(...)`` →
+       ``result[0]['rec_texts']``)。所以 PaddleOCR 4.x 那种 API 变更会**在这里**
+       就暴露, 而不是等 L2 那一步才炸。
+    3. **真结果**: 断言拿到非空 ``rec_texts``。能加载模型却认不出字(如 ABI 不匹配的
+       假成功)也会被判失败。
+
+    断言只要求"识别到非空文本", 不比对具体字符串 —— OCR 把 O 认成 D 是正常的
+    (本机实测 "OCR 12345" → "DCR 12345", 置信度 0.996), 拿精确比对当门槛那是自找假红。
+
+    返回 ``(ok, detail)``, **不抛异常**。``timeout`` 只用于兜底日志, 不打断调用
+    (paddle 的加载/推理无法安全中断, 打断只会留下半初始化状态)。
+    """
+    import tempfile
+
+    tmpdir = None
+    try:
+        tmpdir = tempfile.mkdtemp(prefix="ocr_smoke_")
+        img_path = os.path.join(tmpdir, "smoke.png")
+        # 自造素材: 不依赖任何外部图片, 也不像纯色图那样可能被判成"本就没有文字"
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (520, 150), "white")
+        ImageDraw.Draw(image).text((20, 40), OCR_SMOKE_TEXT, fill="black",
+                                   font=_smoke_font())
+        image.save(img_path)
+
+        from paddleocr import PaddleOCR
+
+        ocr = PaddleOCR(use_textline_orientation=True, lang="ch")
+        result = ocr.predict(img_path)
+        first = (result or [None])[0]
+        if first is None:
+            return False, "推理返回空结果"
+        try:
+            texts = list(first["rec_texts"])
+        except Exception:                                   # noqa: BLE001
+            texts = list(getattr(first, "rec_texts", None) or [])
+        if not texts:
+            return False, "模型加载成功但没识别出任何文字(权重损坏或 ABI 不匹配)"
+        joined = "".join(str(t) for t in texts)
+        return True, "真识别通过: 识别到 %d 段文字 (%s)" % (len(texts), joined[:40])
+    except Exception as e:                                  # noqa: BLE001
+        return False, "真识别失败: %s: %s" % (type(e).__name__, str(e)[:200])
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+#: mmx-cli 保存凭据的位置。**与 MINIMAX_API_KEY 是两套东西** —— 见 _probe_mmx_auth。
+MMX_CONFIG_PATH = os.path.expanduser("~/.mmx/config.json")
+
+
+def _mmx_bin():
+    return _which("mmx") or _which("mmx-cli")
+
+
+def _probe_mmx_auth():
+    """mmx 是否**已认证** —— 判据只认 mmx 自己的状态, 不认 MINIMAX_API_KEY。
+
+    为什么必须改 (v5.4.44 实测): mmx-cli 用的是**它自己**的凭据(``mmx auth login``
+    写进 ``~/.mmx/config.json``, 也支持全局 ``--api-key`` 覆盖), 与 ``MINIMAX_API_KEY``
+    是两条互不相通的路径。旧探测把结论建在 ``MINIMAX_API_KEY`` 上, 于是本机同时出现
+    了方向相反的两个错误:
+
+    * **假警报**: 本机 ``MINIMAX_API_KEY`` 未设置, 而 ``mmx auth status`` 早就就绪且
+      真能调通(后台用量都能读到), 报告却写"缺 MINIMAX_API_KEY, 调用会失败";
+    * **假就绪(更危险)**: 有人 export 了 ``MINIMAX_API_KEY`` 但没跑过 ``mmx auth login``,
+      报告会写"已配置" —— 而 mmx 实际调用会 401。
+
+    判据: 先看 ``~/.mmx/config.json`` 里的 api_key(快、不联网、api-key 模式下的权威),
+    再看 ``mmx auth status --output json``(覆盖 OAuth 模式; 实测 0.09s)。
+    """
+    if not _mmx_bin():
+        return False, "未安装 mmx-cli —— 认证无从谈起"
+    try:
+        with open(MMX_CONFIG_PATH, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        if isinstance(cfg, dict) and str(cfg.get("api_key") or "").strip():
+            return True, "已认证 (api-key, 来源 %s)" % MMX_CONFIG_PATH
+    except (OSError, ValueError):
+        pass
+    path = _mmx_bin()
+    ok, out = _run([path, "--output", "json", "auth", "status"], timeout=60)
+    if ok and out:
+        try:
+            data = json.loads(out[out.index("{"):])
+        except (ValueError, IndexError):
+            data = {}
+        if isinstance(data, dict) and (data.get("key") or data.get("method")):
+            return True, "已认证 (%s, 来源 %s)" % (
+                data.get("method", "?"), data.get("source", "?"))
+    return False, "未认证 —— `mmx auth login --api-key <key>` 或 `mmx auth login` (OAuth)"
+
+
+def mmx_auth_login(api_key=None):
+    """用凭据把 mmx 登录上。返回 ``(ok, detail)``。
+
+    唯一的自动通道是环境里的 ``MINIMAX_API_KEY``: mmx 的凭据必须**由人提供**,
+    部署脚本不能凭空造一个。没有 key 时如实返回失败并给出人工步骤, 而不是假装完成。
+    """
+    path = _mmx_bin()
+    if not path:
+        return False, "未安装 mmx-cli"
+    key = (api_key or os.environ.get("MINIMAX_API_KEY") or "").strip()
+    if not key:
+        return False, ("没有可用凭据: 设置 MINIMAX_API_KEY 后重跑, 或交互式执行 "
+                       "`mmx auth login`(OAuth)")
+    cmd = [path, "auth", "login", "--api-key", key]
+    ok, out = _run(cmd, timeout=120)
+    _note_channel("env", "mmx auth login --api-key ***")
+    if not ok:
+        return False, "mmx auth login 失败: %s" % ((out or "").strip()[:200] or "无输出")
+    return True, "已用 MINIMAX_API_KEY 完成 mmx 登录"
 
 
 def _probe_browser():
@@ -672,6 +872,13 @@ def _probe_browser():
             return True, p
     return False, "未找到 Chrome/Edge/Chromium"
 
+
+#: OCR 的 pip 包与**版本约束**。
+#:
+#: 为什么要约束: 管线调的是 PaddleOCR 3.x 的 API(见 ``ocr_smoke_test``), 不约束就会有
+#: 一天静默装上 2.x/4.x —— 而"装上"与"能跑"是两件事, 后者只会在 L2 那一步才炸。
+#: 上界与下界都给: 4.x 尚未验证, 2.x 的 API 形状不同。
+_OCR_PKGS = ["paddleocr>=3.0,<4", "paddlepaddle>=3.0,<4"]
 
 #: 平台 -> 系统工具包名。集中一处, 免得每个能力各写一份、慢慢走样。
 _NODE_PKGS = {"brew": "node", "apt-get": "nodejs", "dnf": "nodejs", "yum": "nodejs",
@@ -723,10 +930,24 @@ def build_matrix(include_heavy=True):
         caps.append(Cap(
             "ocr", "PaddleOCR (L2 中文 OCR)", ALL, "python", required=True, heavy=True,
             probe=_probe_ocr,
-            install=lambda: pip_install(["paddleocr", "paddlepaddle"]),
-            plan=lambda: " ".join(pip_cmd(["paddleocr", "paddlepaddle"])) + "   (数百 MB)",
-            hint="pip install paddleocr paddlepaddle  (数百 MB; 加 --skip-heavy 可跳过)",
+            # 版本**必须带约束**: 管线用的是 PaddleOCR 3.x 的 API
+            # (`PaddleOCR(use_textline_orientation=True, lang='ch').predict()` →
+            #  `result[0]['rec_texts']`)。不约束就会在某天静默装上 4.x/2.x,
+            # 而"装上了"和"能跑"是两件事。本机实测可用组合: paddleocr 3.7.0 + paddle 3.3.1。
+            install=lambda: pip_install(_OCR_PKGS),
+            plan=lambda: " ".join(pip_cmd(_OCR_PKGS)) + "   (数百 MB)",
+            hint="pip install %s  (数百 MB; 加 --skip-heavy 可跳过)" % " ".join(_OCR_PKGS),
             why="l3_vision_verify 的 L2 中文/图片识别腿; 缺它则纯图片页无法识别"))
+        caps.append(Cap(
+            "ocr_models", "PaddleOCR 权重 (真识别预热)", ALL, "python",
+            required=True, heavy=True,
+            probe=_probe_ocr_models,
+            install=ocr_smoke_test,
+            plan="跑一次真识别, 把 det/rec 权重下到 %s (~170MB)" % OCR_MODELS_DIR,
+            hint="权重缺失时首次 OCR 会在业务路径上突然联网下载; "
+                 "受限网络下直接失败。补齐: python3 scripts/deploy_scan.py --only ocr_models",
+            why="包装好了但权重没下 = 首次真实调用要联网; 离线/受限网络下必然失败, "
+                "而且失败点离「部署完成」很远, 没人会把两件事联系起来"))
     caps += [
         Cap("pywin32", "pywin32 (Office COM)", (WINDOWS,), "python", required=True,
             probe=lambda: _import_probe("win32com"),
@@ -753,11 +974,15 @@ def build_matrix(include_heavy=True):
             plan=lambda: " ".join(npm_cmd("mmx-cli")) + "   (失败会自动退回私有前缀 %s)" % NODE_PREFIX,
             hint="npm install -g mmx-cli  (注意: **不是** pip install —— PyPI 上没有这个包)",
             why="VISION_PROVIDER=mmx 的默认实现; 缺它则 L3 视觉校验不可用"),
-        Cap("mmx_key", "MINIMAX_API_KEY", ALL, "env", required=False, gate=False,
-            probe=lambda: (bool(os.environ.get("MINIMAX_API_KEY")),
-                           "已配置" if os.environ.get("MINIMAX_API_KEY") else "未配置"),
-            hint="export MINIMAX_API_KEY=... (写进 ~/.zshrc / 系统环境变量)",
-            why="mmx 视觉调用需要凭据; 无法由部署脚本代填"),
+        Cap("mmx_auth", "mmx 凭据 (已认证)", ALL, "env", required=False, gate=False,
+            probe=_probe_mmx_auth,
+            # 有 MINIMAX_API_KEY 时可自动登录; 没有就只能人工(脚本不能凭空造凭据)。
+            install=mmx_auth_login,
+            plan="mmx auth login --api-key $MINIMAX_API_KEY  (没有该环境变量时需人工)",
+            hint="`mmx auth login`(OAuth) 或 `mmx auth login --api-key <key>`; "
+                 "或先 export MINIMAX_API_KEY 再重跑本脚本由部署流程代登",
+            why="mmx 用的是**它自己的**凭据(~/.mmx/config.json), 与 MINIMAX_API_KEY 是两套; "
+                "未认证时视觉调用会 401 —— 而这在「二进制已安装」的报告里看不出来"),
         Cap("powerpoint", "桌面版 PowerPoint (PPT 版式渲染)",
             (WINDOWS, MACOS), "office", gate=False,
             probe=_probe_office("powerpoint"),
@@ -1235,13 +1460,15 @@ _USAGE = """用法: deploy_scan.py [选项]
   --stage S         只跑一个阶段: env | deps | compat | all
   --verify-platform CI 用: 只校验"平台分类是否与宿主一致"
   --verify-llm      只校验"接入了哪些 LLM + token 消耗能不能读到"(部署/更新后强制跑)
+  --verify-ocr      只校验"PaddleOCR 真能识别"(真跑一次识别, 顺带预热权重)
+  --verify-mmx      只校验"mmx-cli 可用 + 已认证"(两件事分开报)
   --llm-live        配合 --verify-llm: 联网探测凭据可达性与 mmx 账户级用量
   --no-verify-llm   跳过 LLM 接入校验(仅用于确实无法验证的环境)
   --help            显示本帮助
 
 环境变量: VIA54_DRY_RUN / VIA54_ONLY / VIA54_SKIP_HEAVY / VIA54_STRICT /
           VIA54_JSON / VIA54_STAGE / VIA54_HOME / VIA54_ALLOW_BREAK_SYSTEM /
-          VIA54_LLM_LIVE / VIA54_SKIP_LLM_VERIFY
+          VIA54_LLM_LIVE / VIA54_SKIP_LLM_VERIFY / VIA54_OCR_SMOKE_TEXT
 退出码: 0=就绪  1=仍有必需缺口  2=用法错误"""
 
 
@@ -1322,6 +1549,28 @@ def main(argv):
                 for p in problems:
                     print("  ✗ %s" % p)
         return EXIT_OK if ok else EXIT_GAP
+
+    if "--verify-ocr" in argv:
+        # 部署后 / 真机复检用: 真跑一次识别。这是"OCR 到底能不能用"的**唯一强证据**,
+        # 也正是把 det/rec 权重预热下来的动作(见 ocr_smoke_test)。
+        ok, detail = ocr_smoke_test()
+        print("OCR 真识别自检 %s: %s" % ("OK" if ok else "失败", detail))
+        return EXIT_OK if ok else EXIT_GAP
+
+    if "--verify-mmx" in argv:
+        # mmx 由**两件独立的事**组成, 分开报 —— 因为修法完全不同:
+        #   二进制不可用 -> 重装(npm); 未认证 -> 提供凭据(人工, 脚本造不出来)。
+        bin_ok, bin_detail = _probe_mmx()
+        auth_ok, auth_detail = _probe_mmx_auth()
+        print("mmx-cli : %s %s" % ("✓" if bin_ok else "✗", bin_detail))
+        print("凭据    : %s %s" % ("✓" if auth_ok else "✗", auth_detail))
+        if not auth_ok:
+            print("  补法  : export MINIMAX_API_KEY=... 后重跑 "
+                  "`python3 scripts/deploy_scan.py --only mmx_auth`")
+            print("          或交互式 `mmx auth login`(OAuth)")
+        # 退出码只跟二进制走: 凭据必须由人提供, 把它算成"部署失败"会让部署永远无法成功
+        # (这与能力矩阵里 mmx_auth 的 gate=False 是同一条判断)。
+        return EXIT_OK if bin_ok else EXIT_GAP
 
     return run(install=install, include_heavy=include_heavy, strict=strict,
                as_json=as_json, dry_run=dry_run, only=only, stage=stage,

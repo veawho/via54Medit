@@ -48,6 +48,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.44] - 2026-09-12 (OCR 与 mmx-cli 的部署集成: 部署阶段自动检测 + 未部署自动部署 + 真跑一次才算就绪)
+
+回应"我需要将 OCR 的部署方式、mmx-cli 的部署方式集成到 via54Medit 中，并确保可以在部署阶段
+就能自动检测是否已部署，如果未部署则自动部署"。
+
+两者此前已在能力矩阵里有探测与安装通道(v5.4.34/36), 但**探测本身会给出假就绪**。这一轮把
+"就绪"的定义落到**真实可用性**上, 并补上两处会让隐患漂很久的缺口。
+
+### 一、OCR: "能 import" ≠ "能识别"(两处缺口)
+
+| 缺口 | 后果 |
+| --- | --- |
+| 探测只做 `import paddleocr; import paddle` | 权重没下也算就绪。首次真实调用会去联网下 ~170MB, 离线/受限网络下**必然失败** —— 而失败点在 L2 那一步, 离"部署完成"已经很远, 没人会把两件事联系起来 |
+| 安装不带版本约束 (`pip install paddleocr paddlepaddle`) | 某天会静默装上 2.x/4.x。管线调的是 PaddleOCR **3.x** 的 API(`use_textline_orientation` + `.predict()` + `result[0]['rec_texts']`), 而"装上了"与"能跑"是两件事 |
+
+修法:
+
+* **新增能力 `ocr_models`**(权重就位): 探测 = 权重是否已落地(**便宜的文件系统检查**, 只有
+  `det`/`rec` 两个家族都在才算齐); 安装 = **预热**, 即真跑一次识别把权重下下来。
+  `PaddleOCR 3.x` 的权重在 `$PADDLE_PDX_CACHE_HOME/official_models`(**不是** `~/.paddleocr` ——
+  那是 2.x 的路径, 3.x 上是空的, 照它判断会误报)。
+* **新增 `--verify-ocr`**: 真跑一次识别并断言拿到非空 `rec_texts`。这是"OCR 到底能不能用"的
+  **唯一强证据**, 也是权重预热动作本身(单一实现 `ocr_smoke_test()`)。
+  断言只要求"识别到非空文本", 不比对具体字符串 —— 实测 "OCR 12345" 会被认成 "DCR 12345"
+  (置信度 0.996), 拿精确比对当门槛是自找假红。样本文字可用 `VIA54_OCR_SMOKE_TEXT` 覆盖。
+* **安装带约束**: `paddleocr>=3.0,<4` / `paddlepaddle>=3.0,<4`(实测可用组合 3.7.0 + 3.3.1)。
+
+### 二、mmx-cli: 凭据探测**接错了对象**(这是更严重的一处)
+
+mmx-cli 用的是**它自己**的凭据(`mmx auth login` 写进 `~/.mmx/config.json`, 也支持全局
+`--api-key` 覆盖), 与 `MINIMAX_API_KEY` 是两条互不相通的路径。旧探测把结论建在环境变量上,
+于是在本机同时出现方向相反的**两个错误**:
+
+* **假警报**: 本机 `MINIMAX_API_KEY` 未设置, 而 `mmx auth status` 早已就绪、真能调通
+  (后台用量都能读到), 报告却写"缺 MINIMAX_API_KEY, 调用会失败";
+* **假就绪(更危险)**: export 了 `MINIMAX_API_KEY` 但没跑过 `mmx auth login` 时, 报告写
+  "已配置" —— 而 mmx 实际调用会 401。这在"二进制已安装"的报告里完全看不出来。
+
+修法:
+
+* `_probe_mmx()` 只判**二进制可用**(一件事一个人管), 不再对凭据下任何结论。
+* 新增 `_probe_mmx_auth()`: 判据是 `~/.mmx/config.json` 里的 api_key(快、不联网、api-key
+  模式下的权威), 其次 `mmx auth status --output json`(覆盖 OAuth 模式; 实测 0.09s)。
+* 新增能力 `mmx_auth`(**替换**原来的 `mmx_key`): 有 `MINIMAX_API_KEY` 时部署流程可
+  **代登**(`mmx auth login --api-key`); 没有则如实报"需人工", `gate=False` —— 凭据必须由人
+  提供, 把它算成部署失败会让部署永远无法成功。
+* 新增 `--verify-mmx`: 二进制与认证**分开报**(修法完全不同), 退出码**只跟二进制走**。
+* `install_mmx.py` 同步改掉那段"看环境变量下结论"的输出。
+* 顺手实测到 mmx 的自我更新通道 `mmx update` 与 `mmx quota show`(账户级用量)。
+
+### 三、部署 / 更新阶段自动检测 + 自动部署(已有的通道, 现在覆盖到新缺口)
+
+* `bootstrap_device.py`: 新增第 4 步 —— 跑 `--verify-ocr` 与 `--verify-mmx`; **凭据缺失只记警告**,
+  不算失败(与 `gate=False` 同一条判断)。步骤号顺延到 6 步。
+* `auto_sync.py`: 拉取+重建**之后**新增视觉/OCR 复检(与 v5.4.42 加的 LLM 复检同处), 失败发告警。
+* `deps_auto.ensure_env()`(管线第 [0] 步)与 `medit doctor --fix` **自动继承**新能力 —— 它们读的
+  就是同一份能力矩阵, 不需要再改。
+* `--only ocr_models` 可单独补齐权重; 矩阵默认按平台自动探测并只在缺失时安装, 可反复运行。
+
+### 四、实测(不是"看起来对")
+
+* **空缓存端到端**: `PADDLE_PDX_CACHE_HOME` 指向空目录 → `--only ocr_models` → 报告
+  "本次补齐 1 · 复验未过 0", 该目录随即出现 5 个模型家族 / **177MB**, 退出码 0。
+* **检测灵敏度**: 同一个空目录跑 `--check` → `✗ PaddleOCR 权重(真识别预热) 未发现本地权重`。
+* **真识别**: `--verify-ocr` → `真识别通过: 识别到 1 段文字 (DCR 12345)`。
+* **mmx**: `--verify-mmx` → `mmx-cli : ✓ mmx 1.0.19` / `凭据 : ✓ 已认证 (api-key, 来源
+  ~/.mmx/config.json)` —— 这正是旧探测会误报的那台机器。
+
+### Tests
+- `scripts/test_deploy_scan.py`: 78 → **90**(新增 `TestVisionToolchainDetection` 10 条 +
+  OCR 版本约束 1 条): 权重齐/缺/半成品三态、mmx 凭据只认自己的状态(**双向**回归: 有环境变量
+  但未登录 → 未认证; 无环境变量但已登录 → 已认证)、OAuth 模式回退 CLI、二进制探测不再判凭据、
+  `mmx_auth` 替换 `mmx_key` 且不门禁、无凭据时如实失败且不调用 CLI、部署器与更新器都接入了复检。
+- 更新 1 条把"未带版本约束的安装"当契约的旧测试。
+- 反向验证: 空缓存目录确实被报成缺失, 且预热后确实齐备 —— 检测与补齐都真跑过。
+
 ## [5.4.43] - 2026-09-12 (飞书多维表格统计列没有对齐最新统计项 —— 补齐 8 列 + 定下对齐契约)
 
 回应"飞书多维表格统计列没有对齐最新的统计数据项"。

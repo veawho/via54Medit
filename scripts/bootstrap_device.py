@@ -5,7 +5,7 @@
 
     python3 scripts/bootstrap_device.py
 
-它做五件事:
+它做六件事:
   1. **深度扫描本机环境 + 按平台补齐缺口** —— 交给 scripts/deploy_scan.py:
      只装"与本平台相关且确实缺失"的能力, 并按正确通道装
      (Python 包走 pip、mmx-cli 走 npm、系统工具走 brew/apt/winget/choco/scoop)。
@@ -13,10 +13,14 @@
      分阶段跑(``--stage env|deps|compat``), 这样进度是可见的, 而不是等一大坨输出。
   2. **渲染通道真出图自检** —— 交给 scripts/render_doctor.py: "探测到"不等于"能出图"。
   3. **构建 Go 二进制**(有 go 工具链时)。
-  4. **强制校验 LLM 接入与 token 用量可读性** —— 交给 ``deploy_scan.py --verify-llm``:
+  4. **校验视觉/OCR 通道真能出结果** —— 交给 ``deploy_scan.py --verify-ocr`` 与
+     ``--verify-mmx``。**不是**"看到文件在": OCR 只 import 成功会被报成就绪, 但权重没下时
+     首次调用会突然联网; mmx 只装了二进制也会被报成就绪, 但没认证时调用直接 401。
+     所以这里真跑一次识别(凭据缺失只记警告 —— 凭据得由人给)。
+  5. **强制校验 LLM 接入与 token 用量可读性** —— 交给 ``deploy_scan.py --verify-llm``:
      接入了哪些 LLM、它们的 token 消耗能不能真的读进库。记账是旁路, 少了不会报错,
      所以这一步不能靠"记得去看"; 校验失败时本脚本以非 0 退出。
-  5. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
+  6. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
 
 本脚本**幂等**: 重复运行、或在版本更新后运行, 都只会补上当时缺的东西。
 
@@ -142,6 +146,53 @@ def step_build_go():
         print("  ⚠️ 编译未成功: %s %s" % (err1 or "", err2 or ""))
 
 
+def step_verify_vision():
+    """校验**视觉/OCR 两条通道真能出结果** —— 不是"看到文件在"。
+
+    为什么必须真跑一次: "装上了"与"能跑"是两件事, 而这个差别在报告里看不出来。
+    OCR 只有 import 成功会被报成就绪, 但权重没下时首次调用会在业务路径上突然联网
+    (离线/受限网络直接失败); mmx 只有二进制存在也会被报成就绪, 但没认证时调用直接 401。
+    所以这里跑的是 ``deploy_scan.py --verify-ocr``(真识别一次) 与 ``--verify-mmx``
+    (二进制 + 认证分开判)。
+
+    返回 ``(ok, warnings)``: **凭据缺失只记警告**, 不算失败 —— 凭据必须由人提供,
+    把它算成部署失败会让部署永远无法成功(与矩阵里 mmx_auth 的 gate=False 同一条判断)。
+    """
+    step_print("4. 校验视觉/OCR 通道真能出结果 (deploy_scan.py --verify-ocr / --verify-mmx)")
+    script = SCRIPTS / "deploy_scan.py"
+    if not script.exists():
+        print("  ✗ 未找到 scripts/deploy_scan.py")
+        return False, []
+
+    warnings = []
+    ocr = subprocess.run([sys.executable, str(script), "--verify-ocr"], cwd=str(REPO_DIR))
+    if ocr.returncode == 0:
+        print("  ✓ OCR 真识别通过 (权重已就绪, 首次业务调用不需联网)")
+    else:
+        print("  ✗ OCR 真识别未通过 —— 后果: 纯图片页无法识别, 且失败点在 L2 那一步。")
+        print("     排查: python3 scripts/deploy_scan.py --verify-ocr")
+
+    mmx = subprocess.run([sys.executable, str(script), "--verify-mmx"], cwd=str(REPO_DIR))
+    if mmx.returncode != 0:
+        print("  ✗ mmx-cli 不可用 —— 后果: VISION_PROVIDER=mmx 的视觉校验全失败。")
+        print("     补法: npm install -g mmx-cli")
+
+    # 凭据单独再判一次: --verify-mmx 的退出码**故意**不反映它(凭据必须由人提供,
+    # 把它算成部署失败会让部署永远无法成功)。这里只降级成警告。
+    from_deploy_scan = (
+        "import sys; sys.path.insert(0, {p!r}); import deploy_scan as d;"
+        " ok, detail = d._probe_mmx_auth();"
+        " print('' if ok else detail);"          # 成功时 --verify-mmx 已报过
+        " sys.exit(0 if ok else 1)".format(p=str(SCRIPTS)))
+    auth = subprocess.run([sys.executable, "-c", from_deploy_scan], cwd=str(REPO_DIR))
+    if auth.returncode != 0:
+        warnings.append("mmx 未认证")
+        print("  ⚠️ mmx 未认证 —— 视觉调用会 401。补法: export MINIMAX_API_KEY=... 后重跑, "
+              "或交互式 `mmx auth login`")
+
+    return (ocr.returncode == 0 and mmx.returncode == 0), warnings
+
+
 def step_verify_llm():
     """**强制**校验接入了哪些 LLM, 以及它们的 token 消耗真能读进库。
 
@@ -150,7 +201,7 @@ def step_verify_llm():
     却从不写库; Go 侧 ``internal/foundation/llm.go`` 整个丢弃 usage), 都不会让任何
     测试变红。所以部署/更新后必须主动验一次, 且失败要能被看见。
     """
-    step_print("4. 校验 LLM 接入与 Token 用量可读性 (deploy_scan.py --verify-llm)")
+    step_print("5. 校验 LLM 接入与 Token 用量可读性 (deploy_scan.py --verify-llm)")
     script = SCRIPTS / "deploy_scan.py"
     if not script.exists():
         print("  ✗ 未找到 scripts/deploy_scan.py")
@@ -166,7 +217,7 @@ def step_verify_llm():
 
 
 def step_periodic_sync():
-    step_print("5. 注册自动更新 (定时从 GitHub 拉取)")
+    step_print("6. 注册自动更新 (定时从 GitHub 拉取)")
     script = SCRIPTS / "auto_sync.py"
     if not script.exists():
         print("  ✗ 未找到 auto_sync.py")
@@ -207,25 +258,31 @@ def main():
     step_build_go()
     # LLM 记账校验必须发生在"动过代码之后"(build_go 之后), 且**不可跳过** ——
     # 除非显式给 --no-verify-llm(给确实无法验证的环境留一条明路, 但会记进结论)。
+    vision_ok, vision_warnings = step_verify_vision()
     llm_ok = True
     if "--no-verify-llm" in argv:
-        print("\n4. LLM 接入校验: 已按 --no-verify-llm 跳过")
+        print("\n5. LLM 接入校验: 已按 --no-verify-llm 跳过")
     else:
         llm_ok = step_verify_llm()
     step_periodic_sync()
 
-    ready = scan_ok and llm_ok
+    ready = scan_ok and llm_ok and vision_ok
     print("\n======================================================")
     print(" 初始化完成%s" % ("" if ready else "(仍有缺口, 见上)"))
+    if not vision_ok:
+        print(" ⚠️ 视觉/OCR 通道校验未通过: 图片页识别或视觉校验会失败。")
     if not llm_ok:
         print(" ⚠️ LLM 接入校验未通过: token 统计会缺一块, 而这些调用不会报任何错。")
+    for w in vision_warnings:
+        print(" ⚠️ %s" % w)
     print(" 默认配置:")
     print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx, 经 npm 安装)")
     print("   • PPT Engine   : 桌面版 Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
-    print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装)")
+    print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装 + 权重预热)")
     print("   • Auto-Sync    : 已按平台注册系统定时任务")
     print(" 复检任意时刻: python3 scripts/deploy_scan.py --check")
     print(" 复检 LLM 记账: python3 scripts/deploy_scan.py --verify-llm")
+    print(" 复检 OCR/mmx : python3 scripts/deploy_scan.py --verify-ocr / --verify-mmx")
     print(" 预演将要做什么: python3 scripts/bootstrap_device.py --dry-run")
     print("======================================================")
     return 0 if ready else 1

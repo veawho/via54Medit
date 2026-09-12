@@ -198,6 +198,29 @@ class TestInstallOnlyMissing(unittest.TestCase):
 class TestInstallChannels(unittest.TestCase):
     """按正确通道安装: mmx-cli 走 npm(不是 PyPI), Python 包走 pip。"""
 
+    def test_ocr_installs_paddle_via_pip(self):
+        cap = [c for c in ds.build_matrix() if c.key == "ocr"][0]
+        with mock.patch.object(ds, "pip_install", return_value=(True, "ok")) as pip:
+            cap.install()
+        args = pip.call_args[0][0]
+        self.assertTrue(any(a.startswith("paddleocr") for a in args), args)
+        self.assertTrue(any(a.startswith("paddlepaddle") for a in args), args)
+
+    def test_ocr_packages_carry_a_version_constraint(self):
+        """OCR 包必须带版本约束。
+
+        管线调的是 PaddleOCR **3.x** 的 API(``use_textline_orientation`` + ``.predict()``
+        + ``result[0]['rec_texts']``)。不约束就会有一天静默装上 2.x/4.x —— 而"装上了"
+        与"能跑"是两件事, 后者只会在 L2 那一步才炸。
+        """
+        for spec in ds._OCR_PKGS:
+            self.assertRegex(spec, r"^paddle(ocr|paddle)>=3,?.*<4",
+                             "OCR 包缺版本约束: %s" % spec)
+        cap = [c for c in ds.build_matrix() if c.key == "ocr"][0]
+        with mock.patch.object(ds, "pip_install", return_value=(True, "ok")) as pip:
+            cap.install()
+        self.assertEqual(list(pip.call_args[0][0]), list(ds._OCR_PKGS))
+
     def test_mmx_cli_installs_via_npm(self):
         cap = [c for c in ds.build_matrix() if c.key == "mmx_cli"][0]
         with mock.patch.object(ds, "npm_install", return_value=(True, "ok")) as npm, \
@@ -205,14 +228,6 @@ class TestInstallChannels(unittest.TestCase):
             cap.install()
         npm.assert_called_once_with("mmx-cli")
         pip.assert_not_called()
-
-    def test_ocr_installs_paddle_via_pip(self):
-        cap = [c for c in ds.build_matrix() if c.key == "ocr"][0]
-        with mock.patch.object(ds, "pip_install", return_value=(True, "ok")) as pip:
-            cap.install()
-        args = pip.call_args[0][0]
-        self.assertIn("paddleocr", args)
-        self.assertIn("paddlepaddle", args)
 
     def test_no_capability_pip_installs_mmx_cli(self):
         """回归守卫: mmx-cli 不是 PyPI 包, 任何能力都不该用 pip 装它。"""
@@ -984,6 +999,147 @@ class TestEntrypoints(unittest.TestCase):
         self.assertTrue(kw["dry_run"])
         self.assertFalse(kw["include_heavy"])
         self.assertEqual(kw["only"], ["ocr"])
+
+
+class TestVisionToolchainDetection(unittest.TestCase):
+    """OCR 与 mmx-cli 的"部署检测"必须回答**真问题**。
+
+    两条通道各有一个很隐蔽的假就绪, 都在本机实测到过:
+
+    * **OCR**: "两个包能 import"就报已就绪 —— 但权重没下时首次真实调用会去联网下 ~170MB,
+      离线/受限网络下必然失败; 而失败点在 L2 那一步, 离"部署完成"已经很远。
+    * **mmx**: 旧探测把凭据结论建在 ``MINIMAX_API_KEY`` 上, 而 mmx 用的是**它自己**的
+      ``~/.mmx/config.json``。结果是双向错误: 本机 MINIMAX_API_KEY 未设置而 mmx 早已认证
+      且真能调通(假警报); 反过来配了环境变量但没 ``mmx auth login`` 时会报"已配置"而实际
+      401(假就绪)。
+
+    这组测试盯的就是这两件事: 检测必须落在**真实的可用性**上, 而不是"看起来装了"。
+    """
+
+    def test_ocr_models_capability_exists_and_is_warmed_by_real_recognition(self):
+        caps = {c.key: c for c in ds.build_matrix()}
+        self.assertIn("ocr_models", caps, "缺少「权重是否就位」这条能力")
+        cap = caps["ocr_models"]
+        self.assertTrue(cap.heavy, "权重预热是重依赖, 应随 --skip-heavy 一起跳过")
+        self.assertIs(cap._install, ds.ocr_smoke_test,
+                      "权重补齐必须走**真识别**, 而不是再 import 一次")
+
+    def test_ocr_models_probe_detects_missing_and_partial_weights(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(ds, "OCR_MODELS_DIR", d):
+                ok, detail = ds._probe_ocr_models()
+                self.assertFalse(ok, "空目录不该被判就绪")
+                self.assertIn("未发现本地权重", detail)
+                # 只下了 det、没下 rec —— 半成品状态必须报出来
+                os.makedirs(os.path.join(d, "PP-OCRv6_medium_det"))
+                ok, detail = ds._probe_ocr_models()
+                self.assertFalse(ok)
+                self.assertIn("rec", detail)
+                # det + rec 齐了才算就位
+                os.makedirs(os.path.join(d, "PP-OCRv6_medium_rec"))
+                ok, detail = ds._probe_ocr_models()
+                self.assertTrue(ok, detail)
+
+    def test_mmx_auth_uses_mmx_own_credentials_not_env_var(self):
+        """核心回归: 凭据判据必须是 mmx 自己的状态, **不是** MINIMAX_API_KEY。
+
+        本机实测就是反例: MINIMAX_API_KEY 未设置, 而 mmx 早已认证且能调通。
+        """
+        with tempfile.TemporaryDirectory() as d:
+            cfg = os.path.join(d, "config.json")
+            with mock.patch.object(ds, "MMX_CONFIG_PATH", cfg), \
+                    mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"):
+                # 环境变量有值、但 mmx 没登录 -> 仍是未认证(这是"假就绪"的方向)
+                with mock.patch.dict(os.environ, {"MINIMAX_API_KEY": "sk-test"}, clear=False):
+                    with mock.patch.object(ds, "_run", return_value=(True, "{}")):
+                        ok, detail = ds._probe_mmx_auth()
+                        self.assertFalse(ok, "配了环境变量不等于 mmx 已认证: %s" % detail)
+                # 环境变量没有、但 mmx 自己配好了 -> 已认证(这是"假警报"的方向)
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    with open(cfg, "w", encoding="utf-8") as fh:
+                        json.dump({"region": "cn", "api_key": "sk-cp-xyz"}, fh)
+                    ok, detail = ds._probe_mmx_auth()
+                    self.assertTrue(ok, detail)
+                    self.assertIn("已认证", detail)
+
+    def test_mmx_auth_falls_back_to_cli_status_for_oauth_mode(self):
+        """没有 config.json 时(OAuth 模式)必须问 CLI, 而不是直接判未认证。"""
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(ds, "MMX_CONFIG_PATH", os.path.join(d, "none.json")), \
+                    mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"), \
+                    mock.patch.object(ds, "_run", return_value=(
+                        True, '{"method": "oauth", "source": "keychain"}')) as run:
+                ok, detail = ds._probe_mmx_auth()
+            self.assertTrue(ok, detail)
+            self.assertIn("oauth", detail)
+            self.assertEqual(run.call_args[0][0][1:4], ["--output", "json", "auth"],
+                             "应向 mmx 询问它自己的认证状态")
+
+    def test_mmx_auth_reports_unauthenticated_with_actionable_detail(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(ds, "MMX_CONFIG_PATH", os.path.join(d, "none.json")), \
+                    mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"), \
+                    mock.patch.object(ds, "_run", return_value=(False, "")):
+                ok, detail = ds._probe_mmx_auth()
+        self.assertFalse(ok)
+        self.assertIn("mmx auth login", detail, "未认证必须给出可执行的修法")
+
+    def test_mmx_binary_probe_no_longer_judges_credentials(self):
+        """二进制探测只判二进制 —— 凭据是另一件事(一件事一个人管)。
+
+        旧版在这里用 MINIMAX_API_KEY 下结论, 于是 mmx 明明可用却报"调用会失败"。
+        """
+        with mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"), \
+                mock.patch.object(ds, "_run", return_value=(True, "mmx 1.2.3")), \
+                mock.patch.dict(os.environ, {}, clear=True):
+            ok, detail = ds._probe_mmx()
+        self.assertTrue(ok, detail)
+        self.assertNotIn("MINIMAX_API_KEY", detail,
+                         "二进制探测不该对凭据下结论: %s" % detail)
+
+    def test_mmx_auth_capability_replaces_env_var_capability(self):
+        caps = {c.key: c for c in ds.build_matrix()}
+        self.assertIn("mmx_auth", caps, "凭据应作为独立能力被检测")
+        self.assertNotIn("mmx_key", caps, "旧的「看环境变量」能力应已被替换")
+        cap = caps["mmx_auth"]
+        self.assertTrue(cap.installable(), "有 MINIMAX_API_KEY 时应能自动登录")
+        self.assertFalse(cap.required and cap.gate,
+                         "凭据必须由人提供 —— 不该把缺失算成部署失败")
+
+    def test_mmx_auth_login_refuses_without_a_key_instead_of_pretending(self):
+        with mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"), \
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(ds, "_run", return_value=(True, "ok")) as run:
+            ok, detail = ds.mmx_auth_login()
+        self.assertFalse(ok, "没有凭据时必须如实失败")
+        self.assertIn("MINIMAX_API_KEY", detail)
+        run.assert_not_called()
+
+    def test_mmx_auth_login_uses_env_key_when_present(self):
+        with mock.patch.object(ds, "_mmx_bin", return_value="/usr/bin/mmx"), \
+                mock.patch.dict(os.environ, {"MINIMAX_API_KEY": "sk-real"}, clear=False), \
+                mock.patch.object(ds, "_run", return_value=(True, "ok")) as run:
+            ok, detail = ds.mmx_auth_login()
+        self.assertTrue(ok, detail)
+        cmd = run.call_args[0][0]
+        self.assertEqual(cmd[:4], ["/usr/bin/mmx", "auth", "login", "--api-key"])
+        self.assertEqual(cmd[4], "sk-real")
+
+    def test_verification_modes_are_documented(self):
+        for flag in ("--verify-ocr", "--verify-mmx"):
+            self.assertIn(flag, ds._USAGE, "帮助里未列出 %s" % flag)
+        self.assertIn("VIA54_OCR_SMOKE_TEXT", ds._USAGE)
+
+    def test_bootstrap_and_autosync_call_the_vision_checks(self):
+        """部署之后与更新之后都要跑这两条复检 —— 少一处就有一段时间没人盯着。"""
+        here = os.path.dirname(os.path.abspath(__file__))
+        for name, needles in (
+                ("bootstrap_device.py", ("--verify-ocr", "--verify-mmx")),
+                ("auto_sync.py", ("--verify-ocr", "--verify-mmx"))):
+            with open(os.path.join(here, name), encoding="utf-8") as fh:
+                text = fh.read()
+            for needle in needles:
+                self.assertIn(needle, text, "%s 未接入 %s" % (name, needle))
 
 
 if __name__ == "__main__":

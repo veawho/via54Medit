@@ -21,7 +21,7 @@
 | **L0** PDF 真实性 | PyMuPDF + Crossref | ✅ | `internal/anno2ppt/l0_verify.go` (9 案例 PASS) |
 | **L0+** 分类器 | Producer 黑白名单 | ✅ | `l0_producer_classifier.go` (9 案例 PASS) |
 | **L1** 文字加速 | PyMuPDF | ✅ | 内置 |
-| **L2** OCR 中文 | PaddleOCR 3.7+ | ✅ | `scripts/paddleocr_pdf_page.py` |
+| **L2** OCR 中文 | PaddleOCR 3.x (约束 `>=3.0,<4`; 实测 3.7.0 + paddle 3.3.1) | ✅ | `scripts/paddleocr_pdf_page.py` |
 | **L3** 视觉理解 | sensenova-6.7-flash-lite | ✅ | `scripts/sensenova_vision.py` (实测 P3-1/P29-1) |
 | **L4** 应证推理 | 4 维要素 + 集合结论 | ✅ | `internal/anno2ppt/algorithm.go` (9 案例 PASS) |
 | **L5** 双源架构 | main + fallback | ✅ | `dual_source.go` (9 案例 PASS) |

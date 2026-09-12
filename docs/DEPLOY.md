@@ -112,7 +112,38 @@ macOS 上若报 `AppleEvent -1712` / `-1708`: 手动打开一次 PowerPoint / Wo
 | `pywin32` (Office COM) | 必需, 缺失即装 | **不适用**(不装、不校验) | **不适用** |
 | 桌面版 PowerPoint / Word | 必需(装不了则强力提示) | 同左 | **不适用** → 用 `RENDER_ENGINE=graph` |
 | PaddleOCR (L2 中文 OCR) | 缺失即装 | 缺失即装 | 缺失即装 |
+| PaddleOCR **权重** | 缺失即预热 | 同左 | 同左 |
 | `mmx-cli` 视觉引擎 | 经 **npm** 装 | 同左 | 同左 |
+| mmx **凭据** | 有 `MINIMAX_API_KEY` 则代登 | 同左 | 同左 |
+
+### OCR 与 mmx-cli 的"部署"到底包含什么
+
+这两条通道各有一个很隐蔽的**假就绪**, 都实测到过。所以它们的部署不是"看到文件在":
+
+| 通道 | 假就绪的样子 | 真实代价 | 本仓库怎么判 |
+| --- | --- | --- | --- |
+| OCR | 两个包能 `import` 就报"已就绪" | 权重没下 —— 首次真实调用会去联网下 ~170MB, 离线/受限网络下必然失败, 而失败点是 L2 那一步 | ① 包可导入 ② **权重已落地**(`$PADDLE_PDX_CACHE_HOME/official_models` 有 det/rec) ③ `--verify-ocr` **真跑一次识别** |
+| mmx | 二进制在 PATH 里就报"已就绪" | 没认证 —— 视觉调用直接 401; 而报告里完全看不出来 | ① 二进制可用 ② `mmx auth status` / `~/.mmx/config.json` **已认证** |
+
+**关键更正**: mmx 用的是**它自己**的凭据(`mmx auth login` 写进 `~/.mmx/config.json`),
+与 `MINIMAX_API_KEY` 是两套。旧探测把结论建在环境变量上, 于是本机出现了方向相反的两个错误:
+MINIMAX_API_KEY 未设置而 mmx 早已认证且能调通(假警报)、以及配了环境变量但没登录时
+报"已配置"而实际 401(假就绪)。现在凭据只认 mmx 自己的状态; 有 `MINIMAX_API_KEY` 时
+部署流程可以**代登**(`mmx auth login --api-key`), 没有则如实报"需人工"。
+
+**版本约束**: OCR 包按 `paddleocr>=3.0,<4` / `paddlepaddle>=3.0,<4` 安装 —— 管线调的是
+PaddleOCR 3.x 的 API(`use_textline_orientation` + `.predict()` + `result[0]['rec_texts']`),
+不约束就会有一天静默装上 2.x/4.x, 而"装上了"与"能跑"是两件事。
+
+**部署后复检**(部署器与更新器都会跑, 也可单独跑):
+
+```bash
+python3 scripts/deploy_scan.py --verify-ocr    # 真跑一次识别(顺带预热权重)
+python3 scripts/deploy_scan.py --verify-mmx    # 二进制 + 认证, 两件事分开报
+```
+
+`--verify-mmx` 的**退出码只跟二进制走**: 凭据必须由人提供, 把它算成"部署失败"会让部署
+永远无法成功(与矩阵里 `mmx_auth` 的 `gate=False` 是同一条判断)。
 
 **安装通道**: Python 包 → pip;`mmx-cli` → npm;系统工具 → 本机可用的
 brew / apt / dnf / pacman / winget / choco / scoop。需要管理员权限却拿不到时会
@@ -129,17 +160,24 @@ brew / apt / dnf / pacman / winget / choco / scoop。需要管理员权限却拿
 | `--json` | 机器可读(供 `medit doctor` / CI 消费) |
 | `--skip-heavy` | 跳过重依赖(OCR/Paddle, 数百 MB) |
 | `--strict` | 平台兼容性问题也计入失败 |
+| `--verify-ocr` / `--verify-mmx` | 真机复检: OCR 真识别 / mmx 可用与认证 |
 | `--stage env\|deps\|compat\|all` | 只跑一个阶段(供外层部署器分步显示进度) |
 | `make deploy-check` / `make deploy-fix` | 上面前两条的快捷方式 |
 | `make deploy-plan` / `make deploy-only KEY=ocr` | 预演 / 只补一个能力 |
+| `make deploy-only KEY=ocr_models` | 只预热 OCR 权重(真识别一次) |
 
 **退出码**: `0` = 必需能力齐备; `1` = 仍有必需缺口; `2` = **用法错误**(能力键或阶段名拼错)。
 三者刻意分开 —— 拼错一个开关不该被读成"这台机器环境有问题"。
 
 **环境变量**(CI / 无人值守部署): 与开关一一对应 ——
 `VIA54_DRY_RUN` / `VIA54_ONLY` / `VIA54_SKIP_HEAVY` / `VIA54_STRICT` / `VIA54_JSON` /
-`VIA54_STAGE` / `VIA54_HOME`(私有前缀, 默认 `~/.via54medit`) / `VIA54_ALLOW_BREAK_SYSTEM`。
+`VIA54_STAGE` / `VIA54_HOME`(私有前缀, 默认 `~/.via54medit`) / `VIA54_ALLOW_BREAK_SYSTEM` /
+`VIA54_OCR_SMOKE_TEXT`(OCR 真识别探针用的样本文字, 默认 `OCR 12345`)。
 命令行开关优先于同名环境变量。
+
+OCR 的权重缓存根目录认 **`PADDLE_PDX_CACHE_HOME`**(PaddleX 自己读的变量, 默认 `~/.paddlex`;
+权重在其下的 `official_models/`)。用别的名字覆盖是无效的 —— 探针会去看一个 PaddleX 根本
+不写的位置, 于是永远报"权重缺失"。
 
 ### 2.4 装完凭什么算"装好了"
 
