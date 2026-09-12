@@ -48,6 +48,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.45] - 2026-09-12 (解决 PaddleOCR 的问题: OCR 入口其实是坏的 —— 解释器错配 + 脚本路径依赖 cwd + /tmp 硬编码)
+
+回应"解决 PaddleOCR 的问题"。
+
+排查后发现 **OCR 这条腿实际上是跑不起来的**, 而且有三个各自独立的原因叠在一起。
+之所以一直没人发现, 是因为**部署报告写着"✓ PaddleOCR 已就绪"** —— 报告和命令用的不是同一个解释器。
+
+### 一、实测到的三个缺陷
+
+```bash
+$ cd /tmp && medit anno2ppt ocr paper.pdf 1
+/private/tmp/scripts/paddleocr_pdf_page.py: No such file or directory     # ← 脚本找不到
+$ cd <repo> && medit anno2ppt ocr paper.pdf 1
+ModuleNotFoundError: No module named 'paddleocr'                          # ← 解释器里没装
+```
+
+| # | 缺陷 | 成因 |
+| --- | --- | --- |
+| 1 | **解释器错配**(核心) | `ResolvePython` 按**名字**挑解释器, 候选链 `python3.11 → python3 → python` 先命中 `~/.local/bin/python3.11` —— 实测它有 `pymupdf` 却**没有** `paddleocr`; 而 `python3` 三个都有。名字对不等于包里装了东西 |
+| 2 | **脚本路径依赖 cwd** | 首选项 `~/.hermes/skills/via54medit/via54medit-anno2ppt-phase7/scripts/…` **根本不存在**(多了一层 `via54medit`, 且技能分发包里没有 `scripts/`); fallback 是相对**当前工作目录**的 `scripts/…`。两条都落空 → 只在"恰好 cd 到仓库根"时才工作 |
+| 3 | **`/tmp` 硬编码** | `paddleocr_pdf_page.py` 把渲染出的 PNG 写到 `/tmp/…`。Windows 上 `C:\tmp` 通常不存在 → OCR 第一步就失败。部署扫描器的平台兼容段一直在报这一条, 但没人把它和"OCR 不可用"联系起来 |
+
+### 二、为什么它一直没被发现: 报告与命令各说各话
+
+部署扫描探测 OCR 用的是 `sys.executable`(仓库那个装了 paddle 的 3.10), 而 `medit anno2ppt ocr`
+用的是 `ResolvePython` 挑出来的 `python3.11`。**两个不同的解释器**, 于是"✓ 已就绪"与
+`ModuleNotFoundError` 可以同时为真 —— 与 v5.4.41 抓到的"记账调用点存在但不可达"是同一类问题:
+**检测的对象不是真正会跑的那条路径**。
+
+### 三、修法
+
+**Go 侧** (`internal/foundation/python_capability.go` 新增):
+
+* `ResolvePythonFor(need, envOverride, cfg)` —— 按"**能不能 import** 全部 need"挑解释器
+  (用 `importlib.util.find_spec`, 实测 0.00s; 真 import paddle 是秒级开销)。
+  显式指定(`config.python_path` / `$VIA54_OCR_PYTHON`)**严格**: 不满足就报错, 不静默改用别的
+  —— 悄悄换会把"我把解释器配错了"藏起来。`$PYTHON` 与 PATH 候选则是尽力而为。
+* `FindRepoRoot()` / `ResolveOCRScript()` —— 脚本解析以**仓库根**为锚
+  (`$VIA54_REPO` > 可执行文件位置上溯 > cwd 上溯), 彻底摆脱 cwd 依赖。
+  `$VIA54_OCR_SCRIPT` 同样严格。找不到时报错会**列出全部试过的路径**。
+* `medit anno2ppt ocr --smoke` —— 不读 PDF, 只做真识别自检, 排障一条命令搞定。
+
+**Python 侧** (`scripts/deploy_scan.py`):
+
+* `ocr_python()` / `ocr_script_path()` —— 与 Go 侧**同一套规则、同一顺序**(有测试钉住两边一致)。
+* `_probe_ocr()` 改为判**跑 OCR 的那个解释器**, 并在结论里报出是哪一个; 缺依赖时报错会点名
+  "就是它缺" + 给出针对该解释器的 `pip install` 命令。
+* `pip_install(python=…)` —— OCR 的依赖**装进跑 OCR 的那个解释器**(往错的那个装, 探测会一直
+  说"缺", 而人去看的时候又"明明装过了")。
+* `ocr_smoke_test()` 改为执行 `[ocr_python, ocr_script_path, "--smoke"]` —— 用**真正的解释器**跑
+  **真正的脚本**, 一次把四件事验完: 解释器选得对不对、脚本找不找得到、API 形状变没变、权重在不在。
+  自检与业务共用 `run_ocr_on_image()`, 不同源的自检验的不是会跑的那条路。
+
+**脚本侧** (`scripts/paddleocr_pdf_page.py`):
+
+* 临时目录改用 `tempfile`(平台正确, macOS 上落在 `$TMPDIR`), 顺手把 `doc.close()` 放进 `try/finally`。
+* 新增 `--smoke` 真识别自检。
+* 文档更正: 删掉"表格识别 (PP-Structure)"这个**实现里并不存在**的说法(实际只有一条
+  行/数字启发式), 并把"必须用装了 paddleocr 的解释器"写进脚本头。
+
+### 四、验证(前后对照)
+
+| 场景 | 修复前 | 修复后 |
+| --- | --- | --- |
+| `cd /tmp && medit anno2ppt ocr paper.pdf 1` | `No such file or directory` | **46 个文字块 / 45 行 / 7 行疑似表格** |
+| `cd <repo> && medit anno2ppt ocr paper.pdf 1` | `ModuleNotFoundError: paddleocr` | 同上 |
+| `medit anno2ppt ocr --smoke` | 没有这个开关 | `[L2][smoke] OK: 识别到 1 段文字` |
+| 部署报告那一行 | `✓ PaddleOCR 与 paddle 均可导入`(判的是另一个解释器) | `✓ PaddleOCR python3.10 (部署脚本自己的解释器) 三个依赖齐备` —— **报出判的是谁** |
+| 显式指定缺包的解释器 | 仍报"已就绪" | `✗ $VIA54_OCR_PYTHON 指定的解释器 … 缺 paddleocr, paddle`(不静默换) |
+| 渲染临时文件 | `/tmp/paddleocr_p1_*.png`(Windows 不可用) | `$TMPDIR/paddleocr_p1_*.png` |
+| 平台兼容扫描 | 50 处 | **49 处**(少的就是这处 `/tmp`) |
+
+### 五、顺带更正的一处**教错人**的文档
+
+`skills/via54medit-architecture-honest-status/references/paddleocr-pdf-page-script.md` 原先写着
+"用 `python3.11` 调用", 并称依赖在 "hermes-agent venv" —— 那正是复现本 bug 的配方
+(python3.11 里没有 paddleocr)。已改为首选 `medit anno2ppt ocr`(由它自己挑解释器), 并补上
+"如何判断某个解释器行不行"的一条命令。
+
+### Tests
+- Go: 新增 `internal/foundation/python_capability_test.go` —— 会跳过不合格解释器、错误里列全候选与
+  各自缺什么、显式覆盖严格不回退、候选列表不随 cwd 变化(用 `Chdir` 实证)、找不到仓库根时优雅降级。
+- Python: `scripts/test_deploy_scan.py` 90 → **102**。含**核心回归**: 探测必须判"跑 OCR 的那个
+  解释器"并点名它(旧逻辑在这里必然放行)、候选链与 Go 侧一致(解析 Go 源码比对)、OCR 安装
+  目标解释器正确、以及"OCR 脚本不得再出现 `/tmp` 硬编码"与"--smoke 与业务共用推理函数"两条守卫。
+- 两侧契约一致性由测试守住: 解释器候选链、`VIA54_OCR_PYTHON`/`VIA54_OCR_SCRIPT` 常量名、
+  以及 `anno2ppt ocr` 要求的模块集合。
+
 ## [5.4.44] - 2026-09-12 (OCR 与 mmx-cli 的部署集成: 部署阶段自动检测 + 未部署自动部署 + 真跑一次才算就绪)
 
 回应"我需要将 OCR 的部署方式、mmx-cli 的部署方式集成到 via54Medit 中，并确保可以在部署阶段

@@ -85,23 +85,52 @@ var anno2pptConfirmCmd = &cobra.Command{
 	},
 }
 
+var anno2pptOcrSmoke bool
+
 var anno2pptOcrCmd = &cobra.Command{
 	Use:   "ocr <pdf_path> <page_num>",
 	Short: "Run PaddleOCR on a PDF page, output structured table rows",
-	Args:  cobra.MinimumNArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		pdfPath := args[0]
-		pageNum := args[1]
+	Long: `用 PaddleOCR 解析 PDF 指定页, 输出结构化 JSON(文字块/行/疑似表格行)。
 
-		// 调用 Python 脚本做 OCR (PaddleOCR + PP-Structure)
-		scriptPath := foundation.HermesPath("skills", "via54medit", "via54medit-anno2ppt-phase7", "scripts", "paddleocr_pdf_page.py")
-		// 如果没安装到 skill, fallback 到仓库 scripts/ (git clone 部署形态)
-		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-			scriptPath = filepath.Join("scripts", "paddleocr_pdf_page.py")
+解释器不是按名字挑的 —— 按"能不能 import paddleocr"挑, 否则会出现
+"部署报告说已就绪、命令却 ModuleNotFoundError"这种错配(实测踩过)。
+
+  medit anno2ppt ocr paper.pdf 3      # 解析第 3 页
+  medit anno2ppt ocr --smoke          # 只做真识别自检(不读 PDF), 用于部署后复检`,
+	// --smoke 不需要 PDF 参数, 所以不能直接 MinimumNArgs(2)
+	Args: func(cmd *cobra.Command, args []string) error {
+		if anno2pptOcrSmoke {
+			return nil
+		}
+		if len(args) < 2 {
+			return fmt.Errorf("需要 <pdf_path> <page_num> 两个参数(只做自检请加 --smoke)")
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// 解释器必须**能 import paddleocr**, 不能按名字挑 —— 实测 python3.11 有
+		// pymupdf 却没有 paddleocr, 而它在候选链里排第一, 于是这条命令必然
+		// ModuleNotFoundError(而部署报告还写着"已就绪", 因为报告用的是另一个解释器)。
+		pyExe, err := foundation.ResolvePythonFor(
+			[]string{"paddleocr", "pymupdf"}, foundation.OCRPythonEnv, nil)
+		if err != nil {
+			return fmt.Errorf("OCR 需要一个装了 paddleocr 的 Python 解释器: %w", err)
 		}
 
-		pyExe := resolvePython()
-		cmdP := exec.Command(pyExe, scriptPath, pdfPath, pageNum)
+		// 脚本路径以**仓库根**为锚, 不再依赖当前工作目录 ——
+		// 旧实现只在"恰好 cd 到仓库根"时才找得到脚本。
+		scriptPath, err := foundation.ResolveOCRScript()
+		if err != nil {
+			return err
+		}
+
+		argv := []string{scriptPath}
+		if anno2pptOcrSmoke {
+			argv = append(argv, "--smoke")
+		} else {
+			argv = append(argv, args[0], args[1])
+		}
+		cmdP := exec.Command(pyExe, argv...)
 		cmdP.Stdout = os.Stdout
 		cmdP.Stderr = os.Stderr
 		return cmdP.Run()
@@ -344,6 +373,10 @@ Output: JSON with main_pdf, fallback_pdfs, evidence_sources, highlight_summary.`
 func init() {
 	anno2pptDualSourceCmd.Flags().String("fallback", "", "Fallback PDF path (e.g. NCT02329860 AE table)")
 	anno2pptDualSourceCmd.Flags().String("doi", "", "DOI for NCT registry lookup")
+
+	// 只做真识别自检, 不读 PDF —— 部署后/排障时一条命令判断"OCR 这条腿到底能不能跑"
+	anno2pptOcrCmd.Flags().BoolVar(&anno2pptOcrSmoke, "smoke", false,
+		"只做真识别自检(不读 PDF), 用于部署后复检")
 
 	anno2pptCmd.AddCommand(anno2pptParseCmd)
 	anno2pptCmd.AddCommand(anno2pptConfirmCmd)

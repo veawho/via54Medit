@@ -315,10 +315,16 @@ def _probe_with_timeout(fn, timeout, label):
 # --------------------------------------------------------------------------- #
 # 安装通道 —— 命令先构造出来, 这样 --dry-run 能打印**真实**将执行的命令
 # --------------------------------------------------------------------------- #
-def pip_cmd(packages):
+def pip_cmd(packages, python=None):
+    """构造 pip 安装命令。
+
+    ``python`` 用于**把包装进指定的解释器** —— OCR 就是这样: 真正跑 OCR 的解释器
+    未必是部署脚本自己的那个(实测本机 python3.11 缺 paddleocr, python3 才有)。
+    往错的那个装, 探测会一直说"缺", 而人去看的时候又"明明装过了"。
+    """
     if isinstance(packages, str):
         packages = [packages]
-    return [sys.executable, "-m", "pip", "install"] + list(packages)
+    return [python or sys.executable, "-m", "pip", "install"] + list(packages)
 
 
 def npm_cmd(package, prefix=None):
@@ -418,15 +424,15 @@ def _remembered_npm_prefix(package):
 _PEP668_MARK = ("externally-managed-environment", "externally managed")
 
 
-def pip_install(packages):
-    """Python 包 —— 只走当前解释器的 pip。
+def pip_install(packages, python=None):
+    """Python 包 —— 默认走当前解释器的 pip, 可指定装进另一个解释器(见 pip_cmd)。
 
     撞上 PEP 668 时**默认不越过**这道边界(本项目 v5.4.3 的既定决定: 是否突破由
     解释器管理方(uv/系统/Homebrew)划下的边界, 不该由部署脚本代用户决定)。
     这与 openclaw "探测不通过就停在改包之前" 是同一种克制。
     """
     pkgs = [packages] if isinstance(packages, str) else list(packages)
-    cmd = pip_cmd(pkgs)
+    cmd = pip_cmd(pkgs, python)
     ok, out = _run(cmd, timeout=PIP_TIMEOUT)
     if ok:
         _note_channel("pip", " ".join(cmd))
@@ -637,25 +643,168 @@ def _probe_mmx():
     return True, ver
 
 
-def _probe_ocr():
-    """OCR 腿要 **两个包都能导入** 才算就绪。
+# --------------------------------------------------------------------------- #
+# OCR 的解释器与脚本定位
+#
+# 这一节存在的唯一理由: **"用哪个解释器跑 OCR" 必须只定一次, 且部署与命令要一致。**
+#
+# 实测故障 (2026-09-12): 本机 ``~/.local/bin/python3.11`` 有 pymupdf 却没有 paddleocr,
+# 而它在 ``ResolvePython`` 的候选链里排第一, 于是 ``medit anno2ppt ocr`` 直接
+# ModuleNotFoundError; 同时部署扫描用自己的 ``sys.executable``(装了 paddle 的 3.10)探测,
+# 照样报"✓ PaddleOCR 已就绪"。两句话各说各话 —— 这就是"假就绪"的典型形态。
+#
+# 规则与 Go 侧 ``foundation.ResolvePythonFor`` / ``ResolveOCRScript`` **必须一致**
+# (候选链顺序也要一致), 否则同一个问题在两处会得出不同结论。
+# --------------------------------------------------------------------------- #
 
-    这里刻意不加线程上界 —— paddle 首次导入会做编译/初始化, 被掐断只会得到假阴性
-    (实测: 同一台机器两次运行一次 missing 一次 ok)。失败时把异常原因带出来,
-    因为"socket 里没装"和"装了但 ABI 不匹配"需要完全不同的处置。
+#: OCR 专用解释器 / 脚本的显式覆盖(与 Go 侧同名常量)
+OCR_PYTHON_ENV = "VIA54_OCR_PYTHON"
+OCR_SCRIPT_ENV = "VIA54_OCR_SCRIPT"
 
-    注意: "两个包都能导入"**只是入场券, 不是就绪**。真正能不能识别由
-    ``ocr_smoke_test()`` 回答, 权重是否已落地由 ``_probe_ocr_models()`` 回答 ——
-    只 import 成功就报"已就绪", 正是"装好了却跑不起来"的假就绪来源。
+#: 真正跑 OCR 所需的模块。pymupdf 也要 —— 脚本第一步就用它把 PDF 页渲染成图。
+OCR_REQUIRED_MODULES = ("paddleocr", "paddle", "pymupdf")
+
+#: 解释器候选链, 与 Go 侧 ``foundation.PythonCandidates`` 保持一致
+OCR_PYTHON_CANDIDATES = ("python3.11", "python3", "python")
+
+#: 只查"模块在不在", 不真 import —— 见 ``_python_missing_modules``
+_PYTHON_PROBE = ("import importlib.util as u, sys\n"
+                 "missing = [m for m in sys.argv[1:] if u.find_spec(m) is None]\n"
+                 "print(','.join(missing))\n"
+                 "sys.exit(3 if missing else 0)\n")
+
+
+
+def _python_missing_modules(exe, modules):
+    """返回 ``exe`` 里缺失的模块名列表; 探测本身失败返回 ``None``。
+
+    用 ``importlib.util.find_spec`` 而不是真 ``import``: 只查文件在不在(实测 0.00s),
+    而本探测会被管线第 [0] 步**反复**调用, 真 import paddle 是秒级开销。
+    它能抓住的正是"装到别的解释器里去了"这一类;"装了但跑不起来"交给 ``ocr_smoke_test``。
     """
-    bad = []
-    for mod in ("paddleocr", "paddle"):
-        ok, detail = _import_probe(mod)
-        if not ok:
-            bad.append(detail)
-    if bad:
-        return False, "; ".join(bad)
-    return True, "paddleocr 与 paddle 均可导入"
+    try:
+        r = subprocess.run([exe, "-c", _PYTHON_PROBE] + list(modules),
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode == 0:
+        return []
+    lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip()]
+    return [m for m in lines[-1].split(",") if m] if lines else list(modules)
+
+
+def ocr_python():
+    """定出**跑 OCR 用哪个解释器**(同时也是依赖该装到哪)。返回 ``(exe, 依据)``。
+
+    规则(与 Go 侧 ``ResolvePythonFor`` 一致):
+
+    1. ``$VIA54_OCR_PYTHON`` —— **严格**: 依赖不齐就报错, 不静默改用别的。
+       用户写下"用这个解释器"时, 悄悄换一个才是更坏的结局(那会把配错这件事藏起来)。
+    2. 部署脚本自己的解释器 → ``$PYTHON`` → python3.11 → python3 → python:
+       取第一个依赖**齐备**的。
+    3. 都不齐备 → 返回第一个存在的候选, 说明里标注"依赖不齐, 将安装到它" ——
+       这样"探测报缺失 → 安装 → 复验"能形成闭环(否则会卡在"没一个合格所以不知道装哪")。
+    """
+    override = (os.environ.get(OCR_PYTHON_ENV) or "").strip()
+    if override:
+        missing = _python_missing_modules(override, OCR_REQUIRED_MODULES)
+        if missing is None:
+            return None, "$%s 指向的解释器无法启动: %s" % (OCR_PYTHON_ENV, override)
+        if missing:
+            return None, ("$%s 指定的解释器 %s 缺 %s —— 显式指定会被尊重, 不静默改用别的; "
+                          "请在其中执行 `%s -m pip install %s`, 或改掉该设置"
+                          % (OCR_PYTHON_ENV, override, ", ".join(missing),
+                             override, " ".join(_OCR_PKGS)))
+        return override, "$%s" % OCR_PYTHON_ENV
+
+    cands = []
+    if sys.executable:
+        cands.append((sys.executable, "部署脚本自己的解释器"))
+    if (os.environ.get("PYTHON") or "").strip():
+        cands.append((os.environ["PYTHON"].strip(), "$PYTHON"))
+    for name in OCR_PYTHON_CANDIDATES:
+        p = _which(name)
+        if p:
+            cands.append((p, "PATH:%s" % name))
+
+    seen, uniq = set(), []
+    for exe, why in cands:
+        if exe not in seen:
+            seen.add(exe)
+            uniq.append((exe, why))
+
+    first_any = None
+    for exe, why in uniq:
+        missing = _python_missing_modules(exe, OCR_REQUIRED_MODULES)
+        if missing is None:
+            continue
+        if first_any is None:
+            first_any = (exe, why)
+        if not missing:
+            return exe, why
+    if first_any:
+        return first_any[0], "%s (依赖不齐, 将安装到它)" % first_any[1]
+    return None, "找不到任何 Python 解释器"
+
+
+def ocr_script_path():
+    """定出 OCR 脚本路径。返回 ``(path, 依据)`` 或 ``(None, 报错文案)``。
+
+    锚点是**仓库根**(由本文件位置推出), 不是当前工作目录 —— 旧实现只在"恰好 cd 到
+    仓库根"时才找得到脚本: 站在 /tmp 里跑 ``medit anno2ppt ocr`` 会去找
+    ``/tmp/scripts/paddleocr_pdf_page.py``。候选与 Go 侧 ``OCRScriptCandidates`` 对齐。
+    """
+    rel = "paddleocr_pdf_page.py"
+    override = (os.environ.get(OCR_SCRIPT_ENV) or "").strip()
+    if override:
+        if os.path.isfile(override):
+            return override, "$%s" % OCR_SCRIPT_ENV
+        return None, "$%s 指向的脚本不存在: %s" % (OCR_SCRIPT_ENV, override)
+
+    cands = [
+        (os.path.join(REPO, "scripts", rel), "仓库 scripts/"),
+        (os.path.join(REPO, "skills", "via54medit-anno2ppt-phase7", "scripts", rel),
+         "仓库技能包"),
+        (os.path.expanduser("~/.hermes/skills/via54medit-anno2ppt-phase7/scripts/" + rel),
+         "旧技能布局"),
+        (os.path.join(REPO, "skills", "via54medit", "via54medit-anno2ppt-phase7",
+                      "scripts", rel), "旧技能布局(带 via54medit 前缀)"),
+        (os.path.join("scripts", rel), "当前工作目录(开发态兜底)"),
+    ]
+    for path, why in cands:
+        if os.path.isfile(path):
+            return path, why
+    return None, ("找不到 %s; 已尝试: %s; 可用 $%s 显式指定"
+                  % (rel, " | ".join(p for p, _ in cands), OCR_SCRIPT_ENV))
+
+
+def _probe_ocr():
+    """OCR 就绪 = **真正会跑 OCR 的那个解释器**里有 paddleocr + paddle + pymupdf。
+    这里的关键不是"能不能 import", 而是"**用哪个解释器**判"。
+
+    实测故障 (2026-09-12): 本机 ``~/.local/bin/python3.11`` 有 pymupdf 却没有
+    paddleocr, 而它在 Go 侧 ``ResolvePython`` 的候选链里排第一 —— 于是
+    ``medit anno2ppt ocr`` 直接 ModuleNotFoundError; 而本探测器当时用的是
+    ``sys.executable``(仓库那个装了 paddle 的 3.10), 照样报"✓ 已就绪"。
+    报告与命令各说各话, 这就是"假就绪"。
+
+    所以现在先按**同一套规则**定出 OCR 解释器 (``ocr_python()``), 再判它。
+    判定用 ``find_spec``(查文件在不在, 0.00s) 而不是真 import —— 本探测器会被管线
+    第 [0] 步反复调用, 而真 import paddle 是秒级开销。"装了但坏掉/认不出字"交给
+    ``ocr_smoke_test()`` 真跑一次去发现。
+    """
+    exe, why = ocr_python()
+    if not exe:
+        return False, why
+    missing = _python_missing_modules(exe, OCR_REQUIRED_MODULES)
+    if missing is None:
+        return False, "无法用 %s 探测依赖(解释器启动失败)" % exe
+    if missing:
+        return False, ("%s 缺 %s —— 注意这是**运行 OCR 的那个**解释器, "
+                       "不是部署脚本自己的; 补法: %s -m pip install %s"
+                       % (exe, ", ".join(missing), exe, " ".join(_OCR_PKGS)))
+    return True, "%s (%s) 三个依赖齐备" % (os.path.basename(exe), why)
 
 
 #: OCR 权重缓存目录。PaddleOCR 3.x 的 PaddleX 后端把官方模型放在这里 ——
@@ -672,12 +821,6 @@ OCR_MODELS_DIR = os.path.join(
 #: 一次真实识别至少要用到的模型家族: det 出检测框, rec 认字。
 #: 其余(文本行方向/文档方向/UVDoc)由 PaddleOCR 按参数自行决定, 不在这里要求。
 _OCR_MODEL_NEEDLES = ("det", "rec")
-
-#: OCR 真识别探针的默认文本。**故意只用数字与拉丁字母**: 它不依赖系统中文字体
-#: (Pillow 默认字体没有 CJK 字形, 画出来是方框, 会让探针假失败), 而 ch 模型本来
-#: 就同时认中英文字符。用环境变量可覆盖。
-OCR_SMOKE_TEXT = os.environ.get("VIA54_OCR_SMOKE_TEXT", "OCR 12345")
-
 
 def _ocr_cached_model_families():
     """本地已缓存的 OCR 模型家族名(无则空集)。"""
@@ -708,79 +851,44 @@ def _probe_ocr_models():
     return True, "%d 个模型家族已缓存 (%s)" % (len(fams), ", ".join(sorted(fams)))
 
 
-def _smoke_font(size=64):
-    """给真识别探针找一个大到能被检测器看见的字体。找不到就退回 Pillow 默认字体。"""
-    from PIL import ImageFont
-    for p in ("/System/Library/Fonts/Supplemental/Arial.ttf",
-              "/System/Library/Fonts/Helvetica.ttc",
-              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-              "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-              r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\arial.ttf"):
-        if os.path.exists(p):
-            try:
-                return ImageFont.truetype(p, size)
-            except Exception:                               # noqa: BLE001
-                continue
-    try:
-        return ImageFont.load_default(size=size)              # Pillow >= 10.1
-    except Exception:                                       # noqa: BLE001
-        return ImageFont.load_default()
-
-
 def ocr_smoke_test(timeout=300):
     """**真跑一次识别** —— "能 import" 不等于 "能识别"。
 
-    这是 OCR 唯一的"真就绪"判据, 同时是部署时把权重**预热**下来的动作。三层意义:
+    跑的是 ``[ocr_python(), ocr_script_path(), "--smoke"]``: **真正的解释器** + **真正的
+    脚本** + 真正的推理。这样一次就把四件事一起验了 —— 解释器选得对不对、脚本找得到
+    找不到、API 形状有没有变、权重在不在。自检若与业务不同源, 它验过的就不是会跑的那条路。
 
-    1. **权重落地**: 真跑一次才会把 det/rec 权重下到本地(实测 ~170MB)。否则首次 L2
-       调用会在业务路径上突然要联网 —— 离线/受限网络下直接失败。
-    2. **API 形状**: 这里用的是与 ``scripts/paddleocr_pdf_page.py`` **同一套**调用
-       (``PaddleOCR(use_textline_orientation=True, lang='ch').predict(...)`` →
-       ``result[0]['rec_texts']``)。所以 PaddleOCR 4.x 那种 API 变更会**在这里**
-       就暴露, 而不是等 L2 那一步才炸。
-    3. **真结果**: 断言拿到非空 ``rec_texts``。能加载模型却认不出字(如 ABI 不匹配的
-       假成功)也会被判失败。
+    为什么必须是"真跑": 下面三种情况在 import 阶段都看不出来, 只有跑一次才暴露 ——
+    权重没下(首次调用突然要联网下 ~170MB, 受限网络直接失败)、ABI 不匹配(能加载却认不出字)、
+    以及上面那个解释器错配。同时它也是部署时把权重**预热**下来的动作。
 
-    断言只要求"识别到非空文本", 不比对具体字符串 —— OCR 把 O 认成 D 是正常的
-    (本机实测 "OCR 12345" → "DCR 12345", 置信度 0.996), 拿精确比对当门槛那是自找假红。
+    断言(在脚本里)只要求"识别到非空文本", 不比对具体字符串 —— OCR 把 O 认成 D 是正常的
+    (实测 "OCR 12345" → "DCR 12345", 置信度 0.996)。样本文字可用 ``VIA54_OCR_SMOKE_TEXT`` 覆盖。
 
-    返回 ``(ok, detail)``, **不抛异常**。``timeout`` 只用于兜底日志, 不打断调用
-    (paddle 的加载/推理无法安全中断, 打断只会留下半初始化状态)。
+    返回 ``(ok, detail)``, **不抛异常**。
     """
-    import tempfile
-
-    tmpdir = None
+    exe, why = ocr_python()
+    if not exe:
+        return False, why
+    script, swhy = ocr_script_path()
+    if not script:
+        return False, swhy
     try:
-        tmpdir = tempfile.mkdtemp(prefix="ocr_smoke_")
-        img_path = os.path.join(tmpdir, "smoke.png")
-        # 自造素材: 不依赖任何外部图片, 也不像纯色图那样可能被判成"本就没有文字"
-        from PIL import Image, ImageDraw
-
-        image = Image.new("RGB", (520, 150), "white")
-        ImageDraw.Draw(image).text((20, 40), OCR_SMOKE_TEXT, fill="black",
-                                   font=_smoke_font())
-        image.save(img_path)
-
-        from paddleocr import PaddleOCR
-
-        ocr = PaddleOCR(use_textline_orientation=True, lang="ch")
-        result = ocr.predict(img_path)
-        first = (result or [None])[0]
-        if first is None:
-            return False, "推理返回空结果"
-        try:
-            texts = list(first["rec_texts"])
-        except Exception:                                   # noqa: BLE001
-            texts = list(getattr(first, "rec_texts", None) or [])
-        if not texts:
-            return False, "模型加载成功但没识别出任何文字(权重损坏或 ABI 不匹配)"
-        joined = "".join(str(t) for t in texts)
-        return True, "真识别通过: 识别到 %d 段文字 (%s)" % (len(texts), joined[:40])
-    except Exception as e:                                  # noqa: BLE001
-        return False, "真识别失败: %s: %s" % (type(e).__name__, str(e)[:200])
-    finally:
-        if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        r = subprocess.run([exe, script, "--smoke"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, ("真识别超时 (%ds) —— 首次运行要下载权重, 网络受限时会很久; "
+                       "可先单独预热: python3 scripts/deploy_scan.py --only ocr_models" % timeout)
+    except OSError as e:
+        return False, "真识别无法启动 (%s): %s" % (exe, e)
+    lines = [ln.strip() for ln in ((r.stderr or "") + "\n" + (r.stdout or "")).splitlines()
+             if ln.strip()]
+    tail = lines[-1] if lines else "(无输出)"
+    detail = tail.replace("[L2][smoke] OK: ", "").replace("[L2][smoke] ERROR: ", "")
+    if r.returncode == 0:
+        return True, "真识别通过 [%s | %s]: %s" % (
+            os.path.basename(exe), swhy, detail)
+    return False, "真识别失败 [%s | %s]: %s" % (os.path.basename(exe), swhy, detail)
 
 
 #: mmx-cli 保存凭据的位置。**与 MINIMAX_API_KEY 是两套东西** —— 见 _probe_mmx_auth。
@@ -934,10 +1042,12 @@ def build_matrix(include_heavy=True):
             # (`PaddleOCR(use_textline_orientation=True, lang='ch').predict()` →
             #  `result[0]['rec_texts']`)。不约束就会在某天静默装上 4.x/2.x,
             # 而"装上了"和"能跑"是两件事。本机实测可用组合: paddleocr 3.7.0 + paddle 3.3.1。
-            install=lambda: pip_install(_OCR_PKGS),
-            plan=lambda: " ".join(pip_cmd(_OCR_PKGS)) + "   (数百 MB)",
+            install=lambda: pip_install(_OCR_PKGS, python=ocr_python()[0]),
+            plan=lambda: " ".join(pip_cmd(_OCR_PKGS, ocr_python()[0])) + "   (数百 MB)",
             hint="pip install %s  (数百 MB; 加 --skip-heavy 可跳过)" % " ".join(_OCR_PKGS),
-            why="l3_vision_verify 的 L2 中文/图片识别腿; 缺它则纯图片页无法识别"))
+            why="L2 中文/图片识别腿, 由 `medit anno2ppt ocr` 调用 "
+                "scripts/paddleocr_pdf_page.py; 缺它则纯图片页无法识别。"
+                "**装进哪个解释器**按 ocr_python() 定(不是部署脚本自己那个)"))
         caps.append(Cap(
             "ocr_models", "PaddleOCR 权重 (真识别预热)", ALL, "python",
             required=True, heavy=True,

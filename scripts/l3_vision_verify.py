@@ -8,7 +8,7 @@ L3 视觉复核集成 — 调用 sensenova-6.7-flash-lite 多模态验证 highli
 L4 流程:
     1. L0 验证 PDF 真实性 (medit anno2ppt l0verify)
     2. L1 PyMuPDF 文字提取
-    3. L2 PaddleOCR (中文/图片)
+    3. L2 PaddleOCR (中文/图片) —— 入口是 `medit anno2ppt ocr`, 见 scripts/paddleocr_pdf_page.py
     4. L3 sensenova vision 复核 (本脚本)
     5. L4 应证推理机 (medit anno2ppt confirm)
 

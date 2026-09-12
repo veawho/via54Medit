@@ -1142,5 +1142,192 @@ class TestVisionToolchainDetection(unittest.TestCase):
                 self.assertIn(needle, text, "%s 未接入 %s" % (name, needle))
 
 
+class TestOcrInterpreterAndScriptLocator(unittest.TestCase):
+    """OCR 的"用哪个解释器 / 找哪个脚本"必须与命令一致。
+
+    实测故障 (2026-09-12) 两个独立的坑, 都不会自己喊出来:
+
+    * ``medit anno2ppt ocr`` 用 ``ResolvePython`` 按**名字**挑解释器, 挑中了
+      ``~/.local/bin/python3.11`` —— 它有 pymupdf 却没有 paddleocr, 于是
+      ``ModuleNotFoundError``; 而部署报告用自己的 ``sys.executable``(装了 paddle 的 3.10)
+      探测, 照样报"✓ PaddleOCR 已就绪"。**报告与命令各说各话**。
+    * 脚本路径首选项 (带一层多余 via54medit 的 ~/.hermes 路径) 根本不存在, fallback
+      又是相对 cwd 的, 于是这个命令只在"恰好 cd 到仓库根"时才工作。
+
+    这组测试把两条都钉住。
+    """
+
+    def _fake_missing(self, table, default=None):
+        """把 _python_missing_modules 换成查表 —— 免得真去起子进程。"""
+        def fn(exe, modules):
+            if exe in table:
+                return table[exe]
+            return list(modules) if default is None else default
+        return fn
+
+    def test_python_missing_modules_parses_probe_output(self):
+        ok_run = mock.Mock(returncode=0, stdout="")
+        bad_run = mock.Mock(returncode=3, stdout="paddleocr,paddle\n")
+        with mock.patch.object(ds.subprocess, "run", return_value=ok_run):
+            self.assertEqual(ds._python_missing_modules("/py", ("paddleocr",)), [])
+        with mock.patch.object(ds.subprocess, "run", return_value=bad_run):
+            self.assertEqual(ds._python_missing_modules("/py", ("paddleocr", "paddle")),
+                             ["paddleocr", "paddle"])
+        # 解释器起不来 -> None(与"缺模块"区分开: 处置方式完全不同)
+        with mock.patch.object(ds.subprocess, "run", side_effect=OSError("boom")):
+            self.assertIsNone(ds._python_missing_modules("/py", ("paddleocr",)))
+
+    def test_ocr_python_prefers_first_interpreter_that_has_everything(self):
+        with mock.patch.object(ds, "_python_missing_modules",
+                               side_effect=self._fake_missing({
+                                   "/py/bad": ["paddleocr"],
+                                   "/py/good": [],
+                               })), \
+                mock.patch.object(ds, "_which",
+                                  side_effect=lambda n: {"python3.11": "/py/bad",
+                                                         "python3": "/py/good"}.get(n)), \
+                mock.patch.object(ds.sys, "executable", "/py/bad"):
+            exe, why = ds.ocr_python()
+        self.assertEqual(exe, "/py/good", "必须跳过缺依赖的解释器")
+        self.assertIn("python3", why)
+
+    def test_ocr_python_override_is_strict_and_names_the_fix(self):
+        """显式指定一个不满足依赖的解释器 -> 报错, **不静默改用别的**。
+
+        悄悄换会把"我把解释器配错了"藏起来, 正是本文件要消除的那类问题。
+        """
+        with mock.patch.object(ds, "_python_missing_modules",
+                               side_effect=self._fake_missing({"/py/bad": ["paddleocr"]})), \
+                mock.patch.dict(os.environ, {ds.OCR_PYTHON_ENV: "/py/bad"}, clear=False):
+            exe, why = ds.ocr_python()
+        self.assertIsNone(exe)
+        self.assertIn(ds.OCR_PYTHON_ENV, why)
+        self.assertIn("paddleocr", why)
+        self.assertIn("/py/bad", why, "必须点名是哪个解释器缺东西")
+
+    def test_ocr_python_keeps_an_install_target_when_nothing_satisfies(self):
+        """一个都不满足时仍要给出"装到哪", 否则探测-安装-复验的闭环卡死。"""
+        with mock.patch.object(ds, "_python_missing_modules",
+                               side_effect=self._fake_missing({})), \
+                mock.patch.object(ds, "_which", return_value=None), \
+                mock.patch.object(ds.sys, "executable", "/py/only"):
+            exe, why = ds.ocr_python()
+        self.assertEqual(exe, "/py/only")
+        self.assertIn("将安装到它", why)
+
+    def test_probe_ocr_reports_which_interpreter_it_judged(self):
+        """**核心回归**: 探测必须判"跑 OCR 的那个解释器", 并把它报出来。
+
+        旧探测只 import 自己进程里的模块 —— 于是"命令用 python3.11(缺包)、报告用
+        python3(有包)"这种错配完全看不出来。
+        """
+        with mock.patch.object(ds, "ocr_python", return_value=("/py/only", "PATH:python3.11")), \
+                mock.patch.object(ds, "_python_missing_modules",
+                                  return_value=["paddleocr", "paddle"]):
+            ok, detail = ds._probe_ocr()
+        self.assertFalse(ok, "跑 OCR 的解释器缺包时必须判缺失")
+        self.assertIn("/py/only", detail, "必须点名是哪个解释器缺东西: %s" % detail)
+        self.assertIn("paddleocr", detail)
+
+    def test_probe_ocr_passes_and_names_the_interpreter(self):
+        with mock.patch.object(ds, "ocr_python", return_value=("/py/good", "PATH:python3")), \
+                mock.patch.object(ds, "_python_missing_modules", return_value=[]):
+            ok, detail = ds._probe_ocr()
+        self.assertTrue(ok, detail)
+        self.assertIn("python3", detail)
+
+    def test_ocr_script_path_is_repo_anchored_not_cwd(self):
+        """脚本锚定仓库根 —— 换 cwd 不该影响解析结果。"""
+        got, why = ds.ocr_script_path()
+        self.assertTrue(got and os.path.isfile(got), "仓库里就有这个脚本: %r (%s)" % (got, why))
+        self.assertTrue(os.path.isabs(got), "解析结果应是绝对路径(不随 cwd 变): %r" % got)
+
+        orig = os.getcwd()
+        with tempfile.TemporaryDirectory() as d:
+            try:
+                os.chdir(d)
+                again, _ = ds.ocr_script_path()
+            finally:
+                os.chdir(orig)
+        self.assertEqual(got, again, "换 cwd 后解析结果变了 —— 又回到依赖 cwd 的老路")
+
+    def test_ocr_script_path_override_is_strict(self):
+        with mock.patch.dict(os.environ,
+                             {ds.OCR_SCRIPT_ENV: "/nope/paddleocr_pdf_page.py"}, clear=False):
+            got, why = ds.ocr_script_path()
+        self.assertIsNone(got, "$%s 指向不存在的文件时不该偷偷改用别的" % ds.OCR_SCRIPT_ENV)
+        self.assertIn(ds.OCR_SCRIPT_ENV, why)
+
+    def test_pip_install_can_target_another_interpreter(self):
+        """OCR 的依赖必须装进**跑 OCR 的那个**解释器。"""
+        self.assertEqual(ds.pip_cmd(["x"])[0], ds.sys.executable)
+        self.assertEqual(ds.pip_cmd(["x"], "/py/other")[0], "/py/other")
+        cap = [c for c in ds.build_matrix() if c.key == "ocr"][0]
+        with mock.patch.object(ds, "ocr_python", return_value=("/py/ocr", "test")), \
+                mock.patch.object(ds, "pip_install", return_value=(True, "ok")) as pip:
+            cap.install()
+        self.assertEqual(pip.call_args[1].get("python"), "/py/ocr",
+                         "OCR 安装必须指定解释器: %s" % (pip.call_args,))
+
+    def test_ocr_script_has_no_posix_tmp_hardcode(self):
+        """回归守卫: 临时目录不能硬编码 /tmp —— Windows 上那是 C:\\tmp, 通常不存在。
+
+        部署扫描的平台兼容段一直报这一条, 而它就在 OCR 的第一步(渲染 PDF 页)上,
+        等于整条 OCR 腿在 Windows 上根本走不通。
+        """
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "paddleocr_pdf_page.py")
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertNotIn('"/tmp/', src, "不要硬编码 /tmp, 用 tempfile")
+        self.assertNotIn("'/tmp/", src, "不要硬编码 /tmp, 用 tempfile")
+        self.assertIn("tempfile", src)
+
+    def test_ocr_script_supports_smoke_mode(self):
+        """部署复检跑的就是这个模式 —— 它必须与业务路径同源。"""
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "paddleocr_pdf_page.py")
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn("--smoke", src)
+        self.assertIn("def smoke_test(", src)
+        # 业务路径与自检必须共用同一段推理代码, 否则自检验的不是会跑的那条路
+        self.assertIn("def run_ocr_on_image(", src)
+        self.assertGreaterEqual(src.count("run_ocr_on_image("), 3,
+                                "业务与自检应共用 run_ocr_on_image")
+
+    def test_python_and_go_agree_on_the_ocr_contract(self):
+        """两侧的契约必须一致 —— 顺序/名字一旦分叉, 部署结论与命令行为就会各说各话。"""
+        import re
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        with open(os.path.join(root, "internal", "foundation", "python.go"),
+                  encoding="utf-8") as fh:
+            py_go = fh.read()
+        m = re.search(r"PythonCandidates = \[\]string\{([^}]*)\}", py_go)
+        go_cands = tuple(re.findall(r'"([^"]+)"', m.group(1)))
+        self.assertEqual(go_cands, ds.OCR_PYTHON_CANDIDATES,
+                         "Go 与 Python 的解释器候选链必须一致(含顺序)")
+
+        with open(os.path.join(root, "internal", "foundation", "python_capability.go"),
+                  encoding="utf-8") as fh:
+            cap_go = fh.read()
+        for const, name in (("OCRPythonEnv", ds.OCR_PYTHON_ENV),
+                            ("OCRScriptEnv", ds.OCR_SCRIPT_ENV)):
+            got = re.search(r'%s = "([^"]+)"' % const, cap_go)
+            self.assertIsNotNone(got, "Go 侧缺少常量 %s" % const)
+            self.assertEqual(got.group(1), name,
+                             "%s 两侧名字不一致: Go=%s Python=%s" % (const, got.group(1), name))
+
+        # Go 的 ocr 命令必须要求与 Python 侧同一组模块
+        with open(os.path.join(root, "cmd", "medit", "commands", "anno2ppt.go"),
+                  encoding="utf-8") as fh:
+            cmd_go = fh.read()
+        self.assertIn("ResolvePythonFor", cmd_go, "ocr 命令没走能力感知的解释器解析")
+        self.assertIn("ResolveOCRScript", cmd_go, "ocr 命令没走锚定的脚本解析")
+        for mod in ("paddleocr", "pymupdf"):
+            self.assertIn('"%s"' % mod, cmd_go, "ocr 命令未要求 %s" % mod)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

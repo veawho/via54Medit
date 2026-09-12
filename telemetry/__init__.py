@@ -20,7 +20,7 @@ TelemetryDB`` 之类写法完全不受影响 (由 ``__getattr__`` 兜住)。
 import importlib
 from typing import Any
 
-__version__ = "1.5.44"
+__version__ = "1.5.45"
 
 #: 对外符号 -> (子模块, 模块内名称)
 _LAZY_EXPORTS = {

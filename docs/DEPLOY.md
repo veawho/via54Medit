@@ -135,6 +135,20 @@ MINIMAX_API_KEY 未设置而 mmx 早已认证且能调通(假警报)、以及配
 PaddleOCR 3.x 的 API(`use_textline_orientation` + `.predict()` + `result[0]['rec_texts']`),
 不约束就会有一天静默装上 2.x/4.x, 而"装上了"与"能跑"是两件事。
 
+**装进哪个解释器**: OCR 的依赖要装进"**真正会跑 OCR 的那个** Python", 未必是部署脚本自己的
+那个。实测故障(2026-09-12): 本机 `~/.local/bin/python3.11` 有 pymupdf 却没有 paddleocr,
+而 `ResolvePython` 按名字先挑中了它 —— `medit anno2ppt ocr` 直接 `ModuleNotFoundError`,
+同时部署报告因为用**另一个**解释器探测, 仍然写着"✓ PaddleOCR 已就绪"。现在两侧都按
+"能不能 import"挑解释器(候选链与顺序必须一致, 有测试钉住), 安装也进同一个解释器。
+
+```bash
+export VIA54_OCR_PYTHON=/path/to/python   # 显式指定(该解释器必须已装 paddleocr; 严格, 不合格就报错)
+export VIA54_OCR_SCRIPT=/path/to/paddleocr_pdf_page.py   # 显式指定脚本(严格)
+```
+
+`medit anno2ppt ocr` 的脚本解析以**仓库根**为锚(`$VIA54_REPO` > 可执行文件位置 > cwd 上溯),
+不再依赖当前工作目录 —— 旧实现只在"恰好 cd 到仓库根"时才找得到脚本。
+
 **部署后复检**(部署器与更新器都会跑, 也可单独跑):
 
 ```bash
@@ -172,7 +186,8 @@ brew / apt / dnf / pacman / winget / choco / scoop。需要管理员权限却拿
 **环境变量**(CI / 无人值守部署): 与开关一一对应 ——
 `VIA54_DRY_RUN` / `VIA54_ONLY` / `VIA54_SKIP_HEAVY` / `VIA54_STRICT` / `VIA54_JSON` /
 `VIA54_STAGE` / `VIA54_HOME`(私有前缀, 默认 `~/.via54medit`) / `VIA54_ALLOW_BREAK_SYSTEM` /
-`VIA54_OCR_SMOKE_TEXT`(OCR 真识别探针用的样本文字, 默认 `OCR 12345`)。
+`VIA54_OCR_SMOKE_TEXT`(OCR 真识别探针用的样本文字, 默认 `OCR 12345`) /
+`VIA54_OCR_PYTHON`(跑 OCR 的解释器) / `VIA54_OCR_SCRIPT`(OCR 脚本路径) / `VIA54_REPO`(仓库根)。
 命令行开关优先于同名环境变量。
 
 OCR 的权重缓存根目录认 **`PADDLE_PDX_CACHE_HOME`**(PaddleX 自己读的变量, 默认 `~/.paddlex`;

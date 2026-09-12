@@ -4,32 +4,132 @@ PaddleOCR PDF Page Parser — Phase 7 L2 (中量方案)
 
 用途: 对 PDF 的指定页进行 PaddleOCR 识别, 输出结构化 JSON
    - 文字块: 文本 + 坐标 + 置信度
-   - 表格识别 (PP-Structure): 如果检测到表格, 输出行/列/schema
-   - 聚合: 文本按 y 坐标排序, 行/段合并
+   - 行/段合并: 按 y 坐标把文字块聚成行
+   - 疑似表格行: 从行文本里按"同时出现中文名与数字"的启发式挑出来
 
 调用: python3 paddleocr_pdf_page.py <pdf_path> <page_num>
+      python3 paddleocr_pdf_page.py --smoke          # 真识别自检(部署/复检用)
 输出: stderr = 进度日志; stdout = JSON
 
-依赖: PaddleOCR 3.7.0 + PaddlePaddle 3.3.1 (已在 hermes-agent venv)
+依赖: PaddleOCR 3.x + PaddlePaddle 3.x + PyMuPDF。
+
+**注意 (2026-09-12)**: 这个脚本**必须**用装了 paddleocr 的那个解释器运行。
+本机实测过一个真实故障: `python3.11` 有 pymupdf 却没有 paddleocr, 而 `python3` 两个都有 ——
+`ResolvePython` 先按名字挑到 python3.11, 于是 `medit anno2ppt ocr` 直接 ModuleNotFoundError,
+而部署报告因为用的是**另一个**解释器探测, 仍然写着"PaddleOCR 已就绪"。
+现在调用方按"能不能 import"挑解释器(见 foundation.ResolvePythonFor 与
+deploy_scan.ocr_python), 本脚本的 ``--smoke`` 也用于把这个选择结果验一遍。
+
+关于"表格识别": 早期文档写作 PP-Structure, 但实现里并没有引入它 —— 只有上面那条
+行/数字启发式。这里如实描述, 不再声称用了 PP-Structure。
 """
 
 import json
 import os
 import sys
+import tempfile
 import traceback
 
 import pymupdf as fitz  # PyMuPDF
 
 
+def _temp_png_path(tag: str) -> str:
+    """临时 PNG 路径。
+
+    **不用** 硬编码 ``/tmp`` —— 那是 POSIX 假设, Windows 上 ``C:\\tmp`` 通常不存在,
+    渲染会在第一步就失败(部署扫描器的平台兼容段一直在报这条)。
+    """
+    fd, path = tempfile.mkstemp(prefix="paddleocr_%s_" % tag, suffix=".png")
+    os.close(fd)
+    return path
+
+
 def render_page_to_image(pdf_path: str, page_num: int, dpi: int = 200) -> str:
     """将 PDF 指定页渲染为 PNG 图片"""
     doc = fitz.open(pdf_path)
-    page = doc[page_num - 1]  # 1-indexed → 0-indexed
-    pix = page.get_pixmap(dpi=dpi)
-    out_path = f"/tmp/paddleocr_p{page_num}_{os.getpid()}.png"
-    pix.save(out_path)
-    doc.close()
+    try:
+        page = doc[page_num - 1]  # 1-indexed → 0-indexed
+        pix = page.get_pixmap(dpi=dpi)
+        out_path = _temp_png_path("p%d" % page_num)
+        pix.save(out_path)
+    finally:
+        doc.close()
     return out_path
+
+
+def run_ocr_on_image(img_path: str):
+    """跑一次 PaddleOCR 推理, 返回第一条结果对象。
+
+    单独抽出来是为了让**真实业务路径**与 ``--smoke`` 自检走同一段代码:
+    自检若与业务不同源, 它验过的就不是真正会跑的那条路。
+    """
+    from paddleocr import PaddleOCR
+
+    ocr = PaddleOCR(use_textline_orientation=True, lang="ch")
+    result = ocr.predict(img_path)
+    return (result or [None])[0]
+
+
+def smoke_test() -> int:
+    """真识别自检 —— 部署/复检用。返回进程退出码。
+
+    为什么需要它: "能 import" 不等于 "能识别"。权重没下、ABI 不匹配、解释器选错,
+    这三种情况在 import 阶段都可能看不出来, 只有真跑一次才会暴露。
+    这里自造一张带文字的图(Pillow 直接画, 不依赖任何外部素材), 跑完断言拿到非空文字。
+
+    断言只要求"识别到非空文本", **不比对具体字符串** —— OCR 把 O 认成 D 是正常的
+    (实测 "OCR 12345" → "DCR 12345", 置信度 0.996), 拿精确比对当门槛是自找假红。
+    """
+    text = os.environ.get("VIA54_OCR_SMOKE_TEXT", "OCR 12345")
+    img_path = None
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        font = None
+        for p in ("/System/Library/Fonts/Supplemental/Arial.ttf",
+                  "/System/Library/Fonts/Helvetica.ttc",
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                  r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\arial.ttf"):
+            if os.path.exists(p):
+                try:
+                    font = ImageFont.truetype(p, 64)
+                    break
+                except Exception:                           # noqa: BLE001
+                    continue
+        if font is None:
+            try:
+                font = ImageFont.load_default(size=64)      # Pillow >= 10.1
+            except Exception:                               # noqa: BLE001
+                font = ImageFont.load_default()
+
+        img_path = _temp_png_path("smoke")
+        image = Image.new("RGB", (520, 150), "white")
+        # 只用数字与拉丁字母: Pillow 默认字体没有 CJK 字形, 画中文会变成方框 -> 假失败
+        ImageDraw.Draw(image).text((20, 40), text, fill="black", font=font)
+        image.save(img_path)
+
+        r = run_ocr_on_image(img_path)
+        if r is None:
+            print("[L2][smoke] ERROR: 推理返回空结果", file=sys.stderr)
+            return 1
+        try:
+            texts = list(r["rec_texts"])
+        except Exception:                                   # noqa: BLE001
+            texts = list(getattr(r, "rec_texts", None) or [])
+        if not texts:
+            print("[L2][smoke] ERROR: 模型加载成功但没识别出任何文字"
+                  "(权重损坏或 ABI 不匹配)", file=sys.stderr)
+            return 1
+        print("[L2][smoke] OK: 识别到 %d 段文字 (%s)"
+              % (len(texts), "".join(str(t) for t in texts)[:40]), file=sys.stderr)
+        return 0
+    except Exception as e:                                  # noqa: BLE001
+        print("[L2][smoke] ERROR: %s: %s" % (type(e).__name__, str(e)[:200]), file=sys.stderr)
+        return 1
+    finally:
+        if img_path and os.path.exists(img_path):
+            os.remove(img_path)
 
 
 def group_rows_by_y(texts, scores, polys, y_gap: int = 30):
@@ -120,8 +220,13 @@ def extract_table_data(rows, keywords=None):
 
 
 def main():
+    # --smoke: 真识别自检(部署/复检入口)。放在参数校验之前 —— 它不需要 PDF 参数。
+    if "--smoke" in sys.argv[1:]:
+        sys.exit(smoke_test())
+
     if len(sys.argv) < 3:
         print("Usage: paddleocr_pdf_page.py <pdf_path> <page_num>", file=sys.stderr)
+        print("       paddleocr_pdf_page.py --smoke", file=sys.stderr)
         sys.exit(1)
 
     pdf_path = sys.argv[1]
@@ -137,13 +242,12 @@ def main():
     img_path = render_page_to_image(pdf_path, page_num)
     print(f"[L2] Rendered page {page_num} to {img_path} ({os.path.getsize(img_path)} bytes)", file=sys.stderr)
 
-    # 用 PaddleOCR 识别
+    # 用 PaddleOCR 识别 (与 --smoke 自检同一段代码)
     try:
-        from paddleocr import PaddleOCR
-        ocr = PaddleOCR(use_textline_orientation=True, lang='ch')
         print(f"[L2] PaddleOCR initialized, running inference...", file=sys.stderr)
-        result = ocr.predict(img_path)
-        r = result[0]
+        r = run_ocr_on_image(img_path)
+        if r is None:
+            raise RuntimeError("推理返回空结果")
 
         texts = r['rec_texts']
         scores = r['rec_scores']
