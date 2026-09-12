@@ -5,7 +5,7 @@
 用法: python3 align_tables.py [--out-dir _citation_table]"""
 import os, sys, json, csv, hashlib, re, glob
 
-BASE = '/Users/david/Desktop/TMA_文献整理'
+BASE = os.path.expanduser('~/Desktop/TMA_文献整理')
 STEP4 = os.path.join(BASE, 'step4_highlight_106目录_合并DOI')
 STEP3 = os.path.join(BASE, 'step3_pdf下载_106目录')
 CIT_JSON = os.path.join(BASE, '_citation_table', 'tma_citation_table.json')

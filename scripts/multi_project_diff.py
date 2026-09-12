@@ -16,12 +16,12 @@ from via54_rules import check_all, RULES_TEXT
 PROJECTS = [
     {
         "name": "雷管方案 (uHCC/HCC 三重获益 PPT)",
-        "root": "/Users/david/Desktop/雷管方案_文献整理",
+        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
         "size_mb": None,  # lazy
     },
     {
         "name": "TMA (临床路径诊断与鉴别 PPT)",
-        "root": "/Users/david/Desktop/TMA_文献整理",
+        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
         "size_mb": None,
     },
 ]

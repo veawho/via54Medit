@@ -15,7 +15,7 @@ V4-26-fix: 整合 _literature_citation_index/ 下散乱的单 Pn-x 目录到合�
 
 import os, csv, hashlib, shutil
 
-BASE = '/Users/david/Desktop/雷管方案_文献整理'
+BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 ARCHIVE = os.path.join(BASE, '_literature_citation_index')
 

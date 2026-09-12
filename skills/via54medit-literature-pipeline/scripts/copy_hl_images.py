@@ -7,7 +7,7 @@ try:
 except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
     import fitz
 
-BASE = '/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI'
+BASE = os.path.expanduser('~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI')
 
 def process(pn, dry=False):
     d = os.path.join(BASE, pn)

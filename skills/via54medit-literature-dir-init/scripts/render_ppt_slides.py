@@ -29,6 +29,12 @@ def render_ppt_applescript(pptx_path, output_dir):
     pdf_path = os.path.join(output_dir, '_ppt_export.pdf')
     if os.path.exists(pdf_path):
         os.remove(pdf_path)
+    # osascript 是 macOS 专属命令 —— 在别的平台必然 FileNotFoundError, 而那个报错
+    # 与"PowerPoint 没装"很难区分。这里显式判平台并说清替代方案。
+    if sys.platform != 'darwin':
+        raise RuntimeError(
+            'PowerPoint AppleScript 导出只在 macOS 可用 (osascript); '
+            '其它平台请改用 LibreOffice 或 RENDER_ENGINE=graph 通道')
     ascript = f'''
     tell application "Microsoft PowerPoint"
         open POSIX file "{pptx_path}"

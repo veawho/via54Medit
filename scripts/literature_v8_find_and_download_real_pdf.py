@@ -22,11 +22,11 @@ import sys, os, hashlib, subprocess, shutil, json, time
 import urllib.request, urllib.error
 from pathlib import Path
 
-BASE = '/Users/david/Desktop/雷管方案_文献整理'
+BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 ARCHIVE = os.path.join(BASE, '_literature_citation_index')
 V4_23_BACKUP = os.path.join(BASE, '_audit_report', '_phase_v4_23_highlight_backup')
-PYTHON = '/Users/david/.hermes/hermes-agent/venv/bin/python3.11'
+PYTHON = os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11')
 
 
 def md5_of(p):

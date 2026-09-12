@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-13: slide 23 引用13 (Jodele BMT 2018) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-13_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-13/P23-13_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-13_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-13/P23-13_highlight.pdf")
 
 SENTENCES = [
     "Transplant-associated thrombotic microangiopathy (TA-TMA) is an increasingly recognized complication of hematopoietic cell transplant that can result in multi-organ failure (MOF).",

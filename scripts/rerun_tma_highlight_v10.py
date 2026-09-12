@@ -34,7 +34,7 @@ import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
 PDF_DIR = os.path.join(TMA_ROOT, "_2_pdfs")
 HIGHLIGHT_OLD_DIR = os.path.join(TMA_ROOT, "_3_highlight")
 HIGHLIGHT_NEW_DIR = os.path.join(TMA_ROOT, "_3_highlight_v10")

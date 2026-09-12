@@ -32,7 +32,7 @@ from pdf_understand import (
 )
 
 P41_MAIN = (
-    os.environ.get("VIA54_LEIGUAN_DIR", "/Users/david/Desktop/雷管方案_文献整理")
+    os.environ.get("VIA54_LEIGUAN_DIR", os.path.expanduser("~/Desktop/雷管方案_文献整理"))
     + "/_literature_citation_index/P4-1/P4-1_main_Lin_FrontOncol_2022.pdf"
 )
 

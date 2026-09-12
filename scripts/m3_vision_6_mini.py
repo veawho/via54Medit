@@ -3,11 +3,11 @@
 import json, os, sys, shutil, time, re
 from collections import defaultdict
 
-sys.path.insert(0, '/Users/david/Desktop/developments/via54Medit/scripts')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import m3_vision_highlight as mv3
 import pymupdf as fitz
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 OUT = f'{TMA}/step4_highlight_106目录_合并DOI'
 
 # 6 个 Pn-x + 手工选 anchor (从 PDF page 0 text 抓)

@@ -25,7 +25,7 @@ def load_config():
         'feishu_token': os.environ.get('FEISHU_TOKEN', ''),
         'sheet_id': os.environ.get('SHEET_ID', ''),
         'csv_path': os.environ.get('CSV_PATH', ''),
-        'lark_cli': os.environ.get('LARK_CLI', '/Users/david/.hermes/node/bin/lark-cli'),
+        'lark_cli': os.environ.get('LARK_CLI', os.path.expanduser('~/.hermes/node/bin/lark-cli')),
     }
     
     # 尝试 config 文件

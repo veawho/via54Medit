@@ -21,13 +21,13 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 # 路径常量
-PPTX_PATH = '/Users/david/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622_expanded.pptx'
-OUT_XML = '/Users/david/Desktop/雷管方案_文献整理/_pptx_xml_structured.json'
-OUT_CSV = '/Users/david/Desktop/雷管方案_文献整理/PPT_citations_4col.csv'
-TRUTH = '/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv'
+PPTX_PATH = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622_expanded.pptx')
+OUT_XML = os.path.expanduser('~/Desktop/雷管方案_文献整理/_pptx_xml_structured.json')
+OUT_CSV = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT_citations_4col.csv')
+TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
 VISION_JSON = '/tmp/vision_d_merged.json'
 MISALIGNED_4 = {('12', '5'), ('14', '2'), ('22', '13'), ('30', '10')}
-ARCHIVE_DIR = '/Users/david/Desktop/雷管方案_文献整理/_archived_old_dirs'
+ARCHIVE_DIR = os.path.expanduser('~/Desktop/雷管方案_文献整理/_archived_old_dirs')
 
 # ============================================================
 # 轨道 A: python-pptx 提 PPTX 结构化数据

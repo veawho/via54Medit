@@ -2,7 +2,7 @@
 """快速全删 DEL 27 个 Pn-x 的所有冗余 - 用 glob + rm 加快"""
 import os, json, sys, subprocess, glob
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
 DEL = DECISION['TMA']['del']
 

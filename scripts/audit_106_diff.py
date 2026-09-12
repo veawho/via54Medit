@@ -2,10 +2,10 @@
 """找出 _2_pdfs (90) 和理论 106 PDF 的差异"""
 import os, json
 
-plans = json.load(open('/Users/david/Desktop/TMA_文献整理/_3_highlight_vision/_highlight_plans.json', encoding='utf-8'))
+plans = json.load(open(os.path.expanduser('~/Desktop/TMA_文献整理/_3_highlight_vision/_highlight_plans.json'), encoding='utf-8'))
 plans = plans if isinstance(plans, list) else plans['plans']
 plan_pn = set(p['pn_x'] for p in plans)
-src_pn = set(f.replace('_main.pdf', '') for f in os.listdir('/Users/david/Desktop/TMA_文献整理/_2_pdfs') if f.endswith('.pdf'))
+src_pn = set(f.replace('_main.pdf', '') for f in os.listdir(os.path.expanduser('~/Desktop/TMA_文献整理/_2_pdfs')) if f.endswith('.pdf'))
 
 # 11 不可救
 UNREC = {'P5-1', 'P30-4', 'P14-1', 'P19-1',

@@ -148,7 +148,8 @@ def main():
         except Exception as e:
             print(f"  ERR: {e}")
 
-    out_path = "/Users/david/Desktop/developments/via54Medit/docs/wrong_pdf_replacement_candidates_20260811.json"
+    out_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "docs", "wrong_pdf_replacement_candidates_20260811.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2)
     print(f"\n=== Saved {out_path} ===")

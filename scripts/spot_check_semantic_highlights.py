@@ -15,8 +15,8 @@ from pathlib import Path
 import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
-LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
 
 
 def list_highlights_in_pdf(pdf_path: str) -> dict:

@@ -7,8 +7,8 @@
 import os, hashlib, json, re, sys
 from collections import defaultdict
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
-LEIGUAN = '/Users/david/Desktop/雷管方案_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
+LEIGUAN = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 
 # 从 _2_pdfs 算 hash 重复组
 def get_hash_dup_groups(root_dir):

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P17-2: slide 17 引用2 (Zheng JTH 2020 ISTH TTP指南) ADAMTS13诊断应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P17-2_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P17-2/P17-2_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P17-2_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P17-2/P17-2_highlight.pdf")
 
 SENTENCES = [
     "Thrombotic thrombocytopenic purpura (TTP) is a rare but poten-tially fatal blood disorder.",

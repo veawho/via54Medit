@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
 
 
 def get_page_body_text(pdf_path: str, page_idx: int, top_skip: float = 0.15, max_chars: int = 800) -> str:
@@ -171,7 +171,7 @@ def main():
     parser.add_argument('--write', action='store_true', help='写回 plans JSON')
     args = parser.parse_args()
 
-    project_root = TMA_ROOT if args.project == 'TMA' else "/Users/david/Desktop/雷管方案_文献整理"
+    project_root = TMA_ROOT if args.project == 'TMA' else os.path.expanduser("~/Desktop/雷管方案_文献整理")
     plans_path = os.path.join(project_root, '_3_highlight_vision', '_highlight_plans.json')
     sem_dir = os.path.join(project_root, '_3_highlight_semantic_v142' if args.project == '雷管方案' else '_3_highlight_semantic_v141')
 

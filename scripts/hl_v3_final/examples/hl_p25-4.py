@@ -6,8 +6,8 @@ import sys, os
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = '/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-4_main.pdf'
-OUT = '/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-4/P25-4_highlight.pdf'
+SRC = os.path.expanduser('~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-4_main.pdf')
+OUT = os.path.expanduser('~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-4/P25-4_highlight.pdf')
 
 SENTENCES = [
     # 核心发病机制: 补体旁路失调→补体损伤+微血栓(肾小球毛细血管)

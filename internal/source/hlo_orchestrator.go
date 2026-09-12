@@ -23,10 +23,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/veawho/via54Medit/internal/foundation"
 	"github.com/veawho/via54Medit/pkg/types"
 )
 
@@ -86,12 +89,17 @@ func NewHLOSource(cfg map[string]any) (*HLOSource, error) {
 	return s, nil
 }
 
-// autoDetectScript 自动找 hlo_nlu_v2.py (按可能性优先级)
+// autoDetectScript 自动找 hlo_nlu_v2.py (按可能性优先级)。
+//
+// 2026-09-12 修正两处:
+//   - 原来的首选是写死某个 macOS 账号的路径 (/Users/<name>/Desktop/…), 换台机器必然落空;
+//   - 原来还有一个候选写作字面量 "$HOME/HLO_design/hlo_nlu_v2.py" —— fileExists 不做
+//     shell 展开, 所以那条候选**从来没命中过**(是死代码, 这次一并去掉)。
 func autoDetectScript() string {
 	candidates := []string{
-		"/Users/david/Desktop/HLO_design/hlo_nlu_v2.py",
+		filepath.Join(osHomeDir(), "Desktop", "HLO_design", "hlo_nlu_v2.py"),
+		filepath.Join(osHomeDir(), "HLO_design", "hlo_nlu_v2.py"),
 		"./hlo_nlu_v2.py",
-		"$HOME/HLO_design/hlo_nlu_v2.py",
 	}
 	for _, c := range candidates {
 		if fileExists(c) {
@@ -268,13 +276,27 @@ func HLOTruthQuery(rowPref string) (map[string]any, error) {
 	truthPath := osHomeDir() + "/.hermes/cache/lit_truth.json"
 	if !fileExists(truthPath) {
 		// 自动生成
-		cmd := exec.Command("python3.11", "/Users/david/Desktop/HLO_design/hlo_nlu_v2.py", "刷新 truth")
+		// 解释器按"能不能 import 依赖"解析, 不写死 python3.11 —— 版本名在不同机器上
+		// 对不上是常态(见 foundation.ResolvePythonFor 的说明), 脚本路径同样 HOME 派生。
+		pyExe, err := foundation.ResolvePython(nil)
+		if err != nil {
+			return nil, fmt.Errorf("truth refresh 需要 Python: %w", err)
+		}
+		script := autoDetectScript()
+		if script == "" {
+			return nil, fmt.Errorf("truth refresh 找不到 hlo_nlu_v2.py")
+		}
+		cmd := exec.Command(pyExe, script, "刷新 truth")
 		if err := cmd.Run(); err != nil {
 			return nil, fmt.Errorf("truth refresh failed: %w", err)
 		}
 	}
 	// 读 JSON
-	cmd := exec.Command("python3.11", "-c",
+	pyExe, err := foundation.ResolvePython(nil)
+	if err != nil {
+		return nil, fmt.Errorf("读取真值表需要 Python: %w", err)
+	}
+	cmd := exec.Command(pyExe, "-c",
 		fmt.Sprintf("import json; t=json.load(open('%s')); print(json.dumps(t.get('%s', {})))", truthPath, rowPref))
 	out, err := cmd.Output()
 	if err != nil {
@@ -287,7 +309,13 @@ func HLOTruthQuery(rowPref string) (map[string]any, error) {
 	return result, nil
 }
 
+// osHomeDir 返回用户主目录。
+//
+// 走 os.UserHomeDir 而不是 `sh -c "echo $HOME"` —— 后者依赖 POSIX shell,
+// 在 Windows 上直接不可用, 而这里本来就只需要一个路径。
 func osHomeDir() string {
-	out, _ := exec.Command("sh", "-c", "echo $HOME").Output()
-	return strings.TrimSpace(string(out))
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+	return os.Getenv("HOME") // 兜底: 少数环境下 UserHomeDir 会失败
 }

@@ -42,7 +42,7 @@ from via54_highlight_v3_final import (
 
 
 # === 路径 ===
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
 PDF_DIR = os.path.join(TMA_ROOT, "_2_pdfs")
 HIGHLIGHT_DIR = os.path.join(TMA_ROOT, "_3_highlight_v3")
 CSV_PATH = os.path.join(TMA_ROOT, "_citation_table/tma_citation_table.csv")

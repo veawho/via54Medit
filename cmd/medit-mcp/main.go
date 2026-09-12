@@ -320,7 +320,7 @@ func anno2pptTool(_ context.Context, _ *mcp.CallToolRequest, input Anno2PPTInput
 //   User: "Qin S 2025 HCC"   → medit_hlo_ask(query="找 Qin S 2025 HCC")
 //   User: "P5-7 d 改成 Meyer"  → medit_hlo_corr(row="5-7", field="d", ...)
 //
-// HLO Python 路径: /Users/david/Desktop/HLO_design/hlo_nlu_v2.py
+// HLO Python 路径: ~/Desktop/HLO_design/hlo_nlu_v2.py (可用 $HLO_SCRIPT 覆盖)
 // =============================================================================
 
 // hloRunPython 执行 hlo_nlu_v2.py 并返回 stdout

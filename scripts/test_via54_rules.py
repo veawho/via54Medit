@@ -494,7 +494,7 @@ class TestCheckAll(unittest.TestCase):
 class TestRealProject(unittest.TestCase):
     """真实 TMA 项目跑规则"""
 
-    PROJECT = "/Users/david/Desktop/TMA_文献整理"
+    PROJECT = os.path.expanduser("~/Desktop/TMA_文献整理")
 
     def test_tma_project(self):
         if not os.path.isdir(self.PROJECT):

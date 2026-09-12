@@ -73,5 +73,5 @@ if __name__ == '__main__':
         print('需提供 spreadsheet_token: --sheet <token> 或环境变量 FEISHU_SPREADSHEET_TOKEN')
         sys.exit(1)
     csv_path = sys.argv[sys.argv.index('--csv') + 1] if '--csv' in sys.argv else \
-        '/Users/david/Desktop/TMA_文献整理/_citation_table/tma_citation_table_feishu_ALIGNED.csv'
+        os.path.expanduser('~/Desktop/TMA_文献整理/_citation_table/tma_citation_table_feishu_ALIGNED.csv')
     write_sheet(tok, csv_path)

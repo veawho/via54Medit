@@ -19,8 +19,8 @@ from typing import Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
-LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
 
 
 def find_pdf(project_root: str, pn_x: str) -> Optional[str]:

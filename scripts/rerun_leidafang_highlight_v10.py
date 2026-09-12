@@ -33,7 +33,7 @@ import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 
-LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
+LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
 STEP3_DIR = os.path.join(LEIDA_ROOT, "step3_pdf下载_160目录")
 STEP4_OLD_DIR = os.path.join(LEIDA_ROOT, "step4_highlight_96目录_合并DOI")
 STEP4_NEW_DIR = os.path.join(LEIDA_ROOT, "step4_highlight_v10")

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-1: slide 23 引用1 (Jodele Semin Hematol 2018 TA-TMA) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-1/P23-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-1/P23-1_highlight.pdf")
 
 SENTENCES = [
     "Transplant-associated thrombotic microangiopathy (TA-TMA) is a form of microangiopathy speciﬁcally occurring in the context of hematopoietic stem cell transplantation (HSCT).",

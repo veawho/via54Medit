@@ -194,6 +194,29 @@ OCR 的权重缓存根目录认 **`PADDLE_PDX_CACHE_HOME`**(PaddleX 自己读的
 权重在其下的 `official_models/`)。用别的名字覆盖是无效的 —— 探针会去看一个 PaddleX 根本
 不写的位置, 于是永远报"权重缺失"。
 
+**平台专属硬编码扫描**(`--stage compat`): 仓库要能在 macos / linux / windows 上都跑,
+所以扫描器会找"只有在某一平台上才成立"的写法。五类:
+
+| 类别 | 形态 | 什么时候不算问题 |
+| --- | --- | --- |
+| `macos_user_path` | `/Users/<账号>/…` | 占用位符除外(`/Users/x/…` 之类的合成样例), 其余一律报 |
+| `macos_only_path` | `/Applications/` `/System/` `/Library/` `/opt/homebrew/` | 该文件里有平台守卫, **或**有存在性探测 |
+| `macos_only_cmd` | `osascript` `sips` `pbcopy` `textutil` `hdiutil` … | 该文件里有平台守卫 |
+| `posix_tmp` | `/tmp/…` | —— (POSIX 假设, 也算问题) |
+| `foreign_path` | `G:\` `C:\Users\via54` | —— |
+
+**存在性探测算合法写法**, 不算硬编码。候选表 + 逐个 `os.path.exists` / `LookPath` /
+`shutil.which` 正是跨平台该有的样子(见 `internal/source/chrome_launcher.go` 的
+`ChromeCandidates()`), 报它只会让人去改对的东西。同理, `runtime.GOOS == "darwin"` /
+`sys.platform` 守卫下的 macOS 路径是**故意的分支**, 不是硬编码。
+
+扫描器刻意**不把 `open` / `defaults` 列为 macOS 专属命令** —— 它们作为字符串在 JSON 键和
+状态值里到处都是, 列进去会满屏误报; 会误报的检查器迟早被忽略。只收明确只有 macOS
+才有、且不会与普通字符串混淆的那几个。
+
+`v5.4.46` 起这条不变量由单测 `TestMacosHardcodingScan::test_repo_has_no_macos_specific_hardcoding`
+钉住: 再写死账号路径, 测试直接红。
+
 ### 2.4 装完凭什么算"装好了"
 
 这一节的机制参考了两个成熟项目的部署方式 —— `hermes-agent`(`scripts/install.sh`、

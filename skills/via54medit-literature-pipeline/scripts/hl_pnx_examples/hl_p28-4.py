@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P28-4: 固定句子定义, 自动定位页并 highlight"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P28-4_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P28-4/P28-4_highlight.pdf"
+SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P28-4_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P28-4/P28-4_highlight.pdf")
 
 SENTENCES = [
     'Overall, a ≥2 days delay from admission to starting TPE was more prevalent in the older age groups (31.9% vs. 34.4% vs. 47.6%, p-value of <.001; Table 1A).',

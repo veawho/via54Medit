@@ -12,7 +12,7 @@ rerun_keep_pn_x.py — 校准重跑 KEEP 19 + m3 目录非冲突 Pn-x.
 import json, os, sys, re, pymupdf as fitz, shutil, subprocess, time
 from collections import defaultdict
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 PLANS_FILE = f'{TMA}/_3_highlight_vision/_highlight_plans.json'
 OUT_DIR = f'{TMA}/_3_highlight_semantic_m3'
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -103,14 +103,14 @@ def find_anchor_in_pdf(anchor: str, doc):
 def run_highlight(pn, pi, anchor):
     """调 m3_vision_highlight.py 应用 underline"""
     cmd = [
-        '/Users/david/.hermes/hermes-agent/venv/bin/python',
-        '/Users/david/Desktop/developments/via54Medit/scripts/m3_vision_highlight.py',
+        os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "m3_vision_highlight.py"),
         '--pn-x', pn,
         '--entries', f'[[{pi}, {json.dumps(anchor)}, "phrase"]]',
         '--out-dir', OUT_DIR,
     ]
     r = subprocess.run(cmd, capture_output=True, text=True,
-                        cwd='/Users/david/Desktop/developments/via54Medit',
+                        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         timeout=30)
     ok = 0
     skip = 0

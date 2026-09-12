@@ -26,18 +26,18 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 PROJECTS = {
     "TMA": {
-        "root": "/Users/david/Desktop/TMA_文献整理",
-        "suggestions_json": "/Users/david/Desktop/TMA_文献整理/_3_highlight_v10_glm/_redownload_suggestions.json",
-        "pdf_dir": "/Users/david/Desktop/TMA_文献整理/_2_pdfs",
-        "old_highlight_dir": "/Users/david/Desktop/TMA_文献整理/_3_highlight",
-        "new_highlight_dir": "/Users/david/Desktop/TMA_文献整理/_3_highlight_v10_glm",
+        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
+        "suggestions_json": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm/_redownload_suggestions.json"),
+        "pdf_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs"),
+        "old_highlight_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight"),
+        "new_highlight_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm"),
     },
     "雷管方案": {
-        "root": "/Users/david/Desktop/雷管方案_文献整理",
-        "suggestions_json": "/Users/david/Desktop/雷管方案_文献整理/step4_highlight_v10_glm/_redownload_suggestions.json",
-        "pdf_dir": "/Users/david/Desktop/雷管方案_文献整理/step3_pdf下载_160目录",
-        "old_highlight_dir": "/Users/david/Desktop/雷管方案_文献整理/step4_highlight_96目录_合并DOI",
-        "new_highlight_dir": "/Users/david/Desktop/雷管方案_文献整理/step4_highlight_v10_glm",
+        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
+        "suggestions_json": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm/_redownload_suggestions.json"),
+        "pdf_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step3_pdf下载_160目录"),
+        "old_highlight_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_96目录_合并DOI"),
+        "new_highlight_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm"),
     },
 }
 

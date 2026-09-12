@@ -10,10 +10,12 @@ import urllib.request
 import urllib.parse
 import pymupdf as fitz
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
 PDF_REPLACE_DIR = os.path.join(TMA_ROOT, "_2_pdfs_replaced")
-BACKUP_DIR = "/Users/david/Desktop/TMA_文献整理/_downloads/_pdfs_real"
-CANDIDATES_JSON = "/Users/david/Desktop/developments/via54Medit/docs/wrong_pdf_replacement_candidates_20260811.json"
+BACKUP_DIR = os.path.expanduser("~/Desktop/TMA_文献整理/_downloads/_pdfs_real")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CANDIDATES_JSON = os.path.join(_REPO_ROOT, "docs",
+                               "wrong_pdf_replacement_candidates_20260811.json")
 
 SCI_HUB_URLS = [
     "https://sci-hub.al",

@@ -25,12 +25,12 @@ from datetime import datetime
 import re
 
 # 路径
-PROJECT_ROOT = Path('/Users/david/Desktop/developments/via54Medit')
-LIT_ROOT = Path('/Users/david/Desktop/雷管方案_文献整理')
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LIT_ROOT = Path(os.path.expanduser('~/Desktop/雷管方案_文献整理'))
 ARCHIVE_ROOT = LIT_ROOT / '_literature_citation_index'
 CSV_PATH = LIT_ROOT / '_citation_table' / 'citation_table.csv'
 MEDIT_BIN = '/tmp/medit'
-PYTHON = '/Users/david/.hermes/hermes-agent/venv/bin/python3.11'
+PYTHON = os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11')
 
 # Highlight 颜色
 YELLOW = (1, 0.92, 0)

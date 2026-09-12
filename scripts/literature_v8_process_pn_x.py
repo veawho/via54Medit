@@ -19,10 +19,10 @@ P4-2 / 全 89 目录 高亮算法 v2.0 (视觉驱动精确标注 + 工作目录�
 import os, sys, csv, re, json, pymupdf as fitz, subprocess, shutil, time, tempfile
 from collections import defaultdict
 
-BASE = '/Users/david/Desktop/雷管方案_文献整理'
+BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 ARCHIVE = os.path.join(BASE, '_literature_citation_index')
-PYTHON = '/Users/david/.hermes/hermes-agent/venv/bin/python3.11'
+PYTHON = os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11')
 FALLBACK_MANIFEST = os.path.join(BASE, '_audit_report', '_pn_x_fallback_manifest.json')
 FALLBACK_LOG_DIR = os.path.join(BASE, '_audit_report')
 

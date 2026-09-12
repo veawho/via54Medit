@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P4-2: slide 4 引用2 (Luzzatto PNH综述) 近端补体应证句 (按slide4重选, 非复制P3-2)"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-2_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-2/P4-2_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-2_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-2/P4-2_highlight.pdf")
 
 SENTENCES = [
     # p1 Summary - 近端补体途径抑制剂

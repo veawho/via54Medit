@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P6-1: slide 6 引用1 (Ricklin Nat Rev Nephrol 2018 补体治疗) 疾病应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P6-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P6-1/P6-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P6-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P6-1/P6-1_highlight.pdf")
 
 SENTENCES = [
     "Unfortunately, however, vulnerability to erroneous activation and dysregulation renders the complement system an important risk factor for many diseases",

@@ -2,7 +2,7 @@
 """全删 DEL 27 个 Pn-x 的所有冗余文件 (源 PDF / _downloads / _3_highlight_v*_jpgs)"""
 import os, json, sys
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
 DEL = DECISION['TMA']['del']
 

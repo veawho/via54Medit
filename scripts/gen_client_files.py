@@ -8,7 +8,8 @@ import os
 
 T = chr(9)
 NL = chr(10)
-OUT = "/Users/david/Desktop/developments/via54Medit/internal/cite/client"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(_REPO_ROOT, "internal", "cite", "client")
 
 def write(filename, content_lines):
     path = os.path.join(OUT, filename)
@@ -175,11 +176,11 @@ T+'return &http.Client{Timeout: 30 * time.Second}',
 # ── Verify ────────────────────────────────────────
 import subprocess
 subprocess.run(["go", "build", "./cmd/medit/..."],
-    cwd="/Users/david/Desktop/developments/via54Medit",
+    cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     capture_output=True)
 print()
 print("Build:", "OK" if subprocess.run(
     ["go", "build", "./cmd/medit/..."],
-    cwd="/Users/david/Desktop/developments/via54Medit",
+    cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     capture_output=True).returncode == 0 else "FAILED")
 print("All client files regenerated successfully.")

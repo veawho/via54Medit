@@ -188,12 +188,12 @@ if __name__ == '__main__':
 
     pn_x = sys.argv[1]
     # 从 citation_table 读 PDF + targets
-    sys.path.insert(0, '/Users/david/Desktop/雷管方案_文献整理/scripts')
+    sys.path.insert(0, os.path.expanduser('~/Desktop/雷管方案_文献整理/scripts'))
     from process_pn_x import parse_citation_table_for_pn, extract_targets_from_c
 
     info = parse_citation_table_for_pn(pn_x)
-    pdf_path = '/Users/david/Desktop/雷管方案_文献整理/' + info['main_pdf']
-    out_dir = '/Users/david/Desktop/雷管方案_文献整理/_literature_citation_index/' + pn_x
+    pdf_path = os.path.expanduser('~/Desktop/雷管方案_文献整理/') + info['main_pdf']
+    out_dir = os.path.expanduser('~/Desktop/雷管方案_文献整理/_literature_citation_index/') + pn_x
     targets = extract_targets_from_c(info['cite_c'])
 
     n, imgs = process_pn_x(pn_x, pdf_path, out_dir, targets)

@@ -17,11 +17,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-LIT_ROOT = Path(os.environ.get('LIT_ROOT', '/Users/david/Desktop/雷管方案_文献整理'))
+LIT_ROOT = Path(os.environ.get('LIT_ROOT', os.path.expanduser('~/Desktop/雷管方案_文献整理')))
 ARCHIVE_ROOT = LIT_ROOT / '_literature_citation_index'
 PYTHON = (os.environ.get('HERMES_PYTHON')
           or os.environ.get('PYTHON')
-          or '/Users/david/.hermes/hermes-agent/venv/bin/python3.11')
+          or os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11'))
 
 
 def main():
@@ -142,7 +142,7 @@ def main():
         # 调 sensenova
         code = f"""
 import sys
-sys.path.insert(0, '{Path("/Users/david/Desktop/developments/via54Medit/scripts")}')
+sys.path.insert(0, '{Path(__file__).resolve().parent}')
 from provider_vision import vision_analyze
 result = vision_analyze(sys.argv[1], '这张图里有几处黄色高亮? 简单描述每处覆盖的内容.')
 print('SUCCESS' if result.get('success') else 'FAIL')

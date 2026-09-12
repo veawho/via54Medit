@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P11-4: slide 11 引用4 (浙江医学 2025 PNH共识) PNH症状应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P11-4_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P11-4/P11-4_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P11-4_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P11-4/P11-4_highlight.pdf")
 
 SENTENCES = [
     "阵发性睡眠性血红蛋白尿症（PNH）是一种中青年高发病率的后天获得性罕见溶血性疾病，以血管内溶血、潜在的骨髓造血功能衰竭和血栓形成为主要临床特征，严重影响患者的生活质量，甚至导致死亡。",

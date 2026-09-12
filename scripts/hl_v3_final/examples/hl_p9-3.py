@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P9-3: slide 9 引用3 (戴艳玲 中华医学杂志 2018) TMA分类应证句 (含PDF编码)"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-3/P9-3_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-3/P9-3_highlight.pdf")
 
 SENTENCES = [
     "血栓性微血管病#?@A$是由各种原因所致的一组以微血管病性溶血性贫血#@ABA$'血小板减少'缺血性器官受累为特征的急性临床病理综合征",

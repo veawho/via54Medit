@@ -25,8 +25,8 @@ fitz.TOOLS.mupdf_display_warnings(False)
 from provider_vision import vision_analyze, get_api_key, encode_image, get_image_mime
 
 
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
-LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
 RENDER_ZOOM = 1.5  # 渲染 PDF 时放大 1.5x (与 sensenova 看图一致)
 THREAD_WORKERS = 4  # sensenova 并发数
 

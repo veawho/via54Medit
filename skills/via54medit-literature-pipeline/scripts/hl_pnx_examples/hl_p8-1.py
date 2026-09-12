@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P8-1: slide 8 引用1 (Laurence Clin Adv Hematol Oncol 2016 aHUS) TMA三联征应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P8-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P8-1/P8-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P8-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P8-1/P8-1_highlight.pdf")
 
 SENTENCES = [
     # 摘要

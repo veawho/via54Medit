@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P4-4: slide 4 引用4 (Skattum Mol Immunol 2011 补体缺陷感染) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-4_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-4/P4-4_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-4_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-4/P4-4_highlight.pdf")
 
 SENTENCES = [
     # p1 Fig 1 图注整段

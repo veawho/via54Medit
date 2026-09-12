@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1151,24 +1152,97 @@ _POSIX_PATTERNS = (
 _FOREIGN_PATH = ("G:\\", "C:\\Users\\via54")
 
 
+# --------------------------------------------------------------------------- #
+# 平台兼容性扫描 (POSIX 专属假设 = Windows 上的真故障)
+# --------------------------------------------------------------------------- #
+#: 这些写法在 Windows 上会指向不存在的位置, 属于**平台相关代码**。
+_POSIX_PATTERNS = (
+    ('"/tmp/', "硬编码 POSIX 临时目录 /tmp (Windows 上是 C:\\tmp, 通常不存在)"),
+    ("'/tmp/", "硬编码 POSIX 临时目录 /tmp (Windows 上是 C:\\tmp, 通常不存在)"),
+)
+_FOREIGN_PATH = ("G:\\", "C:\\Users\\via54")
+
+# macOS 专属硬编码 (v5.4.46)
+# -------------------------
+# 这一类与 POSIX / 外机路径是**不同**的问题, 所以单列:
+#   * `/tmp` 是"POSIX 假设" —— Windows 上位置不对;
+#   * `/Users/<某个真实账号>/…` 是"**机器专属**" —— 换用户/换机器就不存在, 而
+#     它在 macOS 上看起来完全正常, 所以最容易一路留到别人机器上才炸;
+#   * `/Applications`、`/System`、`/Library` 是"**macOS 专属布局**" —— Linux 上不存在;
+#   * `osascript`/`sips`/`pbcopy` 等是"**macOS 专属命令**" —— 别的平台没有这些可执行文件。
+_MACOS_USER_PATH = re.compile(r"""(['"])/Users/([^/'"\\ ]+)/""")
+#: 合成占位符不报 —— 它们本来就不是某个真实账号(测试里用来构造绝对路径)。
+_MACOS_USER_ALLOWLIST = {"x", "example", "user", "testuser", "someone", "you"}
+
+_MACOS_ONLY_PREFIXES = (
+    ('"/Applications/', "macOS 专属绝对路径 /Applications (其它平台不存在)"),
+    ("'/Applications/", "macOS 专属绝对路径 /Applications (其它平台不存在)"),
+    ('"/System/', "macOS 专属绝对路径 /System (其它平台不存在)"),
+    ("'/System/", "macOS 专属绝对路径 /System (其它平台不存在)"),
+    ('"/Library/', "macOS 专属绝对路径 /Library (其它平台不存在)"),
+    ("'/Library/", "macOS 专属绝对路径 /Library (其它平台不存在)"),
+    ("/opt/homebrew/", "Apple Silicon 专属 Homebrew 前缀 /opt/homebrew"),
+)
+
+#: macOS 才有的可执行文件。出现在命令行里而文件内没有平台守卫 = 别的平台必然失败。
+#: 只列**明确只有 macOS 才有、且不会与普通字符串混淆**的可执行文件。
+#: 刻意不含 ``"open"`` / ``"defaults"`` —— 它们在 JSON 键、状态值里到处都是, 会满屏误报;
+#: 而 ``"osascript"``/``"sips"`` 这种名字只可能出现在命令行里。
+_MACOS_ONLY_CMDS = ("osascript", "pbcopy", "pbpaste", "sips", "textutil",
+                    "sw_vers", "mdls", "qlmanage", "hdiutil", "diskutil")
+#: 视为"已做平台守卫"的写法(文件内出现过任一即可)。
+_PLATFORM_GUARDS = ("darwin", "sys.platform", "runtime.GOOS", "GOOS",
+                    "current_os", "platform.system")
+
+#: "先探测再用"的写法。``/Applications/Google Chrome.app/...`` 这类**候选路径表**本身是对的
+#: —— 列它、再逐个 stat/LookPath 选可用的, 就是跨平台的正确做法。所以对"macOS 专属目录"
+#: 这一条, 文件里有存在性探测就不再报; 而"macOS 专属命令"不行: 命令找不到就是直接失败,
+#: 必须先判平台再调用, 所以它只认 _PLATFORM_GUARDS。
+_EXISTENCE_PROBES = ("os.path.exists", "os.path.isfile", "os.path.isdir",
+                     "LookPath", "shutil.which", "_which()", "fileExists(")
+
+#: 扫哪些源码。之前只扫 .py 且只扫 scripts/ 与 skills/ —— 于是 Go 侧与 integrations/
+#: 的机器专属路径一直不在视野里(实测 internal/cmd/integrations 里就有 12 处)。
+_COMPAT_SCAN_EXT = (".py", ".go", ".sh")
+
+
+def _compat_roots():
+    return [HERE, os.path.join(REPO, "skills"),
+            os.path.join(REPO, "internal"), os.path.join(REPO, "cmd"),
+            os.path.join(REPO, "integrations"), os.path.join(REPO, "telemetry")]
+
+
+def _is_commented(line, lang):
+    s = line.strip()
+    if lang == "go":
+        return s.startswith("//") or s.startswith("*") or s.startswith("/*")
+    return s.startswith("#")
+
+
 def scan_platform_compat():
-    """扫出与当前平台不兼容的代码点。返回 (findings, scanned_files)。"""
+    """扫出与当前平台不兼容 / 机器专属的代码点。返回 (findings, scanned_files)。
+
+    规则分工: ``posix_tmp`` / ``foreign_path`` 是老面孔; v5.4.46 补上四类 **macOS 专属硬编码**
+    (机器专属账号路径 / macOS 专属目录 / macOS 专属命令 / Apple Silicon 前缀), 并把扫描范围
+    从"只有 scripts+skills 的 .py"扩到 .py/.go/.sh + internal/cmd/integrations/telemetry ——
+    实测 Go 侧与 integrations/ 里原本就各有机器专属路径, 却一直不在视野里。
+    """
     findings = []
     scanned = 0
-    roots = [HERE, os.path.join(REPO, "skills")]
-    for root in roots:
+    for root in _compat_roots():
+        if not os.path.isdir(root):
+            continue
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in ("__pycache__", ".git")]
             for fn in filenames:
-                if not fn.endswith(".py"):
+                if not fn.endswith(_COMPAT_SCAN_EXT):
                     continue
-                if fn == "deploy_scan.py":
-                    # 本文件里的 `/tmp/` 是**检测规则本身**(在 _POSIX_PATTERNS 里),
-                    # 不是在用 /tmp —— 否则扫描器会把自己报出来。
+                if fn in ("deploy_scan.py", "test_deploy_scan.py"):
+                    # 本文件里的这些字面量是**检测规则本身**, 不是在用它们 ——
+                    # 否则扫描器会把自己(以及它的测试)报出来。
                     continue
-                #: 测试文件里的 /tmp 不参与部署(只在 CI/本机跑), 故豁免 posix_tmp 规则;
-                #: 外机路径 / 未守卫的 osascript 仍然照查。
-                is_test = fn.startswith("test_")
+                lang = "go" if fn.endswith(".go") else ("sh" if fn.endswith(".sh") else "py")
+                is_test = fn.startswith("test_") or fn.endswith("_test.go") or fn.endswith("_test.py")
                 path = os.path.join(dirpath, fn)
                 scanned += 1
                 try:
@@ -1177,24 +1251,54 @@ def scan_platform_compat():
                 except OSError:
                     continue
                 rel = os.path.relpath(path, REPO)
+                whole = "".join(lines)
+                guarded = any(g in whole for g in _PLATFORM_GUARDS)
+                probed = any(g in whole for g in _EXISTENCE_PROBES)
                 for i, line in enumerate(lines, 1):
+                    code = line.strip()[:110]
+                    commented = _is_commented(line, lang)
                     for pat, desc in _POSIX_PATTERNS:
                         if pat in line and "tempfile" not in line:
                             if not is_test:
                                 findings.append({"file": rel, "line": i, "kind": "posix_tmp",
-                                                 "detail": desc, "code": line.strip()[:100]})
+                                                 "detail": desc, "code": code})
                             break
-                    if "osascript" in line:
-                        head = "".join(lines[:i])
-                        if "darwin" not in head and "sys.platform" not in line:
-                            findings.append({"file": rel, "line": i, "kind": "osascript_unguarded",
-                                             "detail": "osascript 未在 darwin 守卫内 (非 macOS 会失败)",
-                                             "code": line.strip()[:100]})
                     for fp in _FOREIGN_PATH:
                         if fp in line:
                             findings.append({"file": rel, "line": i, "kind": "foreign_path",
                                              "detail": "引用了另一台机器的绝对路径: %s" % fp,
-                                             "code": line.strip()[:100]})
+                                             "code": code})
+                    # --- macOS 专属硬编码 ---
+                    if not commented:
+                        for m in _MACOS_USER_PATH.finditer(line):
+                            if m.group(2) in _MACOS_USER_ALLOWLIST:
+                                continue
+                            findings.append({
+                                "file": rel, "line": i, "kind": "macos_user_path",
+                                "detail": "写死了 macOS 账号目录 /Users/%s/ —— 换用户或换机器就"
+                                          "不存在。改用 os.path.expanduser(\"~/…\") / $HOME / "
+                                          "环境变量派生" % m.group(2),
+                                "code": code})
+                        for prefix, desc in _MACOS_ONLY_PREFIXES:
+                            if prefix in line:
+                                if guarded or probed:
+                                    break  # 已判平台, 或"先探测再用" —— 属于正确做法
+                                findings.append({
+                                    "file": rel, "line": i, "kind": "macos_only_path",
+                                    "detail": desc + "; 需平台守卫或改用 PATH/环境变量查找",
+                                    "code": code})
+                                break
+                    if _MACOS_ONLY_CMDS and any(
+                            ('"%s"' % c) in line or ("'%s'" % c) in line
+                            for c in _MACOS_ONLY_CMDS):
+                        if not guarded:
+                            hit = next(c for c in _MACOS_ONLY_CMDS
+                                       if ('"%s"' % c) in line or ("'%s'" % c) in line)
+                            findings.append({
+                                "file": rel, "line": i, "kind": "macos_only_cmd",
+                                "detail": "%s 是 macOS 专属命令, 而本文件没有平台守卫 "
+                                          "(非 macOS 会直接失败)" % hit,
+                                "code": code})
     return findings, scanned
 
 

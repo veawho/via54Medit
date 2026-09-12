@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P11-1: slide 11 引用1 (任宏 中国小儿急救医学 2020 溶血危象) 溶血性贫血应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P11-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P11-1/P11-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P11-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P11-1/P11-1_highlight.pdf")
 
 SENTENCES = [
     "溶血性贫血是由于各种原因导致红细胞破坏加速，其严重程度取决于红细胞破坏的速率与骨髓造血代偿能力，从轻度贫血到危及生命的状态，临床表现呈多样性。",

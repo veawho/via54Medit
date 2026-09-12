@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P15-2: slide 15 引用2 (Prasad Pediatr Nephrol 2020) TMA病因分类应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P15-2_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P15-2/P15-2_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P15-2_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P15-2/P15-2_highlight.pdf")
 
 SENTENCES = [
     "Primary hereditary TMA (thrombotic thrombocyto-penic purpura (TTP) secondary to ADAMTS13 mu-tation, atypical hemolytic-uremic syndrome (aHUS) due to a complement gene mutation, diacylglycerol kinase epsilon (DGKE) TMA, Cobalamin C deﬁciency);",

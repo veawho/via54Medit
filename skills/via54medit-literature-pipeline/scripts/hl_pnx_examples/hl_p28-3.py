@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P28-3: 固定句子定义, 自动定位页并 highlight"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P28-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P28-3/P28-3_highlight.pdf"
+SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P28-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P28-3/P28-3_highlight.pdf")
 
 SENTENCES = [
     'if the patient fails to receive timely treatment, the mortality rate can reach 80–90%.',

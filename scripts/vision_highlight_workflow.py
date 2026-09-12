@@ -107,8 +107,8 @@ def _parse_json_loose(text: str) -> Optional[dict]:
 
 
 # === Paths ===
-TMA_ROOT = "/Users/david/Desktop/TMA_文献整理"
-LEIDA_ROOT = "/Users/david/Desktop/雷管方案_文献整理"
+TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
 DEFAULT_ROOT = TMA_ROOT
 
 

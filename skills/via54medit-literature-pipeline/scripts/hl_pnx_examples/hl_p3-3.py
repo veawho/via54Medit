@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P3-3: slide 3 引用3 (West & Kemper Nat Rev Nephrol 2023 补体综述) 应证句逐行 highlight"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P3-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P3-3/P3-3_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P3-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P3-3/P3-3_highlight.pdf")
 
 S = {
     0: [  # 第1页 Abstract

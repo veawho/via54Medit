@@ -15,6 +15,7 @@ h_column_builder.py — H 列 v5.0 内容生成器 (2026-08-02)
 - markdown_to_rich_text_v3(...): markdown → 飞书 rich_text (保留换行 + 裸 URL)
 """
 
+import os
 import re
 from typing import Dict, List, Optional
 
@@ -24,7 +25,7 @@ from typing import Dict, List, Optional
 # ════════════════════════════════════════════════════════════════════
 
 
-def scan_pn_x_dir(pn_x: str, lit_base: str = "/Users/david/Desktop/雷管方案_文献整理/_literature_citation_index", src_base: str = "/Users/david/Desktop/雷管方案_文献整理") -> Dict:
+def scan_pn_x_dir(pn_x: str, lit_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"), src_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理")) -> Dict:
     """
     扫描 Pn-x 目录 + manifest.fallback_pdfs, 返回 main / fb / supp 三类文件 + manifest
 
@@ -139,7 +140,7 @@ def scan_pn_x_dir(pn_x: str, lit_base: str = "/Users/david/Desktop/雷管方案_
             # 检查是否在跨标号目录下也存在于 _literature_citation_index
             exists_in_lit = _os.path.isfile(target_path)
             # 也可能在 src_base
-            src_target = f"/Users/david/Desktop/雷管方案_文献整理/{pdf_rel}"
+            src_target = os.path.expanduser(f"~/Desktop/雷管方案_文献整理/{pdf_rel}")
             exists_in_src = _os.path.isfile(src_target)
             
             # 从目标 Pn-x 的 manifest 取 step2_score

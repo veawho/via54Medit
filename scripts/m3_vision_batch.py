@@ -7,7 +7,7 @@ User 选 M3 vision 自动选 mode, 但 103 个太多
 """
 import json, os, sys, re, pymupdf as fitz, shutil, subprocess
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 PLANS = f'{TMA}/_3_highlight_vision/_highlight_plans.json'
 OUT_DIR = f'{TMA}/_3_highlight_semantic_m3'
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -130,12 +130,12 @@ def main():
         out = f'{OUT_DIR}/{pn}_semantic_highlight.pdf'
         if not os.path.exists(out):
             shutil.copy2(pdf, out)
-        cmd = ['/Users/david/.hermes/hermes-agent/venv/bin/python',
-               '/Users/david/Desktop/developments/via54Medit/scripts/m3_vision_highlight.py',
+        cmd = [os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python'),
+               os.path.join(os.path.dirname(os.path.abspath(__file__)), "m3_vision_highlight.py"),
                '--pn-x', pn,
                '--entries', f'[[{pi}, {json.dumps(hit_text)}, "phrase"]]',
                '--out-dir', OUT_DIR]
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd='/Users/david/Desktop/developments/via54Medit')
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         # 解析输出
         ok_count = 0
         for line in r.stdout.split('\n'):

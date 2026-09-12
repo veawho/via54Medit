@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P24-3: slide 24 引用3 (张赵光 临床医学进展 2022) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P24-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P24-3/P24-3_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P24-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P24-3/P24-3_highlight.pdf")
 
 SENTENCES = [
     "组织学检查是诊断TA-TMA的金标准，但在移植后患者中操作较为困难。",

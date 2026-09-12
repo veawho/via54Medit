@@ -2,12 +2,12 @@
 """逐个重跑所有 hl_p*.py: 先带 run 参数, 失败则直接执行; 成功后 fitz 渲染"""
 import subprocess, sys, os, glob, re
 
-BASE = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI"
+BASE = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI")
 logf = open('/tmp/rerun_all.log', 'w')
 fail = []
 
 # 脚本来源: 优先 toolkit/scripts(沉淀), 回退 /tmp(工作区)
-SCRIPT_DIRS = ['/Users/david/Desktop/TMA_文献整理/_highlight_toolkit/scripts', '/tmp']
+SCRIPT_DIRS = [os.path.expanduser('~/Desktop/TMA_文献整理/_highlight_toolkit/scripts'), '/tmp']
 # 按 basename 去重(toolkit/scripts 优先, /tmp 回退)
 by_name = {}
 for sd in SCRIPT_DIRS:

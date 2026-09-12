@@ -20,9 +20,9 @@ HLO Cron Scheduler — 算法驱动 cron 调度 (Phase 3 + 5.1, 2026-07-29)
 import os, sys, json, sqlite3, time, argparse
 from datetime import datetime, timedelta
 
-BASE = '/Users/david/Desktop/雷管方案_文献整理'
-HLO_DIR = '/Users/david/Desktop/HLO_design'
-HLO_DB = '/Users/david/Desktop/hlo_nlu.sqlite'
+BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+HLO_DIR = os.path.expanduser('~/Desktop/HLO_design')
+HLO_DB = os.path.expanduser('~/Desktop/hlo_nlu.sqlite')
 
 
 def get_db():

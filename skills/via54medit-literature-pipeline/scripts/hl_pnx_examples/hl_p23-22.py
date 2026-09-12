@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-22: slide 23 引用22 (Chen Eur Radiol 2012) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-22_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-22/P23-22_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-22_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-22/P23-22_highlight.pdf")
 
 SENTENCES = [
     "A total of 128 patients had brain imaging in the ﬁrst post-HSCT year.",

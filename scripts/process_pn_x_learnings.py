@@ -14,9 +14,9 @@ from pathlib import Path
 from datetime import datetime
 
 # 沉淀位置
-SKILL_FILE = Path('/Users/david/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md')
-MEMORY_FILE = Path('/Users/david/.hermes/memory/MEMORY.md')
-ALGORITHM_DIR = Path('/Users/david/Desktop/developments/via54Medit/internal/anno2ppt')
+SKILL_FILE = Path(os.path.expanduser('~/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md'))
+MEMORY_FILE = Path(os.path.expanduser('~/.hermes/memory/MEMORY.md'))
+ALGORITHM_DIR = Path(__file__).resolve().parents[1] / "internal" / "anno2ppt"
 
 
 def persist_session_learnings(pnx_id: str, learnings: dict) -> dict:

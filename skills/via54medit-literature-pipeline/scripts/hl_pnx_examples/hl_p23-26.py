@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-26: slide 23 引用26 (Jodele Blood 2013) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-26_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-26/P23-26_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-26_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-26/P23-26_highlight.pdf")
 
 SENTENCES = [
     "We identiﬁed a high prevalence of deletions in CFH-related genes 3 and 1 (delCFHR3-CFHR1) and CFH autoantibodies in these patients with HSCT-TMA.",

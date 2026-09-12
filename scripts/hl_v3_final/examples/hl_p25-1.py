@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P25-1: slide 25 引用1 (Jodele Blood 2014) HSCT-TMA鉴别应证句 (按slide25重选)"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-1/P25-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-1/P25-1_highlight.pdf")
 
 SENTENCES = [
     "Hematopoietic stem cell transplantationeassociated thrombotic microangiopathy (HSCT-TMA) is a challenging post-transplant complication associated with long-term morbidity and high mortality",

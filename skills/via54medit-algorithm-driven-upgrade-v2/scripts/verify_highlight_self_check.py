@@ -20,7 +20,7 @@ import os, sys
 from PIL import Image
 import numpy as np
 
-ROOT = '/Users/david/Desktop/雷管方案_文献整理'
+ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 STEP4 = f'{ROOT}/step4_highlight_96目录_合并DOI'
 
 

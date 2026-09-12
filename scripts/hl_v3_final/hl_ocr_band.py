@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hl_lib  # noqa: E402  (复用 canon/canon_keys 规范化)
 import layout  # noqa: E402  (版面区域: 页眉页脚/双栏阅读序)
 
-DEFAULT_TESS = '/Users/david/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/vm/tools/bin/tesseract'
+DEFAULT_TESS = os.path.expanduser('~/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/vm/tools/bin/tesseract')
 YELLOW = (1.0, 0.85, 0.0)
 _PUNCT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 

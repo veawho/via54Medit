@@ -1,5 +1,5 @@
 // Package download is the layered full-text acquisition pipeline
-// grounded in /Users/david/Downloads/Telegram Desktop/literature_crawl_exp.md
+// grounded in a locally crawled literature list (see the project docs)
 // (2026-07-17 field test conclusions).
 //
 // It does NOT mutate the SourceAdapter contract and is NOT a fan-out

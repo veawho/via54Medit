@@ -12,11 +12,11 @@ m3_pick_body_anchor.py — 不信 plan.target_text, 直接从 PDF 抽 body 段 a
 import json, os, sys, re, pymupdf as fitz, shutil, time
 from collections import defaultdict
 
-sys.path.insert(0, '/Users/david/Desktop/developments/via54Medit/scripts')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import m3_vision_highlight as mv3
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
-LEIGUAN = '/Users/david/Desktop/雷管方案_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
+LEIGUAN = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 
 # 全角转半角
 def fullwidth_to_halfwidth(s: str) -> str:

@@ -22,12 +22,12 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 PROJECTS = {
     "雷管方案": {
-        "root": "/Users/david/Desktop/雷管方案_文献整理",
+        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
         "pptx": "step1_ppt_目录/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx",
         "out_dir": "step1_ppt_目录",
     },
     "TMA": {
-        "root": "/Users/david/Desktop/TMA_文献整理",
+        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
         "pptx": "TMA临床路径的诊断与鉴别.pptx",  # 顶层
         "out_dir": ".",
     },

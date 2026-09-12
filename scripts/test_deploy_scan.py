@@ -323,13 +323,28 @@ class TestCompatScan(unittest.TestCase):
                          "扫描器把自己的检测规则当成违规了")
 
     def test_scanner_finds_posix_tmp_and_foreign_paths(self):
-        findings, scanned = ds.scan_platform_compat()
-        self.assertGreater(scanned, 50, "扫描的文件数太少, 像是没扫到")
+        """规则级断言用**合成夹具**, 不拿"仓库里恰好有"当证据。
+
+        原版依赖"仓库里存在外机绝对路径"这个当时的事实 —— v5.4.46 把它们修掉之后,
+        它就会假红。规则该由夹具测, 仓库该由不变量守。
+        """
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "a.py"), "w", encoding="utf-8") as fh:
+                fh.write('X = "/tmp/x.json"\n'
+                         'Y = r"C:\\Users\\via54\\Desktop\\x.pptx"\n')
+            with mock.patch.object(ds, "_compat_roots", return_value=[d]):
+                findings, _ = ds.scan_platform_compat()
         kinds = {f["kind"] for f in findings}
         self.assertIn("posix_tmp", kinds, "应当报出硬编码 /tmp")
         self.assertIn("foreign_path", kinds, "应当报出外机绝对路径")
         for f in findings:
             self.assertTrue(f["file"] and f["line"] > 0 and f["detail"])
+
+    def test_scanner_still_covers_the_real_repo(self):
+        findings, scanned = ds.scan_platform_compat()
+        self.assertGreater(scanned, 200, "扫描的文件数太少, 像是没扫到")
+        self.assertIn("posix_tmp", {f["kind"] for f in findings},
+                      "仓库里仍有硬编码 /tmp(存量, 另行处理), 扫描应当仍报出来")
 
     def test_strict_mode_gates_on_compat_findings(self):
         """能力全就绪时, 只有兼容性问题在 --strict 下才计失败。
@@ -1327,6 +1342,84 @@ class TestOcrInterpreterAndScriptLocator(unittest.TestCase):
         self.assertIn("ResolveOCRScript", cmd_go, "ocr 命令没走锚定的脚本解析")
         for mod in ("paddleocr", "pymupdf"):
             self.assertIn('"%s"' % mod, cmd_go, "ocr 命令未要求 %s" % mod)
+
+
+class TestMacosHardcodingScan(unittest.TestCase):
+    """平台兼容扫描的 macOS 规则 (v5.4.46) 与"仓库里不许再出现"的不变量。
+
+    来由: 交付环境是 macOS, 于是"某个账号的绝对路径"这类东西写进去当时**完全正常**,
+    换台机器才炸 —— 而且报错点通常离得很远(推送那一刻、渲染那一刻)。实测起步就有
+    604 处 `/Users/<name>/…`, Go 侧与 integrations/ 还因为**只扫 .py** 而根本不在视野里。
+    """
+
+    def _scan(self, files):
+        """在临时目录里造文件并跑扫描, 返回 findings。"""
+        with tempfile.TemporaryDirectory() as d:
+            for name, body in files.items():
+                p = os.path.join(d, name)
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(body)
+            with mock.patch.object(ds, "_compat_roots", return_value=[d]):
+                findings, scanned = ds.scan_platform_compat()
+            self.assertEqual(scanned, len(files))
+            return findings
+
+    def _kinds(self, findings):
+        return sorted({f["kind"] for f in findings})
+
+    def test_flags_machine_specific_account_path(self):
+        f = self._scan({"a.py": 'P = "/Users/jsmith/Desktop/x.pdf"\n'})
+        self.assertEqual(self._kinds(f), ["macos_user_path"])
+        self.assertIn("/Users/jsmith/", f[0]["detail"])
+
+    def test_placeholder_accounts_are_not_flagged(self):
+        """合成占位符不是某个真实账号, 报它只会训练人忽略告警。"""
+        f = self._scan({"t.py": 'self.assertFalse(is_ignored_path("/Users/x/RSV/a.pdf"))\n'})
+        self.assertEqual(f, [])
+
+    def test_commented_paths_are_not_flagged(self):
+        """注释里的示例路径属于文档层面, 不该按"运行时代码"报。"""
+        f = self._scan({"a.py": '# 例如 /Users/jsmith/Desktop/x.pdf\n'})
+        self.assertEqual(f, [])
+
+    def test_flags_go_files_too(self):
+        """Go 侧此前完全不在扫描范围内 —— 而那里恰恰有写死的默认路径。"""
+        f = self._scan({"a.go": 'cfg.LarkCLI = "/Users/jsmith/.hermes/node/bin/lark-cli"\n'})
+        self.assertEqual(self._kinds(f), ["macos_user_path"])
+
+    def test_unguarded_macos_only_command_is_flagged(self):
+        src = 'subprocess.run(["osascript", "-e", s])\n'
+        self.assertEqual(self._kinds(self._scan({"a.py": src})), ["macos_only_cmd"])
+        # 文件里判过平台就不再报 —— 这才是正确写法
+        self.assertEqual(self._scan({"b.py": "if sys.platform == 'darwin':\n" + "    " + src}), [])
+
+    def test_macos_only_path_needs_a_guard_or_an_existence_probe(self):
+        src = 'CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"\n'
+        self.assertEqual(self._kinds(self._scan({"a.py": src})), ["macos_only_path"])
+        # "先探测再用"是候选路径表的正确做法, 不该报
+        probed = src + "if os.path.exists(CHROME):\n    pass\n"
+        self.assertEqual(self._scan({"b.py": probed}), [])
+
+    def test_repo_has_no_macos_specific_hardcoding(self):
+        """不变量: 仓库里不许再出现这几类 macOS 专属硬编码。
+
+        范围是**全仓**(不漏 Go / integrations / skills), 因为规则本身已经给"已判平台"与
+        "先探测再用"留了豁免 —— 所以留在报告里的每一条都是真需要处理的。
+
+        ``posix_tmp`` 刻意不在不变量里: 它是另一类问题(POSIX 假设, 非 macOS 专属),
+        量也大(存量 40 处), 单独立项处理; 它照样出现在部署扫描报告里, 不会被藏起来。
+        """
+        findings, scanned = ds.scan_platform_compat()
+        self.assertGreater(scanned, 200, "扫描面看起来不对")
+        bad = [f for f in findings
+               if f["kind"] in ("macos_user_path", "macos_only_path",
+                                "macos_only_cmd", "foreign_path")]
+        self.assertEqual(
+            bad, [],
+            "发现 macOS/机器专属硬编码:\n" + "\n".join(
+                "  %s:%s [%s] %s" % (f["file"], f["line"], f["kind"], f["code"])
+                for f in bad[:15]))
 
 
 if __name__ == "__main__":

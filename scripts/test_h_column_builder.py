@@ -15,7 +15,7 @@ import os, sys, unittest, json, subprocess, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import h_column_builder
 
-LIT_BASE = "/Users/david/Desktop/雷管方案_文献整理/_literature_citation_index"
+LIT_BASE = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index")
 
 
 class TestParseDField(unittest.TestCase):

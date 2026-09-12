@@ -3,13 +3,23 @@ package prompt
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 // dspyScript is the DSPy compile script used by these tests. On CI it does
 // not exist (it lives in the author's ~/.medit), so tests that actually
 // exec it skip there but keep full value on the dev machine.
-const dspyScript = "/Users/david/.medit/scripts/dspy_compile.py"
+// 用 $HOME 派生而不是写死某个账号: 测试本来就会在脚本不存在时 Skip,
+// 所以派生路径既保留了原有行为, 也不会把机器信息带进仓库。
+var dspyScript = filepath.Join(userHomeDir(), ".medit", "scripts", "dspy_compile.py")
+
+func userHomeDir() string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+	return os.Getenv("HOME")
+}
 
 func requireDSPY(t *testing.T) string {
 	t.Helper()

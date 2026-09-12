@@ -5,12 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+
+	"github.com/veawho/via54Medit/internal/foundation"
 	"github.com/veawho/via54Medit/internal/prompt"
 )
 
 func main() {
 	ctx := context.Background()
-	c, err := prompt.NewCompiler("/Users/david/.medit/scripts/dspy_compile.py", "")
+	c, err := prompt.NewCompiler(
+		filepath.Join(foundation.UserMeditDir(), "scripts", "dspy_compile.py"), "")
 	if err != nil {
 		fmt.Println("err:", err)
 		return

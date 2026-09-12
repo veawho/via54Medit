@@ -17,8 +17,8 @@ import os, re, sys, json, csv
 from collections import defaultdict
 
 # 路径
-TRUTH = '/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv'
-OUT = '/Users/david/Desktop/雷管方案_文献整理/PPT_citations_4col.csv'
+TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
+OUT = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT_citations_4col.csv')
 VISION_D = '/tmp/vision_d_merged.json'
 
 # 4 行错位 (飞书 164 - 视觉验证 160)

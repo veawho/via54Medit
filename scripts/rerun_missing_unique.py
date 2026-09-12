@@ -3,10 +3,10 @@
 import json, os, sys, time
 from collections import defaultdict
 
-sys.path.insert(0, '/Users/david/Desktop/developments/via54Medit/scripts')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import m3_pick_body_anchor as mpb
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])

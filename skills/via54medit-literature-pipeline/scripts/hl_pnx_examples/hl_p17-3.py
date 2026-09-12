@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P17-3: slide 17 引用3 (George NEJM 2006 TTP) ADAMTS13机制应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P17-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P17-3/P17-3_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P17-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P17-3/P17-3_highlight.pdf")
 
 SENTENCES = [
     "reports describ-ing severe deﬁciency (<5 percent activity) of a von Willebrand factor–cleaving protease, termed “ADAMTS 13” (an acronym for a disintegrin and metalloprotease with thrombospondin-1–like do-mains), in patients with a diagnosis of throm-botic thrombocytopenic purpura but not in pa-tients with a diagnosis of the hemolytic–uremic syndrome.",

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P13-1: slide 13 引用1 (替代: Cureus 2026 流感相关TMA) 血涂片应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P13-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P13-1/P13-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P13-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P13-1/P13-1_highlight.pdf")
 
 SENTENCES = [
     "Thrombotic microangiopathy (TMA) is a life-threatening syndrome characterized by microangiopathichemolytic anemia, thrombocytopenia, and end-organ injury resulting from widespread microvascularthrombosis.",

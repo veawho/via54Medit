@@ -122,7 +122,7 @@ var hloDedupCmd = &cobra.Command{
   L3: asreview 主动学习 (已有 ground truth)
 
 不传 --all 是 dry-run (只列出重复).
-加 --all 实际清理 → /Users/david/.Trash/hlo_dedup_*`,
+加 --all 实际清理 → ~/.Trash/hlo_dedup_*`,
 	RunE: runHloDedup,
 }
 

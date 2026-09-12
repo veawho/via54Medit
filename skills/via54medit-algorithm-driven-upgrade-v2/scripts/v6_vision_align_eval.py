@@ -13,7 +13,7 @@ v6_vision_align_eval.py — D 列 ≥50% 命中度量 (v2.5.0)
 """
 import os, re, sys, json, csv
 
-TRUTH = '/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv'
+TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
 VISION_D = '/tmp/vision_d_merged.json'
 MISALIGNED_4 = {('12', '5'), ('14', '2'), ('22', '13'), ('30', '10')}
 

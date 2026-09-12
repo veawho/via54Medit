@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P21-1: slide 21 引用1 (Praga Kidney Int 2019 aHUS) 二次打击机制应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P21-1_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P21-1/P21-1_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P21-1_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P21-1/P21-1_highlight.pdf")
 
 SENTENCES = [
     "However, differentiation may be difﬁcult in clinical practice considering that triggering factors like infections or drugs are frequently identiﬁed in pa-tients with primary aHUS and that in an important proportion (40%–60% in most cohorts) of primary aHUS patients, no complement genetic ab-normalities or autoantibodies against complement regulators are found.",

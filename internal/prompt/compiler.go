@@ -39,7 +39,7 @@ type Compiler struct {
 }
 
 // NewCompiler 创建一个 prompt 编译器
-//   - scriptPath: DSPy Python 入口 (e.g. "/Users/david/.medit/scripts/dspy_compile.py")
+//   - scriptPath: DSPy Python 入口 (e.g. "~/.medit/scripts/dspy_compile.py")
 //   - cacheDir: 编译结果缓存 (默认 ~/.medit/cache/compiled_prompts/)
 func NewCompiler(scriptPath, cacheDir string) (*Compiler, error) {
 	if scriptPath == "" {

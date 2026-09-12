@@ -2,7 +2,7 @@
 """审计 m3 目录 vs 总 Pn-x 数量, 列出缺失的"""
 import json, os
 
-TMA = '/Users/david/Desktop/TMA_文献整理'
+TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
 DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])

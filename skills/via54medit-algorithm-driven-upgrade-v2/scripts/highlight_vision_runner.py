@@ -27,7 +27,7 @@ import pymupdf as fitz
 from PIL import Image, ImageDraw
 import numpy as np
 
-ROOT = '/Users/david/Desktop/雷管方案_文献整理'
+ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 STEP3 = f'{ROOT}/step3_pdf下载_160目录'
 STEP4 = f'{ROOT}/step4_highlight_96目录_合并DOI'
 TRUTH = f'{ROOT}/step2_标注分析/_citation_table/citation_table.csv'

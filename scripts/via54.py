@@ -138,9 +138,9 @@ def cmd_highlight(args):
     # visual-v3 / plan-v3 都基于项目目录跑所有 PDF
     # 默认项目目录
     if ns.project == "雷管方案":
-        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR", "/Users/david/Desktop/雷管方案_文献整理")
+        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR", os.path.expanduser("~/Desktop/雷管方案_文献整理"))
     else:
-        proj_dir = os.environ.get("VIA54_TMA_DIR", "/Users/david/Desktop/TMA_文献整理")
+        proj_dir = os.environ.get("VIA54_TMA_DIR", os.path.expanduser("~/Desktop/TMA_文献整理"))
 
     # 找 PPT 文件
     pptx_path = ns.pptx or os.path.join(proj_dir, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
@@ -206,7 +206,7 @@ def _tma_project_dir(ns):
     """解析项目根: --project-dir > TMA_PROJECT env > VIA54_TMA_DIR env"""
     if getattr(ns, "project_dir", None):
         return ns.project_dir
-    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or "/Users/david/Desktop/TMA_文献整理"
+    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or os.path.expanduser("~/Desktop/TMA_文献整理")
 
 
 def _run_tma(script, argv, project_dir):
@@ -376,8 +376,8 @@ def cmd_all(args):
     """跑全部: rules + step5 + diff"""
     if not args:
         # 默认跑两个项目
-        for proj in ["/Users/david/Desktop/雷管方案_文献整理",
-                     "/Users/david/Desktop/TMA_文献整理"]:
+        for proj in [os.path.expanduser("~/Desktop/雷管方案_文献整理"),
+                     os.path.expanduser("~/Desktop/TMA_文献整理")]:
             if os.path.isdir(proj):
                 print(f"\n=== Rules check: {proj} ===")
                 _run_module("via54_rules.py", [proj])

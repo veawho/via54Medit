@@ -32,7 +32,7 @@ import os, csv, re, shutil
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF
 
-ROOT = '/Users/david/Desktop/雷管方案_文献整理'
+ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV_8COL = f'{ROOT}/PPT_citations_8col.csv'
 HL_BASE = f'{ROOT}/_highlight'
 os.makedirs(HL_BASE, exist_ok=True)

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-11: slide 23 引用11 (Dandoy Blood Adv 2021) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-11_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-11/P23-11_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-11_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-11/P23-11_highlight.pdf")
 
 SENTENCES = [
     "In this multicenter study, we report a high incidence (16%) of TA-TMA after pediatric stem cell transplant.",

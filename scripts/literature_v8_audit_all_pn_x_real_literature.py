@@ -11,7 +11,7 @@ audit_all_pn_x_real_literature.py
 
 import os, csv, json, sys
 
-BASE = '/Users/david/Desktop/雷管方案_文献整理'
+BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 
 

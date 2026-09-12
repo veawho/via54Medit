@@ -15,9 +15,12 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 import os as _os
 PYTHON = _os.environ.get('TMA_PYTHON') or sys.executable
 SCRIPT = _os.environ.get('TMA_SCRIPT') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'via54_ppt_visual_to_pdf.py')
-PPTX = _os.environ.get('TMA_PPTX') or r"C:\Users\via54\Desktop\TMA_test\TMA临床路径的诊断与鉴别.pptx"
-PDF_DIR = _os.environ.get('TMA_PDF_DIR') or (os.environ.get('TMA_PROJECT') or r"C:\Users\via54\Desktop\TMA_test") + r"\_2_pdfs"
-OUT_BASE = _os.environ.get('TMA_OUT_BASE') or (os.environ.get('TMA_PROJECT') or r"C:\Users\via54\Desktop\TMA_test") + r"\_highlight_nested"
+# 默认值走 $HOME 派生, 不写死某台机器的 Windows 盘符路径
+# (旧默认写死了某台 Windows 机器的用户目录, 换机器/换平台都不成立; 环境变量仍可覆盖)。
+_TMA_BASE = _os.environ.get('TMA_PROJECT') or _os.path.expanduser('~/Desktop/TMA_test')
+PPTX = _os.environ.get('TMA_PPTX') or os.path.join(_TMA_BASE, 'TMA临床路径的诊断与鉴别.pptx')
+PDF_DIR = _os.environ.get('TMA_PDF_DIR') or os.path.join(_TMA_BASE, '_2_pdfs')
+OUT_BASE = _os.environ.get('TMA_OUT_BASE') or os.path.join(_TMA_BASE, '_highlight_nested')
 
 only = None
 if '--only' in sys.argv:

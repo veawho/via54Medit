@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P23-25: slide 23 引用25 (Dandoy TCT 2023) 应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-25_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-25/P23-25_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-25_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-25/P23-25_highlight.pdf")
 
 SENTENCES = [
     "HSCT-TMA was associated with renal dysfunction (odds ratio [OR], 11.04 for adult, allogeneic and 7.35 for pediatric, all transplanta-tions), renal failure (OR, 2.41 for adult and pediatric, allogeneic), renal replacement therapy (OR, 6.99 for pediatric, all transplantations and 60.85 for adult, allogeneic), and hypertension (OR, 5.44 for adult, allogeneic).",

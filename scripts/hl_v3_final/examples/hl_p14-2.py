@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P14-2: slide 14 引用2 (Brocklebank CJASN 2018 TMA与肾脏) 血小板消耗应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P14-2_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P14-2/P14-2_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P14-2_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P14-2/P14-2_highlight.pdf")
 
 SENTENCES = [
     "The deﬁning laboratory features comprise thrombocyto-penia, resulting from platelet aggregation and consumption, and MAHA, identiﬁed by evidence of erythrocyte fragmen-tation on peripheral blood ﬁlm microscopy, which occurs in areas of turbulent ﬂow in the microcirculation due to partial occlusion by platelet aggregates",

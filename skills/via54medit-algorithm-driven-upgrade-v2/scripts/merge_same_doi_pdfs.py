@@ -17,7 +17,7 @@ import os, csv, shutil, re
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = '/Users/david/Desktop/雷管方案_文献整理'
+ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
 CSV_8COL = f'{ROOT}/PPT_citations_8col_aligned.csv'
 HL_BASE = f'{ROOT}/_highlight'
 DL_BASE = ROOT

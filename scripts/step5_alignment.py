@@ -47,7 +47,7 @@ except ImportError:
 
 PROJECTS = {
     "雷管方案": {
-        "root": "/Users/david/Desktop/雷管方案_文献整理",
+        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
         "csv": "step2_标注分析/PPT_citations_8col_aligned.csv",
         "step3": "step3_pdf下载_160目录",
         "step4": "step4_highlight_v10_glm",  # v10.2: GLM 增强版
@@ -55,7 +55,7 @@ PROJECTS = {
         "convention": "nested",  # Pn-x/ 内有 main.pdf
     },
     "TMA": {
-        "root": "/Users/david/Desktop/TMA_文献整理",
+        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
         "csv": "_citation_table/tma_citation_table.csv",
         "step3": "_2_pdfs",
         "step4": "_3_highlight_v10_glm",  # v10.2: GLM 增强版 (vs 旧 _3_highlight)

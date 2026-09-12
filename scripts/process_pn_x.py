@@ -13,6 +13,7 @@ Usage:
   python3.11 process_pn_x.py <pnx_id> <pdf_path> [options]
   python3.11 process_pn_x.py P30-1 /path/to/main.pdf --doi 10.1016/... --fallback /path/to/fallback.pdf
 """
+import os
 import json
 import subprocess
 import sys
@@ -69,7 +70,7 @@ def build_dual_source_manifest(pnx, main_pdf, fallback_pdf, doi):
 def persist_learnings(pnx, learnings):
     """经验沉淀: 调用 process_pn_x_learnings.py"""
     # 直接写入 skill + memory (简化版)
-    skill_file = Path('/Users/david/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md')
+    skill_file = Path(os.path.expanduser('~/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md'))
     if not skill_file.exists():
         return {"action": "skill_not_found"}
     return {"action": "noop", "note": "已通过 pitfalls skill §20-§26 完整沉淀"}

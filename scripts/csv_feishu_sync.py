@@ -48,7 +48,7 @@ CANONICAL_HEADER = [
     "来源链接 → 阅读全文",                  # H: SourceURL
 ]
 
-LARK_CLI = os.environ.get("LARK_CLI", "/Users/david/.hermes/node/bin/lark-cli")
+LARK_CLI = os.environ.get("LARK_CLI", os.path.expanduser("~/.hermes/node/bin/lark-cli"))
 FEISHU_SHEET_TOKEN = os.environ.get("FEISHU_SHEET_TOKEN", "")
 FEISHU_SHEET_ID = os.environ.get("FEISHU_SHEET_ID", "b03e59")
 

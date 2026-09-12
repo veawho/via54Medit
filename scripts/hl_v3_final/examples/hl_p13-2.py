@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P13-2: slide 13 引用2 (Martinez BMT 2005 TAM) 裂红细胞与预后应证句"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P13-2_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P13-2/P13-2_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P13-2_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P13-2/P13-2_highlight.pdf")
 
 SENTENCES = [
     "TAM is deﬁned as evidence of hemolysis and schistocytes in the ﬁrst 100 days.",

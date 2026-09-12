@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """P25-3: slide 25 引用3 (Timmermans J Clin Med 2021) HSCT-TMA应证句 (按slide25重选)"""
+import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = "/Users/david/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-3_main.pdf"
-OUT = "/Users/david/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-3/P25-3_highlight.pdf"
+PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-3_main.pdf")
+OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-3/P25-3_highlight.pdf")
 
 SENTENCES = [
     "atypical HUS are hypertensive emergency, pregnancy, kidney transplantation, bacterial infections, drug use, cancer, autoimmunity, and hematologic stem cell transplantation (HSCT), among others.",

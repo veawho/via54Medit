@@ -167,9 +167,9 @@ def check_links(pn_x_list: List[str], lit_base: str) -> Dict:
     return {"total": len(results), "results": results}
 
 
-def run_health_check(lit_base: str = "/Users/david/Desktop/雷管方案_文献整理/_literature_citation_index",
-                    csv_path: str = "/Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv",
-                    ppt_path: str = "/Users/david/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx") -> Dict:
+def run_health_check(lit_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"),
+                    csv_path: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv"),
+                    ppt_path: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")) -> Dict:
     """运行全量健康检查"""
 
     print("=" * 60)

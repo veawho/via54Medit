@@ -48,6 +48,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.46] - 2026-09-12 (清除 macOS 相关硬编码: 604 处写死账号的绝对路径 + 补齐扫描器规则)
+
+回应"检查并避免出现 macOS 相关的硬编码"。
+
+先把"检查"和"避免"分开做: 扫描器原先只认 `/tmp` 和两串外来盘符路径,
+**对"写死本机账号"这一类完全无感** —— 而这一类恰恰是仓库里最多、也最容易
+在换机器/换用户后炸掉的。补上规则后再清, 否则清完也没人守得住。
+
+### 一、检查: 给兼容性扫描器补上 macOS 规则
+
+`scripts/deploy_scan.py` 的 `scan_platform_compat()` 原来只有 2 条规则,
+现在扩到 5 类, 覆盖范围也从 `scripts/` 扩到 `scripts/ skills/ internal/ cmd/ integrations/ telemetry/`:
+
+| 类别 | 形态 | 处理 |
+| --- | --- | --- |
+| `macos_user_path` | `"/Users/<account>/…"` | 一律报, 占位符(`x`/`user`/`example`…)除外 |
+| `macos_only_path` | `/Applications/` `/System/` `/Library/` `/opt/homebrew/` | 有平台守卫或存在性探测才放行 |
+| `macos_only_cmd` | `osascript` `sips` `pbcopy` `textutil` `hdiutil` … | 有平台守卫才放行 |
+| `posix_tmp` | `"/tmp/…"` | 报 (既有规则) |
+| `foreign_path` | `G:\` `C:\Users\via54` | 报 (既有规则) |
+
+两条设计取舍值得记下来:
+
+- **存在性探测算合法**。`ChromeCandidates()` 里那一串 `/Applications/Google Chrome.app/…`
+  是**候选表**, 由 `os.Stat` / `LookPath` 逐个筛 —— 这就是跨平台该有的写法,
+  报它等于让人去改对的东西。于是 `os.path.exists` / `LookPath` / `shutil.which` /
+  `fileExists(` 出现过的文件, `macos_only_path` 放行。
+- **刻意不把 `open` / `defaults` 列进 macOS 专属命令**。它们作为字符串在 JSON 键、
+  状态值里到处都是, 列进去只会满屏误报 —— 一个会误报的检查器等于没有检查器。
+  只收"明确只有 macOS 才有、且不会与普通字符串混淆"的那几个。
+
+### 二、避免: 清掉 604 处, 并保证是零行为变化
+
+全仓 `grep /Users/` 命中 625 处, 分类后: `macos_user_path` 604 · `posix_tmp` 40 ·
+`macos_only_path` 9 · `foreign_path` 3 · `macos_only_cmd` 1。
+
+清除方式是 `~` 派生 / `__file__` 派生 / `$HOME` 派生, **不改变本机解析结果**:
+
+| 场景 | 旧写法 | 新写法 |
+| --- | --- | --- |
+| Python 用户目录 | `"/Users/<account>/Desktop/TMA"` | `os.path.expanduser("~/Desktop/TMA")` |
+| Python 仓库自身 | `"/Users/<account>/…/via54Medit/scripts"` | `os.path.dirname(os.path.abspath(__file__))` |
+| Go 用户目录 | 字面量 | `filepath.Join(home, …)` + `os.UserHomeDir()` |
+| Shell | 字面量 | `$HOME` / `${HOME}` |
+
+规模: **290 个文件 / 581 处替换 / 213 处补 `import os`**。
+
+改动最大的几处不只是"换写法", 而是顺手修掉了原先就坏的逻辑:
+
+- `internal/source/hlo_orchestrator.go`
+  - 首选候选是写死某个 macOS 账号的路径 (`/Users/<name>/Desktop/HLO_design/…`) —— 换台机器必然落空;
+  - 另有一个候选写作字面量 `"$HOME/HLO_design/hlo_nlu_v2.py"`, 而 `fileExists()`
+    **不做 shell 展开**, 所以那条候选**从来没命中过** —— 是死代码, 这次删除;
+  - `osHomeDir()` 原先走 `sh -c "echo $HOME"`, Windows 上直接不可用, 改为 `os.UserHomeDir()`;
+  - `HLOTruthQuery` 里写死的 `python3.11` 改为 `foundation.ResolvePython`(按"能不能 import 依赖"解析)。
+- `internal/integrations/feishu/feishu.go` — 默认 `lark-cli` 路径写死了账号目录, 改为
+  `defaultLarkCLI()`: `~/.hermes/node/bin/lark-cli`(存在才用) → PATH。
+  原先的写法坏在**报错发生在推送那一刻**, 与"配置缺失"很难区分。
+- `scripts/tma_batch_highlight.py` — 默认值写死了某台 Windows 机器的盘符路径, 改为 `$HOME` 派生。
+- `skills/…/render_ppt_slides.py` — 唯一一处没有守卫的 `osascript`, 补 `sys.platform != 'darwin'`
+  判断并说明替代方案(PowerPoint AppleScript 报错与"PowerPoint 没装"很难区分)。
+
+刻意**没动**的: 40 处 `/tmp`。那是"POSIX 假设", 不是"macOS 专属", 是另一件事;
+扫描器仍然把它们报出来, 所以不存在"藏起来"的问题。
+
+### 三、验证: 不是"看着对", 而是逐字等价
+
+机械改了 290 个文件, 光靠 review 不够。做了四层验证:
+
+1. **等价性**: 逐个把新的 `expanduser("~/…")` 在本机解析, 与它替换掉的旧绝对路径
+   比对 —— **577 处逐字相同**。剩下未配对的都属预期(Go 走 `filepath.Join`、
+   仓库自身走 `__file__`、含占位符的 f-string、以及从 Windows 盘符改出的新默认值)。
+2. **静态**: AST 全仓扫描"用了 `os.*` 但文件顶层没有 `import os`" —— 这类是本轮
+   唯一可能引入的回归类别。
+3. **动态**: 用 `runpy` 逐文件执行模块顶层代码(300 个), 抓 `NameError`。
+4. **回归面**: Python 187 + 230 + 24 用例、Go 24 个包、`go vet ./...`、`go build ./...` 全绿。
+
+第 2、3 层**真的抓到一个回归**: `scripts/test_citation_sync.py` 手工改写成
+`__file__` 派生时用了 `os.path` 却漏了 `import os` —— 静态检查报出, 已修。
+这也说明为什么这轮验证不能省: 213 处自动插入的 `import os` 全部有效,
+但**手工改的那几处**同样需要同一把尺子。
+
+### 四、守着它
+
+新增 `TestMacosHardcodingScan`(7 个用例), 其中一条是**全仓不变量**:
+`test_repo_has_no_macos_specific_hardcoding` —— 以后谁再写死账号路径, 单测直接红。
+另外把原来依赖"仓库里真的有外来盘符路径"的用例改成合成目录夹具
+(那条路径这轮被清掉了, 旧写法会假红), 并补 `test_scanner_still_covers_the_real_repo`
+确保扫描范围没被悄悄缩掉。
+
 ## [5.4.45] - 2026-09-12 (解决 PaddleOCR 的问题: OCR 入口其实是坏的 —— 解释器错配 + 脚本路径依赖 cwd + /tmp 硬编码)
 
 回应"解决 PaddleOCR 的问题"。

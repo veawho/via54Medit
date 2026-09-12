@@ -11,11 +11,13 @@ test_citation_sync.py — citation_sync.py + link_health.py 的单测
   6. rich_text_to_markdown 反向解析
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, "/Users/david/Desktop/developments/via54Medit/scripts")
+# 用 __file__ 派生, 不写死仓库在本机的绝对路径
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from citation_sync import (
     lock_row_anchors,

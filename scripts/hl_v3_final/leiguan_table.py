@@ -6,7 +6,7 @@
 数据源: 本地表 + verify slide_topic + CrossRef DOI(中文期刊/UpToDate 标无 DOI)"""
 import sys, json, csv, re, os, glob, time
 
-BASE = '/Users/david/Desktop/TMA_文献整理'
+BASE = os.path.expanduser('~/Desktop/TMA_文献整理')
 CIT = f'{BASE}/_citation_table/tma_citation_table.csv'
 
 def clean_doi(cit, doi):

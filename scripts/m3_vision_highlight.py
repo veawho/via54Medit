@@ -552,12 +552,12 @@ def main():
     parser.add_argument('--pn-x', required=True)
     parser.add_argument('--entries', required=True,
                         help='JSON: [[page, phrase, mode, end_phrase?], ...]')
-    parser.add_argument('--out-dir', default='/Users/david/Desktop/TMA_文献整理/_3_highlight_semantic_m3')
+    parser.add_argument('--out-dir', default=os.path.expanduser('~/Desktop/TMA_文献整理/_3_highlight_semantic_m3'))
     parser.add_argument('--mode', default=None, help='全局 mode 覆盖')
     parser.add_argument('--no-filter', action='store_true', help='禁用禁高亮 filter')
     args = parser.parse_args()
 
-    plans = json.load(open('/Users/david/Desktop/TMA_文献整理/_3_highlight_vision/_highlight_plans.json'))
+    plans = json.load(open(os.path.expanduser('~/Desktop/TMA_文献整理/_3_highlight_vision/_highlight_plans.json')))
     plans = plans if isinstance(plans, list) else plans['plans']
     pdf = None
     for p in plans:
