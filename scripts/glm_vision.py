@@ -13,27 +13,19 @@ Model: glm-4.1v-thinking-flash (免费, 64K context, 多模态)
 - 支持多图输入 (PPTX + PDF page)
 - 失败时 fallback 到 sensenova_call
 """
-import os, sys, json, time, re, hashlib
+import os, sys, json, time, re, hashlib, tempfile
 import urllib.request
 import urllib.error
 from pathlib import Path
 
 
-CACHE_PATH = "/tmp/_glm_vision_cache.json"
+CACHE_PATH = os.path.join(tempfile.gettempdir(), "_glm_vision_cache.json")
 DEFAULT_MODEL = "glm-4.1v-thinking-flash"
 DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 
 
 def _get_api_key():
-    key = os.environ.get("GLM_API_KEY")
-    if key:
-        return key
-    env_path = Path.home() / ".hermes" / ".env"
-    if env_path.is_file():
-        for line in env_path.read_text().splitlines():
-            if line.startswith("GLM_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
+    return os.environ.get("GLM_API_KEY")
 
 
 def _get_base_url():

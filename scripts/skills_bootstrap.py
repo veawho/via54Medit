@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""
-skills_bootstrap.py — 仓库 vendored skills ↔ 本机 skills 目录一键同步
+"""skills_bootstrap.py — 仓库 vendored skills ↔ 本机 skills 目录一键同步
 
 背景 (2026-08-21): 与 via54Medit 代码/算法强绑定的核心 skills 已 vendored 到
 仓库 skills/ (SKILL.md + references + scripts)。本脚本把它们同步到本机
-skills 目录 (默认 ~/.hermes/skills), 新设备部署后一条命令接入全部核心经验。
+skills 目录 (默认 ~/.via54medit/skills), 新设备部署后一条命令接入全部核心经验。
 
 用法:
   python skills_bootstrap.py [--dest DIR] [--dry-run] [--force] [--list]
@@ -12,7 +11,7 @@ skills 目录 (默认 ~/.hermes/skills), 新设备部署后一条命令接入全
   --list      列出仓库将安装的 skills (不执行)
   --dry-run   只显示将复制的文件
   --force     覆盖已存在且内容不同的 skills (默认: 差异时提示并跳过)
-  --dest DIR  目标根 (默认: ~/.hermes/skills)
+  --dest DIR  目标根 (默认: ~/.via54medit/skills)
 
 幂等: 内容一致的文件跳过; 目录不存在自动创建。
 """
@@ -63,8 +62,8 @@ def sync_skill(name, dest_root, dry_run, force):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dest", default=os.path.join(os.path.expanduser("~"), ".hermes", "skills"),
-                    help="目标 skills 根目录 (默认 ~/.hermes/skills)")
+    ap.add_argument("--dest", default=os.path.join(os.path.expanduser("~"), ".via54medit", "skills"),
+                    help="目标 skills 根目录 (默认 ~/.via54medit/skills)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--list", action="store_true")

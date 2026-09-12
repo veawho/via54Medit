@@ -12,7 +12,8 @@ semantic_highlight_workflow.py — 真正的 semantic matching pipeline
 - stage 3 直接在 PDF bbox 上画线, 不调 process_pn_x (无 text search)
 - 多线程 + 缓存
 """
-import os, sys, json, time, re, threading, queue
+import project_paths
+import os, sys, json, time, re, threading, queue, tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
 import warnings
@@ -25,8 +26,8 @@ fitz.TOOLS.mupdf_display_warnings(False)
 from provider_vision import vision_analyze, get_api_key, encode_image, get_image_mime
 
 
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
-LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
+LEIDA_ROOT = project_paths.LEIGUAN_ROOT
 RENDER_ZOOM = 1.5  # 渲染 PDF 时放大 1.5x (与 sensenova 看图一致)
 THREAD_WORKERS = 4  # sensenova 并发数
 
@@ -35,7 +36,7 @@ THREAD_WORKERS = 4  # sensenova 并发数
 import hashlib
 
 _sensenova_cache = {}
-_cache_path = "/tmp/_sensenova_cache.json"
+_cache_path = os.path.join(tempfile.gettempdir(), "_sensenova_cache.json")
 
 
 def _cache_key(image_paths, prompt):

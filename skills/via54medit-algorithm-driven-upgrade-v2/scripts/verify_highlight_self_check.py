@@ -16,11 +16,14 @@ verify_highlight_self_check.py — highlight 后**自检 4 项** (不用 user �
     python verify_highlight_self_check.py P3-2
     python verify_highlight_self_check.py P3-2 P5-1 P14-1
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
 import os, sys
 from PIL import Image
 import numpy as np
 
-ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+ROOT = project_paths.LEIGUAN_ROOT
 STEP4 = f'{ROOT}/step4_highlight_96目录_合并DOI'
 
 

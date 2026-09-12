@@ -15,6 +15,7 @@ via54_health.py — 自检自查自修 (v9.7)
     python3.11 via54_health.py fix            # 检查 + 修复
     python3.11 via54_health.py report         # 生成报告
 """
+import project_paths
 import sys, os, json, csv, subprocess, importlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -167,9 +168,9 @@ def check_links(pn_x_list: List[str], lit_base: str) -> Dict:
     return {"total": len(results), "results": results}
 
 
-def run_health_check(lit_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"),
-                    csv_path: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv"),
-                    ppt_path: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")) -> Dict:
+def run_health_check(lit_base: str = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index"),
+                    csv_path: str = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv"),
+                    ppt_path: str = os.path.join(project_paths.LEIGUAN_ROOT, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")) -> Dict:
     """运行全量健康检查"""
 
     print("=" * 60)

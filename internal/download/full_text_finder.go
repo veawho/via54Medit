@@ -188,7 +188,7 @@ func NewFullTextFinder(chromeCDP string) *FullTextFinder {
 		home = os.Getenv("HOME")
 	}
 	if home == "" {
-		home = "/tmp/medit-user"
+		home = filepath.Join(os.TempDir(), "medit-user")
 	}
 	f.OutDir = filepath.Join(home, ".medit", "pdfs")
 	f.AuditDir = filepath.Join(home, ".medit", "audit")

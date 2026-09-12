@@ -179,8 +179,11 @@ func OCRScriptCandidates() []string {
 		add(filepath.Join(root, "scripts", rel))
 		add(filepath.Join(root, "skills", "via54medit-anno2ppt-phase7", "scripts", rel))
 	}
-	add(HermesPath("skills", "via54medit-anno2ppt-phase7", "scripts", rel))
-	add(HermesPath("skills", "via54medit", "via54medit-anno2ppt-phase7", "scripts", rel))
+	// 兼容旧 hermes 布局: 仅当 HERMES_HOME 显式设置时才加入候选, 不作为默认。
+	if os.Getenv("HERMES_HOME") != "" {
+		add(HermesPath("skills", "via54medit-anno2ppt-phase7", "scripts", rel))
+		add(HermesPath("skills", "via54medit", "via54medit-anno2ppt-phase7", "scripts", rel))
+	}
 	add(filepath.Join("scripts", rel)) // 开发态兜底, 明确排最后
 	return out
 }

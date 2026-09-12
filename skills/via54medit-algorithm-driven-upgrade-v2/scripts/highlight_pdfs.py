@@ -9,7 +9,7 @@ highlight_pdfs.py — 步骤 4: PDF highlight + 提图
 - PyMuPDF search_for + add_highlight_annot (黄色 RGB 1,1,0)
 
 用法:
-    /Users/david/.hermes/hermes-agent/venv/bin/python scripts/highlight_pdfs.py
+    python3 scripts/highlight_pdfs.py
 
 输入: 8 列 CSV (PPT_citations_8col.csv) + 226 PDF (Pn-x/) + 真值 citation_table.csv
 输出: _highlight/Pn-x/<main_pdf>.pdf + page_NNN.png
@@ -28,11 +28,14 @@ Pitfall:
 - MuPDF "format error: non-page object in page tree" 警告 → 不影响渲染
 - 160 个 Pn-x 跑完约 5-8 min (foreground), background 跑用 process tool 避免 timeout
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
 import os, csv, re, shutil
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF
 
-ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+ROOT = project_paths.LEIGUAN_ROOT
 CSV_8COL = f'{ROOT}/PPT_citations_8col.csv'
 HL_BASE = f'{ROOT}/_highlight'
 os.makedirs(HL_BASE, exist_ok=True)

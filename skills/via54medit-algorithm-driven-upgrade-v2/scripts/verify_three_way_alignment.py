@@ -11,7 +11,7 @@ verify_three_way_alignment.py — 步骤 5: 三方对齐验证
 输出: PPT_citations_8col_aligned.csv (11 列, A-K)
 
 用法:
-    /Users/david/.hermes/hermes-agent/venv/bin/python scripts/verify_three_way_alignment.py
+    python3 scripts/verify_three_way_alignment.py
 
 输入: 8 列 CSV (PPT_citations_8col.csv) + Pn-x/ PDF + _highlight/
 输出: 11 列最终 CSV (PPT_citations_8col_aligned.csv) + 对齐率报告
@@ -20,9 +20,12 @@ Pitfall:
 - "J_alignment_C_PDF" 判断用目录存在而非真实 PDF 匹配 — 81 个文件简称与全称不匹配视为 ⚠️ 但通过
 - 81 个"问题" 实际上 0 错 — 增强判断可加 author + DOI 双重校验
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
 import os, csv
 
-ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+ROOT = project_paths.LEIGUAN_ROOT
 CSV_8COL = f'{ROOT}/PPT_citations_8col.csv'
 HL_BASE = f'{ROOT}/_highlight'
 

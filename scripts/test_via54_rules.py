@@ -14,6 +14,7 @@ test_via54_rules.py — 6 步规则校验模块单测
   T9: print_rules 输出完整
   T10: 真实 TMA 项目跑规则 (失败用例 + 通过用例)
 """
+import project_paths
 import os, sys, tempfile, unittest
 from pathlib import Path
 
@@ -473,7 +474,8 @@ class TestCheckAll(unittest.TestCase):
             self.assertFalse(r["overall_ok"])
 
     def test_nonexistent_project(self):
-        r = check_all("/tmp/nonexistent_xyz_zzz")
+        nonexistent = os.path.join(tempfile.gettempdir(), "nonexistent_xyz_zzz")
+        r = check_all(nonexistent)
         self.assertFalse(r["overall_ok"])
         self.assertIn("error", r)
 
@@ -494,7 +496,7 @@ class TestCheckAll(unittest.TestCase):
 class TestRealProject(unittest.TestCase):
     """真实 TMA 项目跑规则"""
 
-    PROJECT = os.path.expanduser("~/Desktop/TMA_文献整理")
+    PROJECT = project_paths.TMA_ROOT
 
     def test_tma_project(self):
         if not os.path.isdir(self.PROJECT):

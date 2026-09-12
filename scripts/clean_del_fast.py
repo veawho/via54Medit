@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """快速全删 DEL 27 个 Pn-x 的所有冗余 - 用 glob + rm 加快"""
-import os, json, sys, subprocess, glob
+import project_paths
+import os, json, sys, subprocess, glob, tempfile
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
-DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+TMA = project_paths.TMA_ROOT
+DECISION = json.load(open(os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json'), encoding='utf-8'))
 DEL = DECISION['TMA']['del']
 
 count = 0

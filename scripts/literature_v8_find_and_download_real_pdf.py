@@ -18,15 +18,16 @@ P35-1 (Thomson AW, Knolle PA. 2010. Nat Rev Immunol. 10(11): 753-66.) 原文件�
 调用: python3 find_and_download_real_pdf.py <pn_x> [<override_url>]
 """
 
-import sys, os, hashlib, subprocess, shutil, json, time
+import project_paths
+import sys, os, hashlib, subprocess, shutil, json, time, tempfile
 import urllib.request, urllib.error
 from pathlib import Path
 
-BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+BASE = project_paths.LEIGUAN_ROOT
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 ARCHIVE = os.path.join(BASE, '_literature_citation_index')
 V4_23_BACKUP = os.path.join(BASE, '_audit_report', '_phase_v4_23_highlight_backup')
-PYTHON = os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11')
+PYTHON = sys.executable
 
 
 def md5_of(p):
@@ -68,7 +69,7 @@ def verify_real_literature_pdf(pdf_path, expected_doi=None, expected_author_keyw
 
 def download_pdf(url, dst_path, timeout=30):
     """下载 PDF"""
-    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Hermes-Agent/1.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X) via54Medit/1.0'}
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read()
@@ -165,8 +166,9 @@ def process_pn_x(pn_x, override_url=None):
         if not url: continue
         print(f'尝试下载: {url}')
         try:
-            tmp = '/tmp/p35_dl_' + hashlib.md5(url.encode()).hexdigest()[:6] + '.pdf'
-            os.makedirs('/tmp/p35_dl', exist_ok=True)
+            tmp_dir = os.path.join(tempfile.gettempdir(), 'p35_dl')
+            os.makedirs(tmp_dir, exist_ok=True)
+            tmp = os.path.join(tmp_dir, 'p35_dl_' + hashlib.md5(url.encode()).hexdigest()[:6] + '.pdf')
             download_pdf(url, tmp)
             # 验证
             real2, reason2 = verify_real_literature_pdf(tmp, expected_doi=doi)

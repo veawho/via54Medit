@@ -9,9 +9,11 @@ test_ppt_understand.py — Step 1 PPT 视觉理解 + Step 2 PDF highlight 验证
 
 共 8 个单测
 """
+import project_paths
 import sys
 import os
 import json
+import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -32,7 +34,7 @@ from pdf_understand import (
 )
 
 P41_MAIN = (
-    os.environ.get("VIA54_LEIGUAN_DIR", os.path.expanduser("~/Desktop/雷管方案_文献整理"))
+    os.environ.get("VIA54_LEIGUAN_DIR", project_paths.LEIGUAN_ROOT)
     + "/_literature_citation_index/P4-1/P4-1_main_Lin_FrontOncol_2022.pdf"
 )
 
@@ -99,9 +101,10 @@ def test_verify_alignment():
     data_points = extract_ppt_data_points(ppt_text)
     print(f"  数据点: {data_points[:5]}")
 
+    dummy_img = os.path.join(tempfile.gettempdir(), "dummy.jpg")
     result = verify_highlight_alignment(
         pdf_path=P41_MAIN,
-        highlight_image_path="/tmp/dummy.jpg",
+        highlight_image_path=dummy_img,
         ppt_citation_context={"context": ppt_text},
         data_points=data_points,
     )

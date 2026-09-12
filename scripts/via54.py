@@ -40,6 +40,9 @@ via54.py — via54Medit 统一入口 (2026-08-10, 2026-08-20 update)
 import os, re, sys, json, argparse, subprocess
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
+
 # 让子工具与 telemetry 可以被 import
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPTS_DIR)
@@ -138,9 +141,9 @@ def cmd_highlight(args):
     # visual-v3 / plan-v3 都基于项目目录跑所有 PDF
     # 默认项目目录
     if ns.project == "雷管方案":
-        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR", os.path.expanduser("~/Desktop/雷管方案_文献整理"))
+        proj_dir = os.environ.get("VIA54_LEIGUAN_DIR") or project_paths.LEIGUAN_ROOT
     else:
-        proj_dir = os.environ.get("VIA54_TMA_DIR", os.path.expanduser("~/Desktop/TMA_文献整理"))
+        proj_dir = os.environ.get("VIA54_TMA_DIR") or project_paths.TMA_ROOT
 
     # 找 PPT 文件
     pptx_path = ns.pptx or os.path.join(proj_dir, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
@@ -206,7 +209,7 @@ def _tma_project_dir(ns):
     """解析项目根: --project-dir > TMA_PROJECT env > VIA54_TMA_DIR env"""
     if getattr(ns, "project_dir", None):
         return ns.project_dir
-    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or os.path.expanduser("~/Desktop/TMA_文献整理")
+    return os.environ.get("TMA_PROJECT") or os.environ.get("VIA54_TMA_DIR") or project_paths.TMA_ROOT
 
 
 def _run_tma(script, argv, project_dir):
@@ -376,8 +379,8 @@ def cmd_all(args):
     """跑全部: rules + step5 + diff"""
     if not args:
         # 默认跑两个项目
-        for proj in [os.path.expanduser("~/Desktop/雷管方案_文献整理"),
-                     os.path.expanduser("~/Desktop/TMA_文献整理")]:
+        for proj in [project_paths.LEIGUAN_ROOT,
+                     project_paths.TMA_ROOT]:
             if os.path.isdir(proj):
                 print(f"\n=== Rules check: {proj} ===")
                 _run_module("via54_rules.py", [proj])

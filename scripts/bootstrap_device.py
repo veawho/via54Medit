@@ -5,7 +5,7 @@
 
     python3 scripts/bootstrap_device.py
 
-它做六件事:
+它对应用户定义的 5 步部署流程, 具体做八件事:
   1. **深度扫描本机环境 + 按平台补齐缺口** —— 交给 scripts/deploy_scan.py:
      只装"与本平台相关且确实缺失"的能力, 并按正确通道装
      (Python 包走 pip、mmx-cli 走 npm、系统工具走 brew/apt/winget/choco/scoop)。
@@ -20,7 +20,10 @@
   5. **强制校验 LLM 接入与 token 用量可读性** —— 交给 ``deploy_scan.py --verify-llm``:
      接入了哪些 LLM、它们的 token 消耗能不能真的读进库。记账是旁路, 少了不会报错,
      所以这一步不能靠"记得去看"; 校验失败时本脚本以非 0 退出。
-  6. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
+  6. **全量测试所有功能** —— Python 测试套件 + Go ``go test ./...``, 部署/更新后必须
+     确认没有回归。
+  7. **清理旧代码与运行时缓存** —— 删除 ``__pycache__`` / ``*.pyc``, 确保当前部署干净稳定。
+  8. **注册自动更新守护任务**(按平台选 launchd / cron / schtasks)。
 
 本脚本**幂等**: 重复运行、或在版本更新后运行, 都只会补上当时缺的东西。
 
@@ -137,11 +140,39 @@ def step_build_go():
     if not shutil.which("go"):
         print("  ~ 未找到 go 工具链, 跳过 (使用预编译的 bin/medit 也正常)")
         return
-    (REPO_DIR / "bin").mkdir(exist_ok=True)
-    ok1, _, err1 = run_cmd(["go", "build", "-o", "bin/medit", "./cmd/medit"])
-    ok2, _, err2 = run_cmd(["go", "build", "-o", "bin/medit-mcp", "./cmd/medit-mcp"])
+    bin_dir = REPO_DIR / "bin"
+    bin_dir.mkdir(exist_ok=True)
+
+    # 适配 Windows 可执行文件后缀
+    exe = ".exe" if sys.platform == "win32" or os.name == "nt" else ""
+    medit_out = f"bin/medit{exe}"
+    mcp_out = f"bin/medit-mcp{exe}"
+
+    # 提取版本戳记 (对齐 Makefile ldflags 机制)
+    _, version_str, _ = run_cmd(["git", "describe", "--tags", "--always", "--dirty"])
+    if not version_str:
+        version_str = "dev"
+    _, commit_str, _ = run_cmd(["git", "rev-parse", "--short", "HEAD"])
+    if not commit_str:
+        commit_str = "unknown"
+    import datetime
+    build_date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _, go_ver, _ = run_cmd(["go", "version"])
+
+    ldflags = (
+        f"-s -w "
+        f"-X github.com/veawho/via54Medit/internal/version.Version={version_str} "
+        f"-X github.com/veawho/via54Medit/internal/version.Commit={commit_str} "
+        f"-X github.com/veawho/via54Medit/internal/version.BuildDate={build_date} "
+        f"-X \"github.com/veawho/via54Medit/internal/version.GoVersion={go_ver}\""
+    )
+
+    env = os.environ.copy()
+    env["CGO_ENABLED"] = "0"
+    ok1, _, err1 = run_cmd(["go", "build", "-ldflags", ldflags, "-o", medit_out, "./cmd/medit"])
+    ok2, _, err2 = run_cmd(["go", "build", "-ldflags", ldflags, "-o", mcp_out, "./cmd/medit-mcp"])
     if ok1 and ok2:
-        print("  ✓ bin/medit 与 bin/medit-mcp 编译成功")
+        print(f"  ✓ {medit_out} 与 {mcp_out} 编译成功 ({version_str})")
     else:
         print("  ⚠️ 编译未成功: %s %s" % (err1 or "", err2 or ""))
 
@@ -216,8 +247,78 @@ def step_verify_llm():
     return False
 
 
+def step_full_tests():
+    """全量测试 —— 部署/更新后必须确认没有回归。
+
+    包含 Python 测试套件与 Go 全包测试。失败即阻塞结论, 避免"能启动但功能坏"
+    的状态被当成已就绪。
+    """
+    step_print("6. 全量测试所有功能")
+    python_ok = False
+    go_ok = False
+
+    if shutil.which("pytest") or run_cmd([sys.executable, "-m", "pytest", "--version"])[0]:
+        res = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-q"],
+                             cwd=str(REPO_DIR))
+        python_ok = res.returncode == 0
+        if python_ok:
+            print("  ✓ Python 测试通过 (pytest)")
+        else:
+            print("  ✗ Python 测试未通过 —— 排查: python3 -m pytest tests/ -v")
+    else:
+        # 对标主流方案: 无 pytest 时平滑回退到 Python 内置的 unittest discover，绝不静默漏测
+        print("  ~ 未找到 pytest，优雅回退至内置 unittest discover 验证...")
+        res = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-q"],
+                             cwd=str(REPO_DIR))
+        python_ok = res.returncode == 0
+        if python_ok:
+            print("  ✓ Python 测试通过 (unittest discover)")
+        else:
+            print("  ✗ Python 测试未通过 —— 排查: python3 -m unittest discover -s tests -v")
+
+    if shutil.which("go"):
+        res = subprocess.run(["go", "test", "./..."], cwd=str(REPO_DIR))
+        go_ok = res.returncode == 0
+        if go_ok:
+            print("  ✓ Go 测试通过")
+        else:
+            print("  ✗ Go 测试未通过 —— 排查: go test ./...")
+    else:
+        print("  ~ 未找到 go 工具链, 跳过 Go 测试")
+
+    return python_ok, go_ok
+
+
+def step_cleanup():
+    """清理旧代码/运行时缓存, 确保当前部署干净、稳定。"""
+    step_print("7. 清理旧代码与运行时缓存")
+    cleaned = {"pycache": 0, "pyc": 0}
+
+    for root, dirs, files in os.walk(REPO_DIR):
+        # 跳过 .git 与虚拟环境, 避免误删
+        if ".git" in root.split(os.sep) or ".venv" in root.split(os.sep):
+            continue
+        for d in list(dirs):
+            if d == "__pycache__":
+                try:
+                    shutil.rmtree(os.path.join(root, d))
+                    cleaned["pycache"] += 1
+                except OSError as e:
+                    print(f"  ~ 无法清理 {os.path.join(root, d)}: {e}")
+        for f in files:
+            if f.endswith(".pyc"):
+                try:
+                    os.remove(os.path.join(root, f))
+                    cleaned["pyc"] += 1
+                except OSError as e:
+                    print(f"  ~ 无法删除 {os.path.join(root, f)}: {e}")
+
+    print(f"  ✓ 清理完成: {cleaned['pycache']} 个 __pycache__, {cleaned['pyc']} 个 .pyc")
+    return True
+
+
 def step_periodic_sync():
-    step_print("6. 注册自动更新 (定时从 GitHub 拉取)")
+    step_print("8. 注册自动更新 (定时从 GitHub 拉取)")
     script = SCRIPTS / "auto_sync.py"
     if not script.exists():
         print("  ✗ 未找到 auto_sync.py")
@@ -264,22 +365,33 @@ def main():
         print("\n5. LLM 接入校验: 已按 --no-verify-llm 跳过")
     else:
         llm_ok = step_verify_llm()
-    step_periodic_sync()
+    python_ok, go_ok = step_full_tests()
+    step_cleanup()
+    if "--no-periodic-sync" in argv:
+        print("\n8. 注册自动更新: 已按 --no-periodic-sync 跳过")
+    else:
+        step_periodic_sync()
 
-    ready = scan_ok and llm_ok and vision_ok
+    ready = scan_ok and llm_ok and vision_ok and python_ok and go_ok
     print("\n======================================================")
     print(" 初始化完成%s" % ("" if ready else "(仍有缺口, 见上)"))
     if not vision_ok:
         print(" ⚠️ 视觉/OCR 通道校验未通过: 图片页识别或视觉校验会失败。")
     if not llm_ok:
         print(" ⚠️ LLM 接入校验未通过: token 统计会缺一块, 而这些调用不会报任何错。")
+    if not python_ok:
+        print(" ⚠️ Python 全量测试未通过: 功能回归风险。")
+    if not go_ok:
+        print(" ⚠️ Go 全量测试未通过: 核心功能回归风险。")
     for w in vision_warnings:
         print(" ⚠️ %s" % w)
     print(" 默认配置:")
-    print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx, 经 npm 安装)")
-    print("   • PPT Engine   : 桌面版 Microsoft PowerPoint (默认) / Microsoft Graph (RENDER_ENGINE=graph)")
+    print("   • Vision Engine: mmx-cli (VISION_PROVIDER=mmx, 强制; 其他 vision 方式均为可选)")
+    print("   • PPT Engine   : 桌面版 Microsoft PowerPoint (唯一强制渲染方式)")
     print("   • OCR          : PaddleOCR (L2 中文识别, pip 安装 + 权重预热)")
-    print("   • Auto-Sync    : 已按平台注册系统定时任务")
+    print("   • Feishu/lark-cli: 可选能力, 不强制部署")
+    sync_state = "本次未注册(用了 --no-periodic-sync)" if "--no-periodic-sync" in argv else "已按平台注册系统定时任务"
+    print("   • Auto-Sync    : %s" % sync_state)
     print(" 复检任意时刻: python3 scripts/deploy_scan.py --check")
     print(" 复检 LLM 记账: python3 scripts/deploy_scan.py --verify-llm")
     print(" 复检 OCR/mmx : python3 scripts/deploy_scan.py --verify-ocr / --verify-mmx")

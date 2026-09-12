@@ -17,12 +17,15 @@ HLO Cron Scheduler — 算法驱动 cron 调度 (Phase 3 + 5.1, 2026-07-29)
 3. Mutex: 同时段任务互斥 (避资源争抢)
 4. Bayesian update: 跟踪每次跑的成功率
 """
-import os, sys, json, sqlite3, time, argparse
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
+import os, sys, json, sqlite3, time, argparse, tempfile
 from datetime import datetime, timedelta
 
-BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
-HLO_DIR = os.path.expanduser('~/Desktop/HLO_design')
-HLO_DB = os.path.expanduser('~/Desktop/hlo_nlu.sqlite')
+BASE = project_paths.LEIGUAN_ROOT
+HLO_DIR = project_paths.HLO_DIR
+HLO_DB = project_paths.HLO_DB
 
 
 def get_db():
@@ -85,13 +88,13 @@ def should_skip(job_name: str, min_new_content: int = 1) -> bool:
     return (new_traces + new_corrections) < min_new_content
 
 
-def check_mutex(job_name: str, mutex_group: str) -> bool:
+def check_mutex(mutex_group: str, job_name: str = "") -> bool:
     """算法 3: Mutex (避免同时段争抢)
     算法: 检查同 mutex_group 是否有 running job (>10min = 死锁)
     """
     if not mutex_group:
         return True
-    lock_file = f'/tmp/hlo_cron_mutex_{mutex_group}'
+    lock_file = os.path.join(tempfile.gettempdir(), f'hlo_cron_mutex_{mutex_group}')
     if os.path.exists(lock_file):
         mtime = os.path.getmtime(lock_file)
         if time.time() - mtime < 600:
@@ -107,7 +110,7 @@ def release_mutex(mutex_group: str):
     """算法 3b: 释放 mutex"""
     if not mutex_group:
         return
-    lock_file = f'/tmp/hlo_cron_mutex_{mutex_group}'
+    lock_file = os.path.join(tempfile.gettempdir(), f'hlo_cron_mutex_{mutex_group}')
     if os.path.exists(lock_file):
         os.remove(lock_file)
 
@@ -219,7 +222,7 @@ if __name__ == '__main__':
 # schedule: "every 10m"
 # prompt: |
 #   步骤 0: 跑算法 scheduler 决定是否真跑
-#   /usr/bin/python3 /Users/david/.hermes/cron/algorithms/hlo_scheduler.py \
+#   /usr/bin/python3 /path/to/via54Medit/skills/via54medit-algorithm-driven-upgrade-v2/scripts/hlo_scheduler.py \
 #     --job hlo_realtime_evolve --min-new-content 1 \
 #     --mutex-group hlo_evolve --bayes-min-prob 0.3
 # 

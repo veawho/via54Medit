@@ -10,6 +10,7 @@ l0_glm_redownload.py — L0 GLM 兜底补搜正确论文
 输入: rerun summary CSV
 输出: redownload_suggestions.json
 """
+import project_paths
 import os, sys, csv, json, re
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -150,16 +151,16 @@ def redownload_suggest(
 
 PROJECTS = {
     "TMA": {
-        "rerun_csv": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm/_rerun_summary.csv"),
-        "source_csv": os.path.expanduser("~/Desktop/TMA_文献整理/_citation_table/tma_citation_table.csv"),
-        "pdf_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs"),
-        "highlight_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm"),
+        "rerun_csv": os.path.join(project_paths.TMA_ROOT, "_3_highlight_v10_glm/_rerun_summary.csv"),
+        "source_csv": os.path.join(project_paths.TMA_ROOT, "_citation_table/tma_citation_table.csv"),
+        "pdf_dir": os.path.join(project_paths.TMA_ROOT, "_2_pdfs"),
+        "highlight_dir": os.path.join(project_paths.TMA_ROOT, "_3_highlight_v10_glm"),
     },
     "雷管方案": {
-        "rerun_csv": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm/_rerun_summary.csv"),
-        "source_csv": os.path.expanduser("~/Desktop/雷管方案_文献整理/step2_标注分析/PPT_citations_8col_aligned.csv"),
-        "pdf_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step3_pdf下载_160目录"),
-        "highlight_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm"),
+        "rerun_csv": os.path.join(project_paths.LEIGUAN_ROOT, "step4_highlight_v10_glm/_rerun_summary.csv"),
+        "source_csv": os.path.join(project_paths.LEIGUAN_ROOT, "step2_标注分析/PPT_citations_8col_aligned.csv"),
+        "pdf_dir": os.path.join(project_paths.LEIGUAN_ROOT, "step3_pdf下载_160目录"),
+        "highlight_dir": os.path.join(project_paths.LEIGUAN_ROOT, "step4_highlight_v10_glm"),
     },
 }
 

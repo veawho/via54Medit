@@ -9,9 +9,10 @@ vision_extract.py - v9.6 新增: Vision API 提取 PDF highlight 图中的数据
     python3 vision_extract.py <pn_x> [--all]
     python3 vision_extract.py P3-1
 """
+import project_paths
 import sys, os, json, re, subprocess
 
-lit_base = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index")
+lit_base = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index")
 
 
 def extract_data_points_from_image(image_path, prompt=None):

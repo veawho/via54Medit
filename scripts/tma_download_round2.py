@@ -14,7 +14,11 @@ import json, os, re, io, sys, time, urllib.request, urllib.parse, pymupdf as fit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tma_scihub import scihub_pdf
 
-T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
+
+T = os.environ.get('TMA_PROJECT') or project_paths.TMA_TEST_ROOT
 MISSING = os.path.join(T, '_missing_list.json')
 OUT = os.path.join(T, '_2_pdfs')
 REPORT = os.path.join(T, '_download_round2_report.json')

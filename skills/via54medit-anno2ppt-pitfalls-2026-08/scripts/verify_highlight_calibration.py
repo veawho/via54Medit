@@ -19,6 +19,9 @@ Usage:
     # 单 Pn-x 校准
     python3 verify_highlight_calibration.py --pn-x P3-3
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
 import argparse
 import json
 import os
@@ -26,8 +29,8 @@ import re
 import sys
 from pathlib import Path
 
-LIT_BASE = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index")
-CSV_PATH = os.path.expanduser("~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv")
+LIT_BASE = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index")
+CSV_PATH = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
 
 try:
     import pymupdf as fitz  # PyMuPDF

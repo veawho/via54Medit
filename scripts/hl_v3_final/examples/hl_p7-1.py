@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P7-1: slide 7 引用1 (Timmermans J Clin Med 2021 TMA) 补体调控应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P7-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P7-1/P7-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P7-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P7-1/P7-1_highlight.pdf")
 
 SENTENCES = [
     "Host cells, including the endothelium, are protected from the harmful effects of complement activation by regulatory proteins.",

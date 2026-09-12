@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P12-2: slide 12 引用2 (中华血液学杂志 2017 DIC共识) 微血管病性溶血应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P12-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P12-2/P12-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P12-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P12-2/P12-2_highlight.pdf")
 
 SENTENCES = [
     "4. 微血管病性溶血：较少发生，表现为进行性贫血、贫血程度与出血量不成比例，偶见皮肤、巩膜黄染。",

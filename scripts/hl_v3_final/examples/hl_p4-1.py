@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P4-1: slide 4 引用1 (PNH中国指南原文) 近端补体应证句逐行 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-1/P4-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P4-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P4-1/P4-1_highlight.pdf")
 
 SENTENCES = [
     "经典型PNH 一线治疗为补体抑制剂,可选择依库珠单抗、可伐利单抗、B 因子抑制剂。",

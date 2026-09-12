@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P25-5: 固定句子定义, 自动定位页并 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-5_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-5/P25-5_highlight.pdf")
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P25-5_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P25-5/P25-5_highlight.pdf")
 
 SENTENCES = [
     'A disintegrin and metalloproteinase with a thrombospondin type 1 motif member 13 (ADAMTS13) activity was evaluated by the application of the fluorogenic substrate FRETS-VWF73',

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """逐个重跑所有 hl_p*.py: 先带 run 参数, 失败则直接执行; 成功后 fitz 渲染"""
-import subprocess, sys, os, glob, re
+import project_paths
+import subprocess, sys, os, glob, re, tempfile
 
-BASE = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI")
-logf = open('/tmp/rerun_all.log', 'w')
+BASE = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI")
+_TMP = tempfile.gettempdir()
+logf = open(os.path.join(_TMP, 'rerun_all.log'), 'w')
 fail = []
 
 # 脚本来源: 优先 toolkit/scripts(沉淀), 回退 /tmp(工作区)
-SCRIPT_DIRS = [os.path.expanduser('~/Desktop/TMA_文献整理/_highlight_toolkit/scripts'), '/tmp']
+SCRIPT_DIRS = [os.path.join(project_paths.TMA_ROOT, "_highlight_toolkit/scripts"), _TMP]
 # 按 basename 去重(toolkit/scripts 优先, /tmp 回退)
 by_name = {}
 for sd in SCRIPT_DIRS:
@@ -29,7 +31,7 @@ if __name__ == "__main__":
         ok = False
         for args in ([script, 'run'], [script]):
             try:
-                r = subprocess.run([sys.executable] + args, capture_output=True, text=True, timeout=180, cwd='/tmp')
+                r = subprocess.run([sys.executable] + args, capture_output=True, text=True, timeout=180, cwd=_TMP)
                 logf.write(f'--- {pn} {args[-1] if len(args)>1 else "direct"}\n')
                 logf.write(r.stdout[-2000:])
                 logf.write(r.stderr[-2000:])
@@ -54,7 +56,7 @@ if __name__ == "__main__":
             shutil.rmtree(pages)
         os.makedirs(pages)
         try:
-            r = subprocess.run([sys.executable, '/tmp/render_fitz.py', hp, pages, '100'],
+            r = subprocess.run([sys.executable, os.path.join(_TMP, 'render_fitz.py'), hp, pages, '100'],
                                capture_output=True, text=True, timeout=300)
             if r.returncode != 0:
                 fail.append((pn, 'RENDER_FAIL'))

@@ -27,7 +27,6 @@ def find_mmx_bin():
     if p:
         return p
     for c in (os.path.expanduser("~/.local/bin/mmx"),
-              os.path.expanduser("~/.hermes/node/bin/mmx"),
               os.path.expanduser("~/.npm-global/bin/mmx")):
         if os.path.exists(c):
             return c
@@ -51,6 +50,32 @@ def get_image_mime(image_path):
         ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
     }
     return mime_map.get(ext, "image/png")
+
+
+def _record_usage(result):
+    """把 mmx-cli 视觉调用的真实 usage 记进遥测库。
+
+    当前 ``mmx vision describe --output json`` 只返回 content, CLI 不暴露 token。
+    但 mmx-cli 未来若新增 usage 字段, 这里会立刻把它落库 —— 不需要再改调用方。
+    包装在 try/except 里: 遥测不可用不该让视觉分析本身失败。
+    """
+    try:
+        import os as _os
+        import sys as _sys
+
+        _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from telemetry.token_tracker import record_llm_usage
+
+        record_llm_usage(
+            response=result,
+            provider="minimax",
+            model=result.get("model", "") if isinstance(result, dict) else "",
+            source="mmx_vision.py",
+        )
+    except Exception:
+        pass
 
 
 def vision_analyze(image_path, prompt, json_mode=False, timeout=180):
@@ -81,6 +106,8 @@ def vision_analyze(image_path, prompt, json_mode=False, timeout=180):
     content = data.get("content")
     if content is None:
         return {"success": False, "content": "", "error": "mmx 响应缺少 content: %s" % (r.stdout or "")[:200]}
+    # 如果 mmx-cli 未来返回 usage, 立即落库; 现在没有 usage 时 record_llm_usage 会返回 None
+    _record_usage(data)
     return {"success": True, "content": str(content).strip(), "error": ""}
 
 

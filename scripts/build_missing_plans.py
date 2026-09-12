@@ -12,6 +12,7 @@ build_missing_plans.py v2 — 给无 vision plan 的 Pn-x 自动建 plan (2026-0
 用法:
     python3 build_missing_plans.py --project TMA [--auto-slide]
 """
+import project_paths
 import os, sys, json, csv, argparse, re
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -19,8 +20,8 @@ from typing import Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
-LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
+LEIDA_ROOT = project_paths.LEIGUAN_ROOT
 
 
 def find_pdf(project_root: str, pn_x: str) -> Optional[str]:

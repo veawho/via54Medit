@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P20-2: slide 20 引用2 (Liu Toxins 2023 STEC-HUS) 临床特点与诊断应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P20-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P20-2/P20-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P20-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P20-2/P20-2_highlight.pdf")
 
 SENTENCES = [
     "A STEC infection initially presents with symptoms of hemorrhagic colitis, such as abdominal pain and hemorrhagic diarrhea, and vascular damage can cause hemolytic anemia, thrombosis, and kidney injury",

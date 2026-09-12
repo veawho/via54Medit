@@ -2,7 +2,11 @@
 """tma_final_report.py — 生成 TMA 交付报告 markdown"""
 import json, os, re, io, sys, csv, pymupdf as fitz
 
-T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
+
+T = os.environ.get('TMA_PROJECT') or project_paths.TMA_TEST_ROOT
 REF_JSON = os.path.join(T, '_references_FINAL.json')
 DOI_MAP = os.path.join(T, '_doi_map_full.json')
 PDF_DIR = os.path.join(T, '_2_pdfs')

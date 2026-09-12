@@ -175,7 +175,9 @@ func buildRouter(useLLM bool) (*router.Router, error) {
 
 func buildLLM() (foundation.LLMProvider, error) {
 	switch askLLMProv {
-	case "hermes", "":
+	case "":
+		return nil, fmt.Errorf("no LLM provider configured; use --llm or set it in config")
+	case "hermes":
 		endpoint := askLLMEndp
 		if endpoint == "" {
 			endpoint = "http://localhost:8765"

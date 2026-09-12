@@ -4,7 +4,10 @@ import sys, os, tempfile
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+# 确保上一级 scripts 目录在 sys.path 中以顺利加载 project_paths
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
 import hl_lib
 from hl_lib import (canon, canon_keys, locate_sentence, locate_sentence_all,
                     sentence_rects, highlight_sentences, norm,
@@ -151,7 +154,7 @@ SRC = os.environ.get("TMA_HL_TEST_SRC") or None
 if not SRC:
     proj = os.environ.get("TMA_PROJECT") or ""
     cand = os.path.join(proj, "_2_pdfs", "P23-8.pdf")
-    SRC = cand if os.path.isfile(cand) else os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-8_main.pdf")
+    SRC = cand if os.path.isfile(cand) else os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P23-8_main.pdf")
 if not os.path.isfile(SRC):
     print("  ⚠️ 无测试 PDF (设 TMA_PROJECT 或 TMA_HL_TEST_SRC), 跳过 highlight_sentences 边界组")
     print(f"\n结果: {PASS} passed, {FAIL} failed (1 组跳过)")

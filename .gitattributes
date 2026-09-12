@@ -1,0 +1,37 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Shell scripts must always use LF line endings
+*.sh text eol=lf
+
+# Windows batch files and PowerShell scripts should use CRLF line endings
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Makefiles and Go/Python source files should use LF line endings
+Makefile text eol=lf
+*.go text eol=lf
+*.py text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.pptx binary
+*.docx binary
+*.db binary
+*.sqlite binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary

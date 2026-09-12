@@ -5,9 +5,11 @@ m3_vision_batch.py — 批量用 m3_vision_highlight 跑 103 个 Pn-x (phrase �
 User 选 M3 vision 自动选 mode, 但 103 个太多
 折中: 先用 phrase 模式批量 + plan.target_text 抽 anchor, 失败的单独处理
 """
+import sys
+import project_paths
 import json, os, sys, re, pymupdf as fitz, shutil, subprocess
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
+TMA = project_paths.TMA_ROOT
 PLANS = f'{TMA}/_3_highlight_vision/_highlight_plans.json'
 OUT_DIR = f'{TMA}/_3_highlight_semantic_m3'
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -130,7 +132,7 @@ def main():
         out = f'{OUT_DIR}/{pn}_semantic_highlight.pdf'
         if not os.path.exists(out):
             shutil.copy2(pdf, out)
-        cmd = [os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python'),
+        cmd = [sys.executable,
                os.path.join(os.path.dirname(os.path.abspath(__file__)), "m3_vision_highlight.py"),
                '--pn-x', pn,
                '--entries', f'[[{pi}, {json.dumps(hit_text)}, "phrase"]]',

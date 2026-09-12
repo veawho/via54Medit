@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """创建飞书在线表并写入与雷管方案一致的 8 列 × 106 行数据
-依赖: app_secret 从 ~/.hermes/config.yaml (gateway.platforms.feishu.app_secret) 读取
+依赖: FEISHU_APP_SECRET 环境变量
 输出: 在线表链接 + 授权用户(全编辑) + 公开可读"""
+import project_paths
 import os
-import json, urllib.request, csv, yaml, sys
+import json, urllib.request, csv, sys
 from pathlib import Path
 
-BASE = os.path.expanduser('~/Desktop/TMA_文献整理')
-APP_ID = 'cli_aa93fb63c1b9dcc7'
-USER_OPEN_ID = 'ou_83cf959d09334d3d1585d332fc4a15ce'
+BASE = project_paths.TMA_ROOT
+APP_ID = os.environ.get('FEISHU_APP_ID', 'cli_aa93fb63c1b9dcc7')
+USER_OPEN_ID = os.environ.get('FEISHU_USER_OPEN_ID', 'ou_83cf959d09334d3d1585d332fc4a15ce')
 
 def api(method, url, body=None, token=None):
     h = {'Content-Type': 'application/json; charset=utf-8'}
@@ -22,8 +23,9 @@ def api(method, url, body=None, token=None):
         return json.loads(e.read())
 
 def main():
-    cfg = yaml.safe_load(open(Path.home() / '.hermes' / 'config.yaml'))
-    secret = cfg['gateway']['platforms']['feishu']['app_secret']
+    secret = os.environ.get('FEISHU_APP_SECRET')
+    if not secret:
+        print('缺少环境变量 FEISHU_APP_SECRET'); sys.exit(1)
     tok = api('POST', 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
               {'app_id': APP_ID, 'app_secret': secret}).get('tenant_access_token')
     if not tok:

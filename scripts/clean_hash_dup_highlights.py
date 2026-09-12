@@ -4,11 +4,12 @@
 
 规则: 在每个 hash 重复组里, 保留 cite 最多 + lex tie break 的 Pn-x, 其他全删.
 """
-import os, hashlib, json, re, sys
+import project_paths
+import os, hashlib, json, re, sys, tempfile
 from collections import defaultdict
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
-LEIGUAN = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+TMA = project_paths.TMA_ROOT
+LEIGUAN = project_paths.LEIGUAN_ROOT
 
 # 从 _2_pdfs 算 hash 重复组
 def get_hash_dup_groups(root_dir):
@@ -144,6 +145,7 @@ if __name__ == '__main__':
         'TMA': {'keep': sorted(keep_tma), 'del': sorted(del_tma)},
         '雷管方案': {'keep': sorted(keep_lg), 'del': sorted(del_lg)},
     }
-    with open('/tmp/clean_hash_dup_decision.json', 'w', encoding='utf-8') as f:
+    decision_path = os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json')
+    with open(decision_path, 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
-    print(f'\n=== Decision saved to /tmp/clean_hash_dup_decision.json ===')
+    print(f'\n=== Decision saved to {decision_path} ===')

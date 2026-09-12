@@ -121,9 +121,11 @@ def complete(prompt, system="", model=None, json_mode=False, temperature=0.1, ti
             
         return _call_openai_compatible(endpoint, api_key, payload, timeout=timeout, provider=p)
 
-    # 3. Hermes Local Gateway
+    # 3. Local LLM Gateway (原 Hermes Gateway, 不再默认假设本地服务在 8765 端口)
     if p == "hermes":
-        endpoint = os.environ.get("HERMES_GATEWAY_URL", "http://localhost:8765/v1/chat/completions")
+        endpoint = os.environ.get("LLM_GATEWAY_URL") or os.environ.get("HERMES_GATEWAY_URL")
+        if not endpoint:
+            return "[错误: hermes provider 需要设置 LLM_GATEWAY_URL 或 HERMES_GATEWAY_URL]"
         m = model or "MiniMax-M3"
         messages = []
         if system:

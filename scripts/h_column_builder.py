@@ -15,6 +15,7 @@ h_column_builder.py — H 列 v5.0 内容生成器 (2026-08-02)
 - markdown_to_rich_text_v3(...): markdown → 飞书 rich_text (保留换行 + 裸 URL)
 """
 
+import project_paths
 import os
 import re
 from typing import Dict, List, Optional
@@ -597,7 +598,7 @@ def build_h_md(
         # 没 found_locs (没 docling/PyMuPDF): 跑临时 PyMuPDF 搜索 (light step2)
         main_pdf_path = f"{lit_base}/{pn_x}/{scan['main_pdf']}"
         if not _os.path.isfile(main_pdf_path):
-            main_pdf_path = f"{scan.get('src_base', os.path.expanduser('~/Desktop/雷管方案_文献整理'))}/{pn_x}/{scan['main_pdf']}"
+            main_pdf_path = f"{scan.get('src_base', project_paths.LEIGUAN_ROOT)}/{pn_x}/{scan['main_pdf']}"
         
         light_hits = []
         if _os.path.isfile(main_pdf_path):
@@ -897,7 +898,7 @@ if __name__ == "__main__":
     import sys
     import csv
     
-    csv_path = os.path.expanduser("~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv")
+    csv_path = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         # 测试: 从 CSV 读 P5 第 2 行, 生成 rich_text
         with open(csv_path, newline="") as f:
@@ -923,7 +924,7 @@ if __name__ == "__main__":
 # v6: 扫描 Pn-x 目录, 真实文件清单 (与 highlight 目录一致)
 # ════════════════════════════════════════════════════════════════════
 
-def scan_pn_x_dir(pn_x: str, lit_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"), src_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理")) -> Dict:
+def scan_pn_x_dir(pn_x: str, lit_base: str = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index"), src_base: str = project_paths.LEIGUAN_ROOT) -> Dict:
     """
     扫描 Pn-x 目录 + manifest.fallback_pdfs, 返回 main / fb / supp 三类文件 + manifest
 
@@ -1038,7 +1039,7 @@ def scan_pn_x_dir(pn_x: str, lit_base: str = os.path.expanduser("~/Desktop/雷�
             # 检查是否在跨标号目录下也存在于 _literature_citation_index
             exists_in_lit = _os.path.isfile(target_path)
             # 也可能在 src_base
-            src_target = os.path.expanduser(f"~/Desktop/雷管方案_文献整理/{pdf_rel}")
+            src_target = os.path.join(project_paths.LEIGUAN_ROOT, pdf_rel)
             exists_in_src = _os.path.isfile(src_target)
             
             # 从目标 Pn-x 的 manifest 取 step2_score
@@ -1755,7 +1756,7 @@ def build_h_md_v6(
     scan: Optional[Dict] = None,
     c_raw: Optional[str] = None,
     row_n: Optional[int] = None,
-    lit_base: str = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"),
+    lit_base: str = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index"),
     d: Optional[str] = None,
 ) -> str:
     """
@@ -2206,7 +2207,7 @@ def build_h_md_v6(
         # scan.main_pdf 是文件名 (无 Pn-x/ 前缀), 路径需要 lit_base + pn_x + filename
         main_pdf_path = f"{lit_base}/{pn_x}/{scan['main_pdf']}"
         if not _os.path.isfile(main_pdf_path):
-            main_pdf_path = f"{scan.get('src_base', os.path.expanduser('~/Desktop/雷管方案_文献整理'))}/{pn_x}/{scan['main_pdf']}"
+            main_pdf_path = f"{scan.get('src_base', project_paths.LEIGUAN_ROOT)}/{pn_x}/{scan['main_pdf']}"
         if not _os.path.isfile(main_pdf_path):
             # 最后尝试: scan.main_pdf 可能含 Pn-x/ 前缀 (来自 manifest)
             main_pdf_path = f"{lit_base}/{scan['main_pdf']}"
@@ -2416,7 +2417,7 @@ def build_h_md_v6(
     return "\n".join(md_parts)
 
 
-def build_h_rich_text_v6(pn_x, info_d, info_c, doi, scan=None, c_raw=None, row_n=None, lit_base=os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index"), d=None):
+def build_h_rich_text_v6(pn_x, info_d, info_c, doi, scan=None, c_raw=None, row_n=None, lit_base=os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index"), d=None):
     """v6 入口"""
     if scan is None:
         scan = scan_pn_x_dir(pn_x, lit_base)

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P4-6: slide 4 引用6 (Figueroa Clin Microbiol Rev 1991 补体缺陷感染) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-6_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-6/P4-6_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P4-6_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P4-6/P4-6_highlight.pdf")
 
 SENTENCES = [
     "These individuals exhibit pro-found defects in complement-mediated functions as a con-sequence of the crucial position of C3 in the complement cascade and the resultant inability to use either the classical or the alternative pathway.",

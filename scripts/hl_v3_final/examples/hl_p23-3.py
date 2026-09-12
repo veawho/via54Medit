@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P23-3: slide 23 引用3 (Ho BBMT 2005 TA-TMA共识) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-3_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-3/P23-3_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P23-3_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P23-3/P23-3_highlight.pdf")
 
 SENTENCES = [
     "The syndrome of microangiopathic hemolysis associated with renal failure, neurologic impairment, or both is a recognized complication of hematopoietic stem cell transplantation.",

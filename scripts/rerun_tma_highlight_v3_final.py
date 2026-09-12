@@ -16,6 +16,7 @@ v3 FINAL 优势 vs v10.4:
   - 每行精确 rect, 不延伸
   - 9 条铁律自动应用 (删除标题/作者/期刊高亮)
 """
+import project_paths
 import os, sys, csv, re, json, shutil, glob
 from pathlib import Path
 from typing import Dict, List
@@ -42,7 +43,7 @@ from via54_highlight_v3_final import (
 
 
 # === 路径 ===
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
 PDF_DIR = os.path.join(TMA_ROOT, "_2_pdfs")
 HIGHLIGHT_DIR = os.path.join(TMA_ROOT, "_3_highlight_v3")
 CSV_PATH = os.path.join(TMA_ROOT, "_citation_table/tma_citation_table.csv")

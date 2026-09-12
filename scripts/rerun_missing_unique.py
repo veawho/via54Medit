@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """补跑 36 个 MISSING unique Pn-x (m3_pick_body_anchor)"""
-import json, os, sys, time
+import project_paths
+import json, os, sys, time, tempfile
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import m3_pick_body_anchor as mpb
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
-DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+TMA = project_paths.TMA_ROOT
+DECISION = json.load(open(os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json'), encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])
 
@@ -40,5 +41,6 @@ print(f'\n=== 跑完 ({time.time()-t0:.1f}s) ===')
 for k, v in results.items():
     print(f'{k}: {len(v)}')
 
-with open('/tmp/rerun_missing_unique.json', 'w', encoding='utf-8') as f:
+results_path = os.path.join(tempfile.gettempdir(), 'rerun_missing_unique.json')
+with open(results_path, 'w', encoding='utf-8') as f:
     json.dump({k: v for k, v in results.items()}, f, ensure_ascii=False, indent=2)

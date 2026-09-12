@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P31-3: 固定句子定义, 自动定位页并 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P31-3_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P31-3/P31-3_highlight.pdf")
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P31-3_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P31-3/P31-3_highlight.pdf")
 
 SENTENCES = [
     'In the absence of appropriate therapy, up to 50% of aHUS patients progress to end-stage renal disease within a year, and 25% die during the acute phase.',

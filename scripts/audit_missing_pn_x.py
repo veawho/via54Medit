@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """审计 m3 目录 vs 总 Pn-x 数量, 列出缺失的"""
-import json, os
+import project_paths
+import json, os, tempfile
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
-DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+TMA = project_paths.TMA_ROOT
+DECISION = json.load(open(os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json'), encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])
 

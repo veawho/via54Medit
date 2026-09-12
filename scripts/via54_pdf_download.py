@@ -11,8 +11,8 @@ via54_pdf_download.py — 多策略 PDF 下载引擎 (v9.7)
 
 用法:
     python3.11 via54_pdf_download.py <doi> <output_path> [--allow-scihub]
-    python3.11 via54_pdf_download.py 10.3389/fonc.2022.906778 /tmp/test.pdf
-    python3.11 via54_pdf_download.py 10.1056/NEJMoa1915745 /tmp/imb.pdf --allow-scihub
+    python3.11 via54_pdf_download.py 10.3389/fonc.2022.906778 <tempdir>/test.pdf
+    python3.11 via54_pdf_download.py 10.1056/NEJMoa1915745 <tempdir>/imb.pdf --allow-scihub
 """
 import sys, os, json, subprocess, re, tempfile, time, urllib.parse
 from pathlib import Path

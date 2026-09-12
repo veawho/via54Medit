@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "via54Medit": {
-      "command": "/usr/local/go/bin/go",
+      "command": "go",
       "args": ["run", "./cmd/medit-mcp"],
       "env": {
         "LLM_PROVIDER": "deepseek",

@@ -71,16 +71,16 @@ func init() {
 		"Embedder backend: bge-m3 | openai | sense nova | ...")
 	rootCmd.PersistentFlags().String("vectorstore", "qdrant",
 		"Vector store backend: qdrant | meilisearch | sqlite | ...")
-	rootCmd.PersistentFlags().String("provider", "hermes",
-		"LLM provider: hermes | openai | anthropic | ollama | ...")
+	rootCmd.PersistentFlags().String("provider", "",
+		"LLM provider: hermes | openai | anthropic | ollama | ... (default: none, must be set explicitly)")
 	rootCmd.PersistentFlags().String("lang", "auto",
 		"Query language: zh | en | auto")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose logging")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable ANSI colors")
 
 	// Shared LLM configuration persistent flags
-	rootCmd.PersistentFlags().StringVar(&askLLMProv, "llm", "hermes",
-		"LLM provider: hermes | openai")
+	rootCmd.PersistentFlags().StringVar(&askLLMProv, "llm", "",
+		"LLM provider: hermes | openai | deepseek | glm | ... (default: none, must be set explicitly)")
 	rootCmd.PersistentFlags().StringVar(&askLLMEndp, "llm-endpoint", "",
 		"Custom LLM endpoint")
 	rootCmd.PersistentFlags().StringVar(&askLLMKey, "llm-api-key", "",

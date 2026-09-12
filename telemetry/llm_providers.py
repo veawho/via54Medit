@@ -77,6 +77,8 @@ PROVIDER_ALIASES = {
     "mmx": "minimax",
     "sensenova": "sensenova",
     "hermes": "hermes",
+    "traework": "traework",
+    "trae": "traework",
 }
 
 
@@ -201,6 +203,19 @@ PROVIDERS: Tuple[Provider, ...] = (
         account_usage="本地网关, 计费取决于其背后的模型",
         note="默认模型 MiniMax-M3",
     ),
+    Provider(
+        key="traework",
+        label="TraeWork / Trae 智能体",
+        kind="text+vision",
+        channels=(
+            Channel(name="spool 摄入", module="telemetry/llm_spool.py",
+                    usage=USAGE_RESPONSE,
+                    note="TraeWork 自身不暴露单次 token; 由 spool 文件摄入真实用量"),
+        ),
+        account_usage="TraeWork 本地日志可识别当前模型, 但逐次 token 需通过 spool 或官方账单接口",
+        account_probe="traework_state",
+        note="TraeWork 的 LLM 调用由 IDE 自身发起, 与仓库内 provider 是平行关系",
+    ),
 )
 
 #: 视觉通道的默认 provider (VISION_PROVIDER 的默认值)
@@ -235,11 +250,126 @@ def _which(name: str) -> str:
     if found:
         return found
     for cand in (os.path.expanduser("~/.local/bin/" + name),
-                 os.path.expanduser("~/.hermes/node/bin/" + name),
                  os.path.expanduser("~/.npm-global/bin/" + name)):
         if os.path.exists(cand):
             return cand
     return ""
+
+
+def _extract_balanced_json(line: str, key: str) -> Optional[str]:
+    """从一行日志里提取 ``key`` 后面紧跟的平衡 JSON 对象。
+
+    TraeWork 的 renderer.log 把 ``model_info`` 嵌在 ``user_message_context`` 里,
+    简单 ``line.rfind('}')`` 会抓到外层括号。这里用栈来配对的括号, 只取 key
+    对应的对象。
+    """
+    idx = line.find(key)
+    if idx == -1:
+        return None
+    start = line.find("{", idx)
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    escape = False
+    for i, ch in enumerate(line[start:]):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return line[start:start + i + 1]
+    return None
+
+
+def read_traework_state() -> Dict[str, Any]:
+    """读取 TraeWork 本地状态: 是否安装、最近使用的 provider/model。
+
+    注意: TraeWork 日志只暴露**模型身份**(provider/model_name/base_url), 不暴露
+    单次调用的 token 消耗。逐次用量只能通过以下两种方式获得:
+      1. TraeWork 官方账单/用量接口(目前未找到公开接口);
+      2. 由 TraeWork 侧把每次调用的 usage 写入 ``llm_usage_spool.jsonl``
+         (provider="traework"), 经 ``llm_spool.ingest()`` 摄入本库。
+    本函数只负责识别"它接的是谁", 为审计报告提供上下文。
+    """
+    import glob as _glob
+
+    from . import platform_paths
+
+    state: Dict[str, Any] = {
+        "installed": False,
+        "running": False,
+        "active_provider": "",
+        "active_model": "",
+        "base_url": "",
+        "log_path": "",
+        "detail": "",
+    }
+
+    roots = platform_paths.app_data_roots()
+    app_name = platform_paths.APP_DIR_NAME
+    log_files: List[str] = []
+    for root in roots:
+        base = os.path.join(root, app_name)
+        if os.path.isdir(base):
+            state["installed"] = True
+            # logs/YYYYMMDDTHHMMSS/window*/renderer.log
+            log_files.extend(_glob.glob(
+                os.path.join(base, "logs", "*", "window*", "renderer.log")))
+
+    if not state["installed"]:
+        state["detail"] = "未找到 TraeWork 应用数据目录"
+        return state
+    if not log_files:
+        state["detail"] = "已安装但无 renderer.log 日志"
+        return state
+
+    # 取最新日志
+    log_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    latest = log_files[0]
+    state["log_path"] = latest
+
+    try:
+        with open(latest, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError as exc:
+        state["detail"] = "无法读取日志: %s" % exc
+        return state
+
+    state["running"] = bool(lines)
+
+    # 从后往前找最近的 model_info
+    for raw in reversed(lines):
+        if '"model_info"' not in raw:
+            continue
+        json_str = _extract_balanced_json(raw, '"model_info"')
+        if not json_str:
+            continue
+        try:
+            info = json.loads(json_str)
+        except ValueError:
+            continue
+        provider = str(info.get("provider") or "").strip().lower()
+        if provider:
+            state["active_provider"] = provider
+            state["active_model"] = str(info.get("model_name") or "").strip()
+            state["base_url"] = str(info.get("base_url") or "").strip()
+            state["detail"] = "从 %s 读取到 model_info" % os.path.basename(latest)
+            return state
+
+    state["detail"] = "有日志但未找到 model_info"
+    return state
 
 
 # --------------------------------------------------------------------------- #
@@ -478,6 +608,16 @@ def discover(root: str = "") -> List[Dict[str, Any]]:
                 cred = "已设置" if _env_flag(ch.env_key) else ""
             if not cred and ch.credential_file:
                 cred = "存在" if os.path.exists(os.path.expanduser(ch.credential_file)) else ""
+            # 记账证据有两种形态:
+            # 1. 通道模块里直接调用 record_llm_usage / recordLLMUsage;
+            # 2. 通道模块是 spool 摄入器(llm_spool.py) —— 它通过 db.record_llm_token_log
+            #    把真实用量写入数据库, 同样是有效记录点, 只是函数名不同。
+            records_usage = False
+            if ch.usage == USAGE_RESPONSE:
+                if ch.module in caller_files:
+                    records_usage = True
+                elif ch.module.endswith("llm_spool.py") and module_found:
+                    records_usage = True
             channels.append({
                 "name": ch.name,
                 "module": ch.module,
@@ -487,9 +627,7 @@ def discover(root: str = "") -> List[Dict[str, Any]]:
                 "configured": bool(cred),
                 "credential": cred,
                 "usage": ch.usage,
-                # 这条通道的实现文件里**真的**有记账调用吗(Python: record_llm_usage,
-                # Go: recordLLMUsage)。只看有没有调用, 不看有没有声明。
-                "records_usage": ch.usage == USAGE_RESPONSE and ch.module in caller_files,
+                "records_usage": records_usage,
                 "note": ch.note,
             })
 
@@ -565,6 +703,19 @@ def probe_credential(prov: Dict[str, Any]) -> Dict[str, Any]:
     """验证一个 provider 的凭据。返回 ``{"verifiable": bool, "ok": bool|None, "detail": str}``。"""
     key = prov["key"]
 
+    if key == "traework":
+        state = read_traework_state()
+        if not state["installed"]:
+            return {"verifiable": True, "ok": False,
+                    "detail": "未检测到 TraeWork 安装: %s" % state["detail"]}
+        if not state["active_provider"]:
+            return {"verifiable": True, "ok": None,
+                    "detail": "已安装但未能识别当前模型: %s" % state["detail"]}
+        return {"verifiable": True, "ok": True,
+                "detail": "检测到 TraeWork, 当前模型 %s (%s)" % (
+                    state["active_provider"],
+                    state["active_model"] or "?")}
+
     if key == _MMX_ACCOUNT_PROVIDER:
         # mmx-cli 自带的凭据自检 —— 不花钱, 也不会误判
         mmx = _which("mmx")
@@ -616,7 +767,7 @@ def probe_credential(prov: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# 账户级用量(目前只有 mmx-cli 可程序化读取)
+# 账户级用量(mmx-cli 可程序化读取; TraeWork 只能识别当前模型)
 # --------------------------------------------------------------------------- #
 def read_mmx_quota(timeout: int = PROBE_TIMEOUT) -> Optional[Dict[str, Any]]:
     """读取 mmx-cli 的账户级配额与已用**次数**。
@@ -683,6 +834,9 @@ _SAMPLE_RESPONSES: Dict[str, Dict[str, Any]] = {
     "hermes": {"id": "hg-1", "model": "MiniMax-M3",
                "choices": [{"message": {"content": "ok"}}],
                "usage": {"prompt_tokens": 60, "completion_tokens": 15, "total_tokens": 75}},
+    "traework": {"id": "tw-1", "model": "traework-deepseek-v4-flash",
+                 "choices": [{"message": {"content": "ok"}}],
+                 "usage": {"prompt_tokens": 500, "completion_tokens": 120, "total_tokens": 620}},
 }
 
 
@@ -924,6 +1078,8 @@ def audit(live: bool = False, ingest: bool = False) -> Dict[str, Any]:
         "callers": caller_summary(),
         "problems": problems,
         "mmx_quota": read_mmx_quota() if live else None,
+        # TraeWork 状态只是读本地日志, 成本低, 离线也展示
+        "traework_state": read_traework_state(),
     }
 
 
@@ -994,6 +1150,17 @@ def format_report(res: Dict[str, Any], verbose: bool = False) -> str:
         if sv:
             lines.append("    链路校验: %s %s" % ("✓" if sv.get("ok") else "✗",
                                             sv.get("detail", "")))
+
+    tw = res.get("traework_state") or {}
+    if tw.get("installed"):
+        lines.append("")
+        lines.append("• TraeWork 状态: %s" % (tw.get("detail") or ""))
+        lines.append("    当前模型: %s (%s)" % (
+            tw.get("active_model") or "?",
+            tw.get("active_provider") or "未识别"))
+    elif tw.get("detail"):
+        lines.append("")
+        lines.append("• TraeWork 状态: 未安装 — %s" % tw["detail"])
 
     problems = res.get("problems") or []
     lines.append("")

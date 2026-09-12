@@ -35,9 +35,8 @@ def get_api_key():
     if key:
         return key
 
-    # 从 .env 文件读取
+    # 从 .env 文件读取(优先当前目录)
     env_paths = [
-        os.path.expanduser("~/.hermes/.env"),
         os.path.expanduser("~/.env"),
         ".env",
     ]

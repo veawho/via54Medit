@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P16-1: slide 16 引用1 (Trojnar Front Immunol 2019) TMA分类应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P16-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P16-1/P16-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P16-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P16-1/P16-1_highlight.pdf")
 
 SENTENCES = [
     "We determined the PTX3 and CRP levels, complement factor and activation product concentrations in blood samples of 171 subjects with the diagnosis of typical hemolytic uremic syndrome (STEC-HUS) (N = 34), atypical HUS (aHUS) (N = 44), secondary TMA (N = 63), thrombotic thrombocytopenic purpura (TTP) (N = 30)",

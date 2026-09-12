@@ -13,7 +13,8 @@ vision_highlight_workflow.py — Vision-Driven Highlight Pipeline (2026-08-11)
 
 依赖: sensenova_vision.py + via54_highlight_fix_v10.py
 """
-import os, sys, json, re, time, base64
+import project_paths
+import os, sys, json, re, time, base64, tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import warnings
@@ -107,8 +108,8 @@ def _parse_json_loose(text: str) -> Optional[dict]:
 
 
 # === Paths ===
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
-LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
+LEIDA_ROOT = project_paths.LEIGUAN_ROOT
 DEFAULT_ROOT = TMA_ROOT
 
 
@@ -370,7 +371,7 @@ def stage2_pdf_search(plan: Dict, max_pages: int = 3, vision_timeout: int = 12) 
         pix = page.get_pixmap(matrix=mat)
         img_data = pix.tobytes("png")
         # 写到临时文件
-        tmp = f"/tmp/_pdf_page_{plan['pn_x']}_{p}.png"
+        tmp = os.path.join(tempfile.gettempdir(), f"_pdf_page_{plan['pn_x']}_{p}.png")
         with open(tmp, "wb") as f:
             f.write(img_data)
 
@@ -527,7 +528,7 @@ def stage4_verify(plan: Dict, highlight_pdf_path: str, ppt_render_path: str) -> 
     page = doc[0]
     mat = fitz.Matrix(1.5, 1.5)
     pix = page.get_pixmap(matrix=mat)
-    pdf_img = f"/tmp/_verify_{plan['pn_x']}.png"
+    pdf_img = os.path.join(tempfile.gettempdir(), f"_verify_{plan['pn_x']}.png")
     with open(pdf_img, "wb") as f:
         f.write(pix.tobytes("png"))
     doc.close()

@@ -195,6 +195,10 @@ for r in rows:
     nm = {1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4-weak', 0: 'MISS'}[r['level']]
     extra = f" frac={r['frac']} p{r['page']} win={r['window'][:90]}" if r['level'] else ''
     print(f"  {r['pnx']}#{r['idx']} [{nm}]{extra}")
-out = r'c:\Users\via54\.trae-cn\work\6a9e448884fcf10fc666920a\strict_eval_rows.json'
-json.dump(rows, open(out, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-print('wrote', out)
+default_out = os.path.join(WORK, 'strict_eval_rows.json') if os.path.isdir(WORK) else os.path.join(os.getcwd(), 'strict_eval_rows.json')
+out = os.environ.get('RSV_HL_OUT') or default_out
+try:
+    json.dump(rows, open(out, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    print('wrote', out)
+except Exception as e:
+    print(f'warn: cannot write {out}: {e}')

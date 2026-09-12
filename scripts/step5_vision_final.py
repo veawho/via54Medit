@@ -5,7 +5,7 @@ step5_vision_final.py — Step5 真·视觉双对齐终版
 mmx 视觉逐条返回支撑该引用位置论点的完整原句(附页码) -> 原文流整句定位 -> 单 Highlight 落位。
 用法: python3 step5_vision_final.py <run_base_dir> <mirror_dir> <out_dir>
 """
-import os, sys, re, json, glob, csv, shutil
+import os, sys, re, json, glob, csv, shutil, tempfile
 import pymupdf
 from PIL import Image, ImageDraw
 
@@ -33,7 +33,7 @@ def hl_pages(pdf):
 def render_page(pdf, pi, dpi=140):
     d = pymupdf.open(pdf)
     pix = d[pi - 1].get_pixmap(dpi=dpi)
-    p = f"/tmp/step5_p{os.getpid()}_{pi}.png"
+    p = os.path.join(tempfile.gettempdir(), f"step5_p{os.getpid()}_{pi}.png")
     pix.save(p)
     d.close()
     return p
@@ -64,7 +64,7 @@ def compose(claim_png, page_pngs):
     for im in imgs:
         canvas.paste(im, (cw + 10, y))
         y += im.size[1]
-    tmp = f"/tmp/step5_comp_{os.getpid()}.png"
+    tmp = os.path.join(tempfile.gettempdir(), f"step5_comp_{os.getpid()}.png")
     canvas.save(tmp)
     return tmp
 

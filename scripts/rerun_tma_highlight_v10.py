@@ -16,6 +16,7 @@ rerun_tma_highlight_v10.py — TMA 全量重生成 highlight (v10.1)
 
 用法:  python3.11 rerun_tma_highlight_v10.py [--limit 10] [--mode line]
 """
+import project_paths
 import os, sys, csv, re, json, shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -34,7 +35,7 @@ import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
 PDF_DIR = os.path.join(TMA_ROOT, "_2_pdfs")
 HIGHLIGHT_OLD_DIR = os.path.join(TMA_ROOT, "_3_highlight")
 HIGHLIGHT_NEW_DIR = os.path.join(TMA_ROOT, "_3_highlight_v10")

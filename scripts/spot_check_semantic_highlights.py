@@ -10,13 +10,14 @@ spot_check_semantic_highlights.py — 实际检查每个高亮 PDF
 - 列出每个 highlight 的 bbox + 覆盖的文本
 - 人工 spot check 工具
 """
+import project_paths
 import os, sys, json, argparse
 from pathlib import Path
 import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
-LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
+LEIDA_ROOT = project_paths.LEIGUAN_ROOT
 
 
 def list_highlights_in_pdf(pdf_path: str) -> dict:

@@ -9,16 +9,19 @@ rerun_keep_pn_x.py — 校准重跑 KEEP 19 + m3 目录非冲突 Pn-x.
   3. 在 DEL 列表 → 跳过 (已被 clean_hash_dup_strict.py 删)
 输出: m3_vision_highlight.py 5 类难 case filter + phrase 模式
 """
-import json, os, sys, re, pymupdf as fitz, shutil, subprocess, time
+import sys
+import project_paths
+import json, os, sys, re, pymupdf as fitz, shutil, subprocess, time, tempfile
 from collections import defaultdict
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
+TMA = project_paths.TMA_ROOT
 PLANS_FILE = f'{TMA}/_3_highlight_vision/_highlight_plans.json'
 OUT_DIR = f'{TMA}/_3_highlight_semantic_m3'
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # 加载 keep/del 决策
-DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+DECISION_PATH = os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json')
+DECISION = json.load(open(DECISION_PATH, encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])
 
@@ -103,7 +106,7 @@ def find_anchor_in_pdf(anchor: str, doc):
 def run_highlight(pn, pi, anchor):
     """调 m3_vision_highlight.py 应用 underline"""
     cmd = [
-        os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python'),
+        sys.executable,
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "m3_vision_highlight.py"),
         '--pn-x', pn,
         '--entries', f'[[{pi}, {json.dumps(anchor)}, "phrase"]]',
@@ -184,5 +187,6 @@ if results['no_match']:
         print(f'  {pn:18s} anchor={anc!r}')
 
 # 保存
-with open('/tmp/rerun_keep_pn_x_results.json', 'w', encoding='utf-8') as f:
+RESULTS_PATH = os.path.join(tempfile.gettempdir(), 'rerun_keep_pn_x_results.json')
+with open(RESULTS_PATH, 'w', encoding='utf-8') as f:
     json.dump({k: v for k, v in results.items()}, f, ensure_ascii=False, indent=2)

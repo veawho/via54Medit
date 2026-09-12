@@ -77,7 +77,7 @@ description: "D 列算法驱动升级 — via54Medit 文献整理 4 列 CSV (sli
 
 **复现命令**:
 ```bash
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/highlight_v10.py
+python3 scripts/highlight_v10.py
 ```
 
 ### v2.14.0 颜色 B 选项 + 多行应证段画线 (2026-08-05 反思会话新增)
@@ -100,13 +100,13 @@ description: "D 列算法驱动升级 — via54Medit 文献整理 4 列 CSV (sli
 **复现命令**:
 ```bash
 # 视觉配对 + 多行画线 (P3-2)
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/highlight_vision_runner.py
+python3 scripts/highlight_vision_runner.py
 
 # 测试中文 PDF
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/test_zh_pdfs.py
+python3 scripts/test_zh_pdfs.py
 
 # 自检 (避开 segfault)
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/verify_highlight.py
+python3 scripts/verify_highlight.py
 ```
 
 ### v2.9.0 双轨 + Pydantic 强化
@@ -161,7 +161,7 @@ description: "D 列算法驱动升级 — via54Medit 文献整理 4 列 CSV (sli
 ## v8 算法 (2026-08-05)
 
 - 主脚本: `scripts/analyze_ppt_citations_v8_pydantic_voting.py` (~12 KB)
-- PoC 演示: `/Users/david/v8_demo.py` (290 行, 含 offline self-test)
+- PoC 演示: `scripts/v8_demo.py` (290 行, 含 offline self-test)
 - Pydantic schema 强制: `SlideVision` + `ChartDataPoint` + cap 20 (防止 DP 幻觉过载)
 - 4 类幻觉过滤 (HALLUCINATION_GUARD):
   - `min_decimals_other_source=2` (vision 给 35.5 低于 XML 35.8 → 降级)
@@ -174,7 +174,7 @@ description: "D 列算法驱动升级 — via54Medit 文献整理 4 列 CSV (sli
 
 ## v10 算法 (2026-08-05 反思会话新增)
 
-- 主脚本: `/Users/david/.medit/scripts/highlight_v10.py`
+- 主脚本: `scripts/highlight_v10.py`
 - 7 步拆开: reset_pnx → render_pdf_pages_to_jpg → vision_analyze → draw_underline_on_jpg → jpg_bbox_to_pdf_coords → add_pdf_underline → verify_pdf_underline
 - 浅黄色细线: RGB (1.0, 1.0, 0.6) = (255, 255, 153)
 - PyMuPDF add_underline_annot (type 9, **不是 type 12, 不是 highlight type 8**)
@@ -222,11 +222,11 @@ def vote_slide(runs: list[SlideVision]) -> SlideVision:
 - `scripts/analyze_ppt_citations_v8_pydantic_voting.py` — **v8 主算法, 双轨 + Pydantic + 4 类过滤**
 - `scripts/v9_full_pipeline.py` — **v9 端到端 5 步骤流水线 (PowerPoint 渲染 + 颜色对比度 + Pn-x 1:1 + highlight 综合 + 12 列对齐)**
 - `scripts/highlight_vision_runner.py` — **v2.14 视觉配对 + 多行画线 + 自检 (本轮新增)**
-- `/Users/david/v8_demo.py` — v8 概念验证 (290 行, 含 offline self-test)
-- `/Users/david/.medit/scripts/highlight_vision_runner.py` — **v2.14 视觉配对 + 多行画线 + 自检 (本轮新增)**
-- `/Users/david/.medit/scripts/test_zh_pdfs.py` — **中文 PDF 测试 (P3-1/3-2/3-3/3-4/5-1/14-1/30-9/36-2)**
-- `/Users/david/.medit/scripts/verify_highlight.py` — **自检 (PIL+numpy, 避开 a.type segfault)**
-- `/Users/david/v8_demo.py` — v8 概念验证 (290 行, 含 offline self-test)
+- `scripts/v8_demo.py` — v8 概念验证 (290 行, 含 offline self-test)
+- `scripts/highlight_vision_runner.py` — **v2.14 视觉配对 + 多行画线 + 自检 (本轮新增)**
+- `scripts/test_zh_pdfs.py` — **中文 PDF 测试 (P3-1/3-2/3-3/3-4/5-1/14-1/30-9/36-2)**
+- `scripts/verify_highlight.py` — **自检 (PIL+numpy, 避开 a.type segfault)**
+- `scripts/v8_demo.py` — v8 概念验证 (290 行, 含 offline self-test)
 - `scripts/analyze_ppt_citations_v7_pptx_xml.py` — v7 XML 提结构化
 - `scripts/analyze_ppt_citations_v6_vision_align.py` — v6 vision 评估
 - `scripts/expand_slide_for_visibility.py` — 扩 PPT 7.5\"→9.5\" (修过: 用 prs.slide_height = Inches(max) 而非 slide.element.getparent().set('cy', ...))
@@ -388,14 +388,14 @@ def vote_slide(runs: list[SlideVision]) -> SlideVision:
 
 ```bash
 # v8 主算法 (D 列)
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/analyze_ppt_citations_v8_pydantic_voting.py
+python3 scripts/analyze_ppt_citations_v8_pydantic_voting.py
 
 # v9 端到端 5 步骤流水线
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/v9_full_pipeline.py
+python3 scripts/v9_full_pipeline.py
 
 # v10 highlight 视觉驱动 (本次新增, 7 步拆开)
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/highlight_v10.py
-/Users/david/.hermes/hermes-agent/venv/bin/python /Users/david/.medit/scripts/highlight_v10.py --all
+python3 scripts/highlight_v10.py
+python3 scripts/highlight_v10.py --all
 ```
 
 离线自检 (无需 API key):
@@ -409,9 +409,9 @@ print(analyze_slide(Path('/tmp/fake.jpg'), Path('/tmp/fixture.pptx'), 0, n_runs=
 ```
 
 输出:
-- `/Users/david/Desktop/雷管方案_文献整理/_pptx_xml_structured.json` — 365 KB XML 结构化
-- `/Users/david/Desktop/雷管方案_文献整理/PPT_citations_4col.csv` — 160 行 4 列
-- `/Users/david/Desktop/雷管方案_文献整理/PPT_citations_8col_aligned.csv` — 160 行 12 列完整对齐
+- `<project_dir>/_pptx_xml_structured.json` — 365 KB XML 结构化
+- `<project_dir>/PPT_citations_4col.csv` — 160 行 4 列
+- `<project_dir>/PPT_citations_8col_aligned.csv` — 160 行 12 列完整对齐
 - `_archived_old_dirs/PPT_citations_4col_v8_pydantic_<ts>.csv` — 旧版本备份
 - `step4_highlight_96目录_合并DOI/Pn-x/_pdf_jpg/page_NNN.jpg` — v10 PDF 每页 jpg
 - `step4_highlight_96目录_合并DOI/Pn-x/page_NNN.png` — v10 应证页 PNG

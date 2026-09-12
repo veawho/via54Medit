@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P5-1: slide 5 引用1 (Kirschfink 德语书章) 末端补体应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P5-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P5-1/P5-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P5-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P5-1/P5-1_highlight.pdf")
 
 SENTENCES = [
     "Jeder dieser auf unterschiedliche Weise initiierten Aktivierungswege mündet in eine gemeinsame Endstrecke, die mit der Bildung der sogenannten C3-Konvertase beginnt und über Zwischenstufen zum lytischen Membranangriffskomplex (membrane-attack complex, MAC) führt",

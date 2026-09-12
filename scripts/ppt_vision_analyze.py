@@ -12,6 +12,7 @@ ppt_vision_analyze.py — 6 步规则 #2 PPT 视觉分析 (2026-08-10)
 用法:
   python3.11 ppt_vision_analyze.py <project_dir> [--start 3] [--end 43] [--no-render]
 """
+import project_paths
 import os, sys, json, argparse
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -22,12 +23,12 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 PROJECTS = {
     "雷管方案": {
-        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
+        "root": project_paths.LEIGUAN_ROOT,
         "pptx": "step1_ppt_目录/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx",
         "out_dir": "step1_ppt_目录",
     },
     "TMA": {
-        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
+        "root": project_paths.TMA_ROOT,
         "pptx": "TMA临床路径的诊断与鉴别.pptx",  # 顶层
         "out_dir": ".",
     },

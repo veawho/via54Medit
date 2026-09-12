@@ -43,7 +43,7 @@ type InformationElement struct {
 ## 5. 实现位置
 
 ```
-/Users/david/Desktop/developments/via54Medit/
+<repo>/via54Medit/
 ├── internal/anno2ppt/
 │   ├── algorithm.go       (4 维对齐 + 集合结论 + 应证评分)
 │   └── algorithm_test.go  (9 案例 / 9 PASS, P3-2 驱动)
@@ -55,7 +55,7 @@ type InformationElement struct {
 
 ```bash
 # 编译
-cd /Users/david/Desktop/developments/via54Medit
+cd <repo>/via54Medit
 go build -o /tmp/medit ./cmd/medit/
 
 # 解析 PPT 文本
@@ -176,7 +176,7 @@ score = 0.45*TitleSim + 0.30*AuthorSim + 0.15*DateMatch + 0.10*MetadataCompleten
 ### 实现位置
 
 ```
-/Users/david/Desktop/developments/via54Medit/
+<repo>/via54Medit/
 ├── internal/anno2ppt/
 │   ├── l0_verify.go        (新增, 280 行)
 │   └── l0_verify_test.go   (新增, 9 案例 / 9 PASS)

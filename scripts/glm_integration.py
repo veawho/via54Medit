@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""
-glm_integration.py — GLM 集成层 (2026-08-10)
+"""glm_integration.py — GLM 集成层 (2026-08-10)
 
-包装 /Users/david/.hermes/skills/via54/glm_academic_official.py 的能力,
+包装外部 GLM 脚本 (如 glm_academic_official.py) 的能力,
 让 v10.1 highlight / l0 paper match / l4 keyword / step5 alignment
 可以无缝调 GLM (默认 glm-4-flash-250414).
 
@@ -33,9 +32,11 @@ import os, sys, json, re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# 加载现有 GLM 模块
-GLM_SCRIPTS = Path.home() / ".hermes" / "skills" / "via54"
-if str(GLM_SCRIPTS) not in sys.path:
+# 加载现有 GLM 模块: 默认不假设 hermes 路径, 通过 VIA54_GLM_DIR 指定。
+_GLM_DIR = os.environ.get("VIA54_GLM_DIR")
+GLM_SCRIPTS = Path(os.path.expanduser(_GLM_DIR)) if _GLM_DIR else None
+_GLM_AVAILABLE = GLM_SCRIPTS is not None and GLM_SCRIPTS.is_dir()
+if _GLM_AVAILABLE and str(GLM_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(GLM_SCRIPTS))
 
 # 默认模型
@@ -44,12 +45,16 @@ DEFAULT_MODEL = "glm-4-flash-250414"
 
 def _get_client():
     """懒加载 GLM client (避免无谓启动)"""
+    if not _GLM_AVAILABLE:
+        return None
     from glm_academic_official import get_glm_client
     return get_glm_client()
 
 
 def _call_glm(client, model: str, prompt: str, max_retries: int = 2) -> Optional[str]:
     """封装 call_glm, 失败返回 None"""
+    if client is None:
+        return None
     try:
         from glm_academic_official import call_glm
         result = call_glm(client, model, prompt, prompt, max_retries=max_retries)

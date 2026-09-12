@@ -19,6 +19,9 @@ highlight_vision_runner.py — vision 真视觉配对 highlight (用户硬规则
 10. 自检 4 项 (避开 PyMuPDF a.type segfault, 用 rect 推断 + PIL numpy)
 
 用法:
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
     from highlight_vision_runner import highlight_vision_pnx
     highlight_vision_pnx('P3-2')  # 视觉配对 + 画 + 验证
 """
@@ -27,7 +30,7 @@ import pymupdf as fitz
 from PIL import Image, ImageDraw
 import numpy as np
 
-ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+ROOT = project_paths.LEIGUAN_ROOT
 STEP3 = f'{ROOT}/step3_pdf下载_160目录'
 STEP4 = f'{ROOT}/step4_highlight_96目录_合并DOI'
 TRUTH = f'{ROOT}/step2_标注分析/_citation_table/citation_table.csv'

@@ -3,9 +3,10 @@
 - 唯一数据源: step4_highlight_106目录_合并DOI/{Pn-x}/ 目录 + verify.json + 引用表
 - 输出两张列完全相同的表: 本地表 tma_citation_table.csv 与 在线表(飞书回传) 同构
 用法: python3 align_tables.py [--out-dir _citation_table]"""
+import project_paths
 import os, sys, json, csv, hashlib, re, glob
 
-BASE = os.path.expanduser('~/Desktop/TMA_文献整理')
+BASE = project_paths.TMA_ROOT
 STEP4 = os.path.join(BASE, 'step4_highlight_106目录_合并DOI')
 STEP3 = os.path.join(BASE, 'step3_pdf下载_106目录')
 CIT_JSON = os.path.join(BASE, '_citation_table', 'tma_citation_table.json')

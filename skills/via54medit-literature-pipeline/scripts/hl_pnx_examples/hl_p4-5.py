@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P4-5: slide 4 引用5 (Heesterbeek J Innate Immun 2018 补体与细菌感染) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P4-5_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P4-5/P4-5_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P4-5_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P4-5/P4-5_highlight.pdf")
 
 SENTENCES = [
     "The main effector functions of complement are driven by the cleavage of 2 central complement proteins: C3 and C5",

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P9-2: slide 9 引用2 (Timmermans J Clin Med 2021) TMA分类应证句 (按slide9重选)"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-2/P9-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P9-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P9-2/P9-2_highlight.pdf")
 
 SENTENCES = [
     "Thrombotic microangiopathy (TMA) is a rare, potentially life-threatening condition that reﬂects tissue responses to severe endothelial damage caused by distinct disorders, including thrombotic thrombocytopenic purpura and hemolytic uremic syndrome (HUS).",

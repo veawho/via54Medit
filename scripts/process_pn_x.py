@@ -17,13 +17,16 @@ import os
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
 # 路径
-MEDIT_BIN = "/tmp/medit"
+MEDIT_BIN = os.path.join(tempfile.gettempdir(), "medit")
 SCRIPT_DIR = Path(__file__).parent
 LEARNINGS = SCRIPT_DIR / "process_pn_x_learnings.py"
+_SKILL_FILE_STR = os.environ.get("VIA54_PITFALLS_SKILL")
+_SKILL_FILE = Path(os.path.expanduser(_SKILL_FILE_STR)) if _SKILL_FILE_STR else None
 
 
 def run_medit(*args):
@@ -70,8 +73,7 @@ def build_dual_source_manifest(pnx, main_pdf, fallback_pdf, doi):
 def persist_learnings(pnx, learnings):
     """经验沉淀: 调用 process_pn_x_learnings.py"""
     # 直接写入 skill + memory (简化版)
-    skill_file = Path(os.path.expanduser('~/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md'))
-    if not skill_file.exists():
+    if _SKILL_FILE is None or not _SKILL_FILE.exists():
         return {"action": "skill_not_found"}
     return {"action": "noop", "note": "已通过 pitfalls skill §20-§26 完整沉淀"}
 

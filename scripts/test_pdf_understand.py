@@ -9,6 +9,7 @@ test_pdf_understand.py — pdf_understand.py 单测
   - semantic_match_ppt_to_pdf (综合应证)
 """
 
+import project_paths
 import os
 import sys
 import unittest
@@ -24,8 +25,8 @@ from pdf_understand import (
 )
 
 
-P4_1 = os.path.expanduser("~/Desktop/雷管方案_文献整理/P4-1/P4-1_main_Lin_FrontOncol_2022.pdf")
-P3_1 = os.path.expanduser("~/Desktop/雷管方案_文献整理/P3-1/P3-1_main_GLOBOCAN_2022_Liver_IARC.pdf")
+P4_1 = os.path.join(project_paths.LEIGUAN_ROOT, "P4-1/P4-1_main_Lin_FrontOncol_2022.pdf")
+P3_1 = os.path.join(project_paths.LEIGUAN_ROOT, "P3-1/P3-1_main_GLOBOCAN_2022_Liver_IARC.pdf")
 
 
 class TestParsePdfWithDocling(unittest.TestCase):

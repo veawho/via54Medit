@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P17-1: slide 17 引用1 (中华血液学杂志 2022 vWD指南) VWF应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P17-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P17-1/P17-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P17-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P17-1/P17-1_highlight.pdf")
 
 SENTENCES = [
     "血管性血友病（von Willebrand disease, VWD）是最常见的遗传性出血性疾病。血管性血友病因子（von Willebrand Factor, VWF）基因突变引起血浆VWF 数量减少或质量异常是VWD 的主要致病机制",

@@ -2,11 +2,12 @@
 """TMA 在线表 → 雷管方案格式(对齐飞书上「雷管方案—逐页引用表」模板)
 列: PPT页 | 第几条 | 引用语义（上下文） | PPT中的文献引用 完整字段 | DOI | 类型 | 对应PDF文件 | 来源链接 → 阅读全文
 用法: python3 leiguan_table.py --write   (生成并写入飞书)
-      python3 leiguan_table.py           (仅生成 /tmp/tma_leiguan_final.json)
+      python3 leiguan_table.py           (仅生成 <tempfile.gettempdir()>/tma_leiguan_final.json)
 数据源: 本地表 + verify slide_topic + CrossRef DOI(中文期刊/UpToDate 标无 DOI)"""
-import sys, json, csv, re, os, glob, time
+import project_paths
+import sys, json, csv, re, os, glob, time, tempfile
 
-BASE = os.path.expanduser('~/Desktop/TMA_文献整理')
+BASE = project_paths.TMA_ROOT
 CIT = f'{BASE}/_citation_table/tma_citation_table.csv'
 
 def clean_doi(cit, doi):
@@ -73,12 +74,14 @@ def build():
             '对应PDF文件': f'{pn}/{pn}_main.pdf' if os.path.exists(main) else f'{pn}/(缺 PDF)',
             '来源链接 → 阅读全文': f'🎯 {pn} — {title[:40]}' if title else f'🎯 {pn}',
         })
-    json.dump(out, open('/tmp/tma_leiguan_final.json', 'w'), ensure_ascii=False, indent=1)
+    out_path = os.path.join(tempfile.gettempdir(), 'tma_leiguan_final.json')
+    json.dump(out, open(out_path, 'w'), ensure_ascii=False, indent=1)
     return out
 
 if __name__ == '__main__':
     rows = build()
-    print(f'生成 {len(rows)} 行(雷管方案格式) → /tmp/tma_leiguan_final.json')
+    out_path = os.path.join(tempfile.gettempdir(), 'tma_leiguan_final.json')
+    print(f'生成 {len(rows)} 行(雷管方案格式) → {out_path}')
     if '--write' in sys.argv:
         sys.path.insert(0, os.path.dirname(__file__))
         from feishu_write import write_sheet_values

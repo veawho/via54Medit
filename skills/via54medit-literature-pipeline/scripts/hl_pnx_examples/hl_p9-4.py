@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P9-4: slide 9 引用4 (中华血液学杂志 2021 移植相关TMA共识) TA-TMA应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-4_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-4/P9-4_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P9-4_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P9-4/P9-4_highlight.pdf")
 
 SENTENCES = [
     "TA-TMA根据确诊时间，分为早发型TA-TMA（确诊于移植后100 d内）和迟发型TA-TMA（确诊于移植后100 d以后）两种类型",

@@ -24,6 +24,7 @@ ppt_understand.py — Step 1: PPT 视觉理解 + 引文标号位置提取 (v2.0)
   ...
 """
 
+import project_paths
 import os
 import sys
 import re
@@ -38,7 +39,7 @@ except ImportError:
     HAS_PPTX = False
     Presentation = None
 
-PPT_PATH = os.path.expanduser("~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
+PPT_PATH = os.path.join(project_paths.LEIGUAN_ROOT, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

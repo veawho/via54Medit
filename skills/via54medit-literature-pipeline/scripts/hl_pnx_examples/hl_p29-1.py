@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P29-1: 固定句子定义, 自动定位页并 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P29-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P29-1/P29-1_highlight.pdf")
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P29-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P29-1/P29-1_highlight.pdf")
 
 SENTENCES = [
     'Screening of the functional activity of the classic (total hemolytic complement assay [CH50]) and alternative (complement alternate pathway assay [AH50]) pathways can reveal whether recent complement activation has consumed the involved factors (low CH50 and/or AH50).',

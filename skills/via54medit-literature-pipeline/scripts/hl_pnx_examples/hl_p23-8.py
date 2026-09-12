@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """P23-8: Lazana I. Transplant-Associated Thrombotic Microangiopathy... IJMS 2023;24:1159
 slide 23: HSCT-TMA 发生率/多器官表现/三打击机制"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-8_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-8/P23-8_highlight.pdf")
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P23-8_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P23-8/P23-8_highlight.pdf")
 
 SENTENCES = [
     # 发生率: 0.5%-76% (对应 slide "报道的HSCT-TMA发生率范围为1-20")

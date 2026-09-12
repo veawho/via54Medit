@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P23-10: slide 23 引用10 (Dandoy BBMT 2015) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-10_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-10/P23-10_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P23-10_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P23-10/P23-10_highlight.pdf")
 
 SENTENCES = [
     "Cardiac complications after hematopoietic stem cell transplantation (HSCT) can lead to signiﬁcant morbidity and mortality.",

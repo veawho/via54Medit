@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """把有 highlight 的页面图片复制到 Pn-x 根目录(仅高亮页, 命名 {Pn-x}_highlight_pNNN.png)
 用法: python3 copy_hl_images.py [Pn-x ...]   (省略参数=全部)"""
+import project_paths
 import os, sys, glob, shutil
 try:
     import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
 except ImportError:  # 旧版只有 fitz (写 import fitz 会打弃用警告)
     import fitz
 
-BASE = os.path.expanduser('~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI')
+BASE = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI")
 
 def process(pn, dry=False):
     d = os.path.join(BASE, pn)

@@ -13,9 +13,11 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-# 沉淀位置
-SKILL_FILE = Path(os.path.expanduser('~/.hermes/skills/via54medit/via54medit-anno2ppt-pitfalls-2026-08/SKILL.md'))
-MEMORY_FILE = Path(os.path.expanduser('~/.hermes/memory/MEMORY.md'))
+# 沉淀位置。默认不假设 hermes 安装路径; 需要时通过环境变量显式指定。
+_SKILL_FILE_STR = os.environ.get("VIA54_PITFALLS_SKILL")
+_MEMORY_FILE_STR = os.environ.get("VIA54_HERMES_MEMORY")
+SKILL_FILE = Path(os.path.expanduser(_SKILL_FILE_STR)) if _SKILL_FILE_STR else None
+MEMORY_FILE = Path(os.path.expanduser(_MEMORY_FILE_STR)) if _MEMORY_FILE_STR else None
 ALGORITHM_DIR = Path(__file__).resolve().parents[1] / "internal" / "anno2ppt"
 
 
@@ -67,6 +69,10 @@ def persist_session_learnings(pnx_id: str, learnings: dict) -> dict:
 
 def append_to_skill(pnx_id: str, learnings: dict) -> dict:
     """追加 § 章节到 pitfalls skill."""
+    if SKILL_FILE is None:
+        return {"action": "skill_not_configured",
+                "reason": "未设置 VIA54_PITFALLS_SKILL"}
+
     title = learnings.get("title", "新经验")
     summary = learnings.get("summary", "")
     details = learnings.get("details", "")
@@ -94,7 +100,7 @@ def append_to_skill(pnx_id: str, learnings: dict) -> dict:
 
 def next_section_number() -> int:
     """找下一个 §N 编号."""
-    if not SKILL_FILE.exists():
+    if SKILL_FILE is None or not SKILL_FILE.exists():
         return 1
     import re
     with open(SKILL_FILE) as f:
@@ -107,6 +113,9 @@ def next_section_number() -> int:
 
 def update_memory(pnx_id: str, learnings: dict) -> dict:
     """把关键经验写入 memory."""
+    if MEMORY_FILE is None:
+        return {"action": "memory_not_configured",
+                "reason": "未设置 VIA54_HERMES_MEMORY"}
     if not MEMORY_FILE.exists():
         return {"action": "memory_not_found"}
 

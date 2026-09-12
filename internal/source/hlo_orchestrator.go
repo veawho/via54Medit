@@ -271,9 +271,13 @@ func parseAuthors(s string) []string {
 
 // HLOTruthQuery 返回 160 Row 字段真值表 (medit_grade 升级数据源).
 //
-// 数据源: ~/.hermes/cache/lit_truth.json (160 Row DOI + Author 真值)
+// 数据源: ~/.via54medit/cache/lit_truth.json (160 Row DOI + Author 真值),
+// 或由 VIA54_LIT_TRUTH_PATH 覆盖.
 func HLOTruthQuery(rowPref string) (map[string]any, error) {
-	truthPath := osHomeDir() + "/.hermes/cache/lit_truth.json"
+	truthPath := os.Getenv("VIA54_LIT_TRUTH_PATH")
+	if truthPath == "" {
+		truthPath = filepath.Join(osHomeDir(), ".via54medit", "cache", "lit_truth.json")
+	}
 	if !fileExists(truthPath) {
 		// 自动生成
 		// 解释器按"能不能 import 依赖"解析, 不写死 python3.11 —— 版本名在不同机器上

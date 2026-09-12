@@ -20,6 +20,8 @@ Pipeline 步骤:
     python3.11 via54_pipeline.py --step 1  # 只跑 PPT 视觉理解
     python3.11 via54_pipeline.py  # 跑全部
 """
+import shutil
+import project_paths
 import sys, os, json, csv, subprocess, time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -235,7 +237,7 @@ def step8_h_column_write(csv_path: str, lit_base: str, feishu_token: str, sheet_
             cells_2d = jsonmod.dumps([[{"rich_text": rt}]], ensure_ascii=False)
             
             result = subprocess.run([
-                os.path.expanduser('~/.hermes/node/bin/lark-cli'), 'sheets', '+cells-set',
+                (os.environ.get('LARK_CLI') or shutil.which('lark-cli')), 'sheets', '+cells-set',
                 '--spreadsheet-token', feishu_token,
                 '--sheet-id', sheet_id,
                 '--range', f'{sheet_id}!H{row_n}:H{row_n}',
@@ -257,9 +259,9 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--step', type=int, default=0, help='只跑某一步 (0=全部)')
-    parser.add_argument('--ppt', default=os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx'))
-    parser.add_argument('--csv', default=os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv'))
-    parser.add_argument('--lit-base', default=os.path.expanduser('~/Desktop/雷管方案_文献整理/_literature_citation_index'))
+    parser.add_argument('--ppt', default=os.path.join(project_paths.LEIGUAN_ROOT, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622.pptx"))
+    parser.add_argument('--csv', default=os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv"))
+    parser.add_argument('--lit-base', default=os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index"))
     parser.add_argument('--feishu-token', default=os.environ.get('FEISHU_TOKEN', ''))
     parser.add_argument('--sheet-id', default='b03e59')
     args = parser.parse_args()

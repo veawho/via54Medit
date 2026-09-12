@@ -19,6 +19,8 @@ citation_sync.py — 飞书表 ↔ 本地 CSV 单一真理源 + 原子化双向�
 ═══════════════════════════════════════════════════════════════════════════
 """
 
+import shutil
+import project_paths
 import json
 import subprocess
 import csv
@@ -32,11 +34,11 @@ from typing import List, Dict, Tuple, Optional
 # 飞书配置 (硬编码, 不允许运行期改)
 FEISHU_TOKEN = os.environ.get("FEISHU_TOKEN") or os.environ.get("FEISHU_SHEET_TOKEN", "")
 FEISHU_SHEET = "b03e59"
-LARK_CLI = os.environ.get("LARK_CLI", os.path.expanduser("~/.hermes/node/bin/lark-cli"))
+LARK_CLI = os.environ.get("LARK_CLI") or shutil.which("lark-cli")
 
 # 本地 CSV 路径
-CSV_PATH = os.path.expanduser("~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv")
-BASE_DIR = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+CSV_PATH = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
+BASE_DIR = project_paths.LEIGUAN_ROOT
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -367,7 +369,7 @@ def write_h_atomic(row_n: int, expected_pnx: str, rich_text: List[Dict]) -> bool
     # 3. 如果 rich_text 是空列表, 从 CSV 重建
     if not rich_text:
         csv_path = os.path.join(
-            os.environ.get("PROJECT_BASE", os.path.expanduser("~/Desktop/雷管方案_文献整理")),
+            os.environ.get("PROJECT_BASE", project_paths.LEIGUAN_ROOT),
             "_citation_table", "citation_table.csv",
         )
         with open(csv_path, newline="") as f:

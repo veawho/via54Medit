@@ -7,12 +7,13 @@ PDF 表格 bbox 严格配对抽取器 — P3-3 Fig.2 实战验证版
 修法: < 3pt 严格匹配 + disease 按 y_mid 排序 + 同 disease 只配一个 value
 
 用法:
-    python3 extract_table_bboxes.py <pdf_path> <page_num> [--output /tmp/rows.json]
+    python3 extract_table_bboxes.py <pdf_path> <page_num> [--output <tempfile.gettempdir()>/rows.json]
 
 依赖: PyMuPDF (已装). 无须 LLM, 纯算法.
 """
 
 import argparse
+import tempfile
 import json
 import os
 import re
@@ -133,7 +134,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("pdf_path")
     parser.add_argument("page_num", type=int)
-    parser.add_argument("--output", "-o", default="/tmp/table_rows.json")
+    parser.add_argument("--output", "-o", default=os.path.join(tempfile.gettempdir(), "table_rows.json"))
     parser.add_argument("--y-tolerance", type=float, default=3.0)
     args = parser.parse_args()
 

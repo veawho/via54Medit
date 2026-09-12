@@ -13,14 +13,15 @@ step5_alignment.py — 6 步规则 #5 三方对齐 (v10.1)
   - step5_三方对齐_aligned.csv  (更新 I/J/K 列)
 
 支持项目 (按 --project):
-  雷管方案: /Users/david/Desktop/雷管方案_文献整理
-  TMA:      /Users/david/Desktop/TMA_文献整理
+  雷管方案: project_paths.LEIGUAN_ROOT
+  TMA:      project_paths.TMA_ROOT
 
 用法:
   python3.11 step5_alignment.py --project 雷管方案
   python3.11 step5_alignment.py --project TMA
   python3.11 step5_alignment.py --csv <path> --step3 <dir> --step4 <dir> --out <dir>
 """
+import project_paths
 import os, sys, json, csv, argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -47,7 +48,7 @@ except ImportError:
 
 PROJECTS = {
     "雷管方案": {
-        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
+        "root": project_paths.LEIGUAN_ROOT,
         "csv": "step2_标注分析/PPT_citations_8col_aligned.csv",
         "step3": "step3_pdf下载_160目录",
         "step4": "step4_highlight_v10_glm",  # v10.2: GLM 增强版
@@ -55,7 +56,7 @@ PROJECTS = {
         "convention": "nested",  # Pn-x/ 内有 main.pdf
     },
     "TMA": {
-        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
+        "root": project_paths.TMA_ROOT,
         "csv": "_citation_table/tma_citation_table.csv",
         "step3": "_2_pdfs",
         "step4": "_3_highlight_v10_glm",  # v10.2: GLM 增强版 (vs 旧 _3_highlight)

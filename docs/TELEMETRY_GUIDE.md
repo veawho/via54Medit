@@ -250,6 +250,36 @@ response = client.chat.completions.create(...)
 record_llm_usage(response, provider="deepseek", model="deepseek-chat", project_name="RSV")
 ```
 
+### 3.1 各 LLM 服务商真实 Token 消耗获取方式
+
+不同服务商暴露用量的能力差异很大，本模块**只记录能真实拿到的数字**，不会把调用次数、余额或估算值折算成 token 造数。
+
+| 服务商 | 单次调用 token | 账户级用量 | 说明 |
+| --- | --- | --- | --- |
+| **DeepSeek** | 可读：响应体 `usage` 字段 | 余额可读 (`/user/balance`)；按 key 逐条 token 需控制台导出 CSV | Python (`scripts/provider_llm.py`) 与 Go (`internal/foundation/llm.go`) 两侧都调用 `recordLLMUsage` 真实落库。 |
+| **MiniMax / mmx-cli** | 当前**读不到**：`mmx vision describe --output json` 只返回 `content`，CLI 不暴露 token | 可读：`mmx quota show --output json` 返回按模型的**调用次数**配额 | 账户级次数不会折成 token 入库；`mmx_vision.py` 已预留 `_record_usage`，mmx-cli 未来若返回 usage 会自动落库。 |
+| **TraeWork / Trae 智能体** | 依赖 **spool 摄入**：TraeWork IDE 自身发起调用，本仓库通过 `llm_usage_spool.jsonl` 摄入真实用量 | 本地日志可识别当前 provider/model，但无账单接口 | TraeWork 侧（伴侣进程 / 插件 / MCP）拿到真实 usage 后，调用 `telemetry.llm_spool.write_spool_record({"provider": "traework", ...})` 写入 spool，`medit-telemetry refresh` 或 `llm` 会自动摄入。 |
+
+**TraeWork 侧上报示例**：
+
+```python
+from telemetry.llm_spool import write_spool_record
+
+# 在 TraeWork 扩展/伴侣进程中拿到 IDE 的真实 usage 后调用
+write_spool_record({
+    "provider": "traework",
+    "model": "traework-deepseek-v4-flash",
+    "prompt_tokens": 500,
+    "completion_tokens": 120,
+    "total_tokens": 620,
+    "req_id": "tw-req-001",      # 服务商返回的 id，用于幂等去重
+    "source": "traework-extension",
+    "project_name": "RSV",
+})
+```
+
+然后运行 `python -m telemetry.cli llm` 即可审计 TraeWork 用量是否被正确摄入。
+
 ---
 
 ## 4. 本地持久化与凭据文件分布

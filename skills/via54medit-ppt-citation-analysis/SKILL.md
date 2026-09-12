@@ -5,8 +5,8 @@ description: >
   拿到 PPT 后, 第二件事: 视觉分析所有元素可见性 → 扩大 PPT 页面 → 按 4 列 (A=slide, B=mark, C=cite, D=visual+text 暂定) 输出 CSV。
   关键铁律: 标号 N 对应引用文献 依赖视觉理解 (不写启发式规则 — 用户原话 "人类也是靠视觉理解, 我无法给你固定规则")。
   多引用共享 (17,18) 拆 2 行, 每个 slide 的每条引用序号 = 1 行, D 列必真调 vision_analyze 而不是仅文字。
-  工具: ~/.medit/scripts/{expand_slide_for_visibility, export_ppt_to_images, analyze_ppt_citations}.py
-  配套测试: ~/.medit/tests/test_ppt_citation_rules.py (6 个, 锁住规则 #1-6)
+  工具: scripts/{expand_slide_for_visibility, export_ppt_to_images, analyze_ppt_citations}.py
+  配套测试: tests/test_ppt_citation_rules.py (6 个, 锁住规则 #1-6)
 metadata:
   author: via54
   version: 1.0.0
@@ -27,8 +27,8 @@ metadata:
 
 > 本 skill 的 4 列 CSV 是**中间分析产出**。最终交付的本地表/在线表必须是雷管方案 8 列:
 > `PPT页 | 第几条 | 引用语义（上下文） | PPT中的文献引用 完整字段 | DOI | 类型 | 对应PDF文件 | 来源链接 → 阅读全文`
-> 完整标准(列/规则/H 列卡片/生成脚本): `~/.hermes/skills/via54medit-literature-pipeline/references/leiguan-8col-table-standard.md`
-> TMA 项目新 PPT 引用提取用 `~/.hermes/skills/via54medit-literature-pipeline/scripts/step2_extract_refs.py`
+> 完整标准(列/规则/H 列卡片/生成脚本): `skills/via54medit-literature-pipeline/references/leiguan-8col-table-standard.md`
+> TMA 项目新 PPT 引用提取用 `skills/via54medit-literature-pipeline/scripts/step2_extract_refs.py`
 > (106 条全量回归验证, 支持同行多引用/跨段落续行; 本 skill 的脚本适用于 HCC 等项目)。
 
 ## 用户原话 (硬规则, 2026-08-05)
@@ -70,8 +70,8 @@ slide_num,mark_num,citation_text,d_content_provisional
 **触发**: 任何 PPT 引用分析前必跑, 检测底部超出
 
 ```bash
-python ~/.medit/scripts/expand_slide_for_visibility.py <pptx>           # dry-run
-python ~/.medit/scripts/expand_slide_for_visibility.py <pptx> --apply  # 实际扩大
+python scripts/expand_slide_for_visibility.py <pptx>           # dry-run
+python scripts/expand_slide_for_visibility.py <pptx> --apply  # 实际扩大
 ```
 
 **核心逻辑**:
@@ -87,7 +87,7 @@ python ~/.medit/scripts/expand_slide_for_visibility.py <pptx> --apply  # 实际�
 **触发**: 视觉分析前必跑
 
 ```bash
-python ~/.medit/scripts/export_ppt_to_images.py <pptx> <out_dir> --dpi 150
+python scripts/export_ppt_to_images.py <pptx> <out_dir> --dpi 150
 ```
 
 **已知坑 (2026-08-05)**: 
@@ -98,9 +98,9 @@ python ~/.medit/scripts/export_ppt_to_images.py <pptx> <out_dir> --dpi 150
 ### 3. `analyze_ppt_citations.py` — 主分析器
 
 ```bash
-python ~/.medit/scripts/analyze_ppt_citations.py --no-vision           # 仅文字, C 列标 [need_vision]
-python ~/.medit/scripts/analyze_ppt_citations.py --images <dir>        # 真视觉
-python ~/.medit/scripts/analyze_ppt_citations.py --slide 5            # debug 单 slide
+python scripts/analyze_ppt_citations.py --no-vision           # 仅文字, C 列标 [need_vision]
+python scripts/analyze_ppt_citations.py --images <dir>        # 真视觉
+python scripts/analyze_ppt_citations.py --slide 5            # debug 单 slide
 ```
 
 **核心函数**:
@@ -167,7 +167,7 @@ PPT 第 {slide_idx} 页, 有以下引用文献 (底部, 按 y 排序):
 
 ## 6 个回归测试
 
-`~/.medit/tests/test_ppt_citation_rules.py` 锁住规则 #1-6:
+`tests/test_ppt_citation_rules.py` 锁住规则 #1-6:
 
 | 测试 | 锁什么 |
 |------|--------|
@@ -178,7 +178,7 @@ PPT 第 {slide_idx} 页, 有以下引用文献 (底部, 按 y 排序):
 | `test_expand_dry_run_no_file` | 规则 #2: dry-run 不写文件 |
 | `test_export_images_creates_dir` | 规则 #6: 目录自动建 |
 
-跑 `cd ~/.medit/tests && python test_ppt_citation_rules.py` → 6/6 passed.
+跑 `python tests/test_ppt_citation_rules.py` → 6/6 passed.
 
 ## 测试用例 (已知 P3 / P5)
 
@@ -239,11 +239,11 @@ Pn-x目录是按**下载顺序**编号的。和PPT里的引用序号**完全不�
 
 ## 相关引用
 
-- `~/.medit/scripts/expand_slide_for_visibility.py` — 规则 #2 底部超出 + 文字色保可见
-- `~/.medit/scripts/export_ppt_to_images.py` — 规则 #6 视觉导出 LibreOffice
-- `~/.medit/scripts/analyze_ppt_citations.py` — 主分析器 (4 列 + vision_analyze 路径)
-- `~/.medit/tests/test_ppt_citation_rules.py` — 6 个回归测试
-- `~/.hermes/skills/via54medit-algorithm-driven-upgrade-v2/SKILL.md` — 算法升级 v1.8.0 (目录规范 + 8 步 fallback)
-- `~/.hermes/skills/pdf-download-tool-composition/SKILL.md` — 工具组合调用
+- `scripts/expand_slide_for_visibility.py` — 规则 #2 底部超出 + 文字色保可见
+- `scripts/export_ppt_to_images.py` — 规则 #6 视觉导出 LibreOffice
+- `scripts/analyze_ppt_citations.py` — 主分析器 (4 列 + vision_analyze 路径)
+- `tests/test_ppt_citation_rules.py` — 6 个回归测试
+- `skills/via54medit-algorithm-driven-upgrade-v2/SKILL.md` — 算法升级 v1.8.0 (目录规范 + 8 步 fallback)
+- `skills/pdf-download-tool-composition/SKILL.md` — 工具组合调用
 - `~/Desktop/developments/via54Medit/scripts/ppt_understand.py` — 标号提取 v2 (复用 _find_marks_in_slide)
 - `~/Desktop/developments/via54Medit/AGENTS.md` — 30 条铁律 (via54Medit 跨工具规约)

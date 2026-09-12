@@ -20,11 +20,11 @@
 
 | 工具 | 用途 |
 |---|---|
-| Python 3.11+ (Hermes venv: `~/.hermes/hermes-agent/venv/bin/python3.11`) | 跑所有 v10 脚本 |
+| Python 3.11+ (通过 `PYTHON` 环境变量或 PATH 上的 `python3.11`/`python3` 指定) | 跑所有 v10 脚本 |
 | python-pptx | PPT 扩页 (`ppt_expand.py`) |
 | PyMuPDF (`fitz`) | PDF 文字/坐标/渲染 |
 | LibreOffice (可选) | PPT 渲染 jpg, 没装也能跑 (只是 Step 2 没法生成预览图) |
-| GLM API key (`~/.hermes/.env` 的 `GLM_API_KEY=...`) | v10.2 GLM 兜底增强 (推荐) |
+| GLM API key (环境变量 `GLM_API_KEY=...`) | v10.2 GLM 兜底增强 (推荐) |
 
 ### 0.2 项目结构约定 (两种都支持)
 

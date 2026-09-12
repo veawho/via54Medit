@@ -28,8 +28,20 @@ go build -o bin/medit ./cmd/medit/          # 或 make build
 **部署到任何新设备、或更新到任何版本之后, 先跑这一条**:
 
 ```bash
-python3 scripts/bootstrap_device.py   # 深度扫描 + 按平台补齐缺口 + 渲染自检 + 构建 + 注册自动更新
+python3 scripts/bootstrap_device.py   # 扫描 + 补缺口 + 渲染自检 + 构建 + 全量测试 + 清理 + 注册自动更新
 ```
+
+它对应标准部署流程的 5 步:
+
+| 部署流程步骤 | 本脚本中的实现 | 说明 |
+|---|---|---|
+| 1. 执行更新或部署指令 | `git pull` / 解压包后运行 `bootstrap_device.py` | 幂等, 重复运行只补当时缺的 |
+| 2. 完成所有依赖/工具/包检测 | `deploy_scan.py --stage env` / `deps` / `compat` | 按平台只检相关项 |
+| 3. 安装所有缺失的必要的依赖/工具/包 | `deploy_scan.py --stage deps` 自动安装 | Python 包走 pip, mmx-cli 走 npm, 系统包走 brew/apt/winget |
+| 4. 全量测试所有功能 | `pytest tests/ -q` + `go test ./...` | 失败即阻塞结论 |
+| 5. 清理旧代码, 确保高可用/健壮/持续稳定 | 删除 `__pycache__` / `*.pyc` + 注册自动更新 | 清理后注册系统定时任务 |
+
+
 
 只想看、不想改:
 
@@ -46,6 +58,8 @@ python3 scripts/render_doctor.py          # 渲染通道**真出图**自检 —�
 
 ```bash
 python3 scripts/bootstrap_device.py --dry-run          # 一键部署的预演(不落地)
+python3 scripts/bootstrap_device.py --no-periodic-sync # 不注册系统定时任务(纯功能验证)
+python3 scripts/bootstrap_device.py --no-verify-llm    # 不校验 LLM 记账(无凭据环境)
 python3 scripts/deploy_scan.py --only ocr               # 只补一个能力
 python3 scripts/deploy_scan.py --list                   # 列出所有能力键(配合 --only)
 ```
@@ -57,13 +71,14 @@ PPT / Word 的**版式**只能由微软的引擎产出 —— 第三方引擎会
 
 | 能力 | Windows | macOS | Linux |
 |---|---|---|---|
-| PPT 版式渲染 | 桌面版 **PowerPoint** (COM, 需 pywin32) | 桌面版 **PowerPoint** (原生 AppleScript) | ✗ 需显式 `RENDER_ENGINE=graph` |
-| Word 版式渲染 | 桌面版 **Word** (COM) | 桌面版 **Word** (原生 AppleScript) | ✗ 先用 Word 另存为 PDF 再传入 |
-| 微软在线渲染 | `RENDER_ENGINE=graph` (Microsoft Graph, 需凭据) | 同左 | 同左 |
+| PPT 版式渲染(**唯一强制**) | 桌面版 **PowerPoint** (COM, 需 pywin32) | 桌面版 **PowerPoint** (原生 AppleScript) | ✗ 暂不支持 |
+| Word 版式渲染(可选) | 桌面版 **Word** (COM) | 桌面版 **Word** (原生 AppleScript) | ✗ 先用 Word 另存为 PDF 再传入 |
+| 微软在线渲染(可选) | `RENDER_ENGINE=graph` (Microsoft Graph, 需凭据) | 同左 | 同左 |
 | PDF / 图片 → 分页图 | pymupdf (pip, 只光栅化不重排) | 同左 | 同左 |
 
-**没有兜底通道**: WPS / LibreOffice / Keynote / python-pptx / Aspose / Spire / GroupDocs /
-Syncfusion 都已删除。拿不到微软引擎就**直接失败**, 不会产出"看起来像"的近似渲染。
+**强制与可选**: 桌面版 PowerPoint 是**唯一强制**的 PPT 渲染方式; Word / `RENDER_ENGINE=graph`
+及其他第三方引擎(WPS / LibreOffice / Keynote / python-pptx / Aspose 等)均为可选, 不默认部署。
+拿不到微软 PowerPoint 引擎就**直接失败**, 不会产出"看起来像"的近似渲染。
 
 **部署后先跑真出图自检, 别跳过**:
 
@@ -85,10 +100,12 @@ macOS 上若报 `AppleEvent -1712` / `-1708`: 手动打开一次 PowerPoint / Wo
 |---|---|---|---|
 | Python 3.10+ | `python.org` 安装包 | `brew install python@3.11` | `apt install python3.11` |
 | Python 包 (pymupdf/pptx/PIL) | 自动 pip (`doctor --fix` / `deps_auto.py`) | 同左 | 同左 |
-| 桌面版 Office (渲染必需) | Microsoft PowerPoint / Word | Microsoft PowerPoint / Word | ✗ (或用 `RENDER_ENGINE=graph`) |
+| 桌面版 PowerPoint (渲染**必需**) | Microsoft PowerPoint (COM) | Microsoft PowerPoint (AppleScript) | ✗ 暂不支持 |
+| 桌面版 Word / `RENDER_ENGINE=graph` | 可选 | 可选 | 可选 |
+| mmx-cli (视觉**必需**) | `npm install -g mmx-cli` | 同左 | 同左 |
 | 浏览器 CDP | Chrome/Edge 自动启动 | Chrome/Chromium 自动启动 | chromium 自动启动 |
 | pdftoppm (`RENDER_RASTERIZER=pdftoppm` 时) | 需 poppler (可选) | `brew install poppler` (可选) | `apt install poppler-utils` (可选) |
-| 飞书 CLI | `$LARK_CLI` 指定 | 内置默认 | `$LARK_CLI` 指定 |
+| 飞书 lark-cli | 可选; 通过 `$LARK_CLI` 或 PATH 指定 | 同左 | 同左 |
 
 ### 2.3 深度扫描: 按平台只装"相关且缺失"的
 
@@ -110,11 +127,11 @@ macOS 上若报 `AppleEvent -1712` / `-1708`: 手动打开一次 PowerPoint / Wo
 | 能力 | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | `pywin32` (Office COM) | 必需, 缺失即装 | **不适用**(不装、不校验) | **不适用** |
-| 桌面版 PowerPoint / Word | 必需(装不了则强力提示) | 同左 | **不适用** → 用 `RENDER_ENGINE=graph` |
-| PaddleOCR (L2 中文 OCR) | 缺失即装 | 缺失即装 | 缺失即装 |
-| PaddleOCR **权重** | 缺失即预热 | 同左 | 同左 |
-| `mmx-cli` 视觉引擎 | 经 **npm** 装 | 同左 | 同左 |
+| 桌面版 PowerPoint | 必需(装不了则强力提示) | 同左 | **不适用** |
+| 桌面版 Word / `RENDER_ENGINE=graph` | 可选, 不默认安装 | 可选, 不默认安装 | 可选, 不默认安装 |
+| `mmx-cli` 视觉引擎 | 必需, 经 **npm** 装 | 同左 | 同左 |
 | mmx **凭据** | 有 `MINIMAX_API_KEY` 则代登 | 同左 | 同左 |
+| lark-cli (飞书) | 可选, 不强制 | 同左 | 同左 |
 
 ### OCR 与 mmx-cli 的"部署"到底包含什么
 
@@ -247,7 +264,7 @@ OCR 的权重缓存根目录认 **`PADDLE_PDX_CACHE_HOME`**(PaddleX 自己读的
 |---|---|
 | `PYTHON` | 指定 Python 解释器 (优先级: 配置 > $PYTHON > python3.11 > python3 > python) |
 | `CHROME_PATH` | 指定浏览器可执行文件 |
-| `HERMES_HOME` | skills/venv 数据根 (默认 ~/.hermes) |
+| `HERMES_HOME` | 旧 hermes 布局兼容: 若已设置则 OCR 脚本候选会额外查 ~/.hermes/skills; 新设备无需设置, skills 默认同步到 ~/.via54medit/skills |
 | `HLO_DIR` / `HLO_PYTHON` / `HLO_SQLITE` | HLO 编排脚本/解释器/修正库 |
 | `TMA_PROJECT` | TMA highlight 项目根 (所有 tma_* 脚本) |
 | `LIT_ROOT` | 文献库根 (self_check) |
@@ -265,7 +282,7 @@ OCR 的权重缓存根目录认 **`PADDLE_PDX_CACHE_HOME`**(PaddleX 自己读的
 
 ```bash
 python scripts/skills_bootstrap.py --list     # 查看将安装项
-python scripts/skills_bootstrap.py            # 同步到 ~/.hermes/skills (幂等)
+python scripts/skills_bootstrap.py            # 同步到 ~/.via54medit/skills (幂等)
 python scripts/skills_bootstrap.py --force    # 覆盖本机已修改版本
 ```
 

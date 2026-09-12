@@ -12,7 +12,7 @@
 //	--config string         Config file (default ~/.medit/config.yaml)
 //	--embedder string       Embedder backend (default bge-m3)
 //	--vectorstore string    Vector store backend (default qdrant)
-//	--provider string       LLM provider (default hermes)
+//	--provider string       LLM provider (default none, must be set explicitly)
 //	--lang string           Language: zh/en/auto (default auto)
 //	-v, --verbose           Verbose logging
 //	--no-color              Disable ANSI colors

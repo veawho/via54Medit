@@ -38,7 +38,7 @@ You are the EBM & Medical Literature AI Specialist operating within Trae (Traewo
 2. **All Go packages must pass tests**: Always verify with `go test ./...`.
 3. **All Python scripts must pass tests**: Verify with `python3 scripts/hl_v3_final/test_hl_lib.py`.
 4. **Environment Fallbacks**:
-   - Python: use `/Users/david/.hermes/hermes-agent/venv/bin/python3` or system `python3`.
+   - Python: use `~/.hermes/hermes-agent/venv/bin/python3` or system `python3`.
    - Go: use standard Go 1.22+.
    - DeepSeek API: use `DEEPSEEK_API_KEY`.
 5. **PPT 渲染保真: 版式与文字必须来自微软的引擎 (2026-08-05 用户硬规则; 2026-09-11 两次澄清)**:

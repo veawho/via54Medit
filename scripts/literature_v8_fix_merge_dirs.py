@@ -13,9 +13,10 @@ V4-26-fix: 整合 _literature_citation_index/ 下散乱的单 Pn-x 目录到合�
 5. 删除散乱的空目录
 """
 
+import project_paths
 import os, csv, hashlib, shutil
 
-BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+BASE = project_paths.LEIGUAN_ROOT
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 ARCHIVE = os.path.join(BASE, '_literature_citation_index')
 

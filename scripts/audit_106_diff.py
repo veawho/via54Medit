@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """找出 _2_pdfs (90) 和理论 106 PDF 的差异"""
-import os, json
+import project_paths
+import os, json, tempfile
 
-plans = json.load(open(os.path.expanduser('~/Desktop/TMA_文献整理/_3_highlight_vision/_highlight_plans.json'), encoding='utf-8'))
+plans = json.load(open(os.path.join(project_paths.TMA_ROOT, "_3_highlight_vision/_highlight_plans.json"), encoding='utf-8'))
 plans = plans if isinstance(plans, list) else plans['plans']
 plan_pn = set(p['pn_x'] for p in plans)
-src_pn = set(f.replace('_main.pdf', '') for f in os.listdir(os.path.expanduser('~/Desktop/TMA_文献整理/_2_pdfs')) if f.endswith('.pdf'))
+src_pn = set(f.replace('_main.pdf', '') for f in os.listdir(os.path.join(project_paths.TMA_ROOT, "_2_pdfs")) if f.endswith('.pdf'))
 
 # 11 不可救
 UNREC = {'P5-1', 'P30-4', 'P14-1', 'P19-1',
          'P23-22', 'P28-1', 'P31-4', 'P31-5', 'P31-6', 'P31-8', 'P4-3'}
+
+DECISION_PATH = os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json')
 
 recoverable = plan_pn - UNREC
 print(f'plan unique: {len(plan_pn)}')
@@ -29,7 +32,7 @@ for p in sorted(UNREC & src_pn):
     print(f'  {p}')
 
 # KEEP/DEL 状态
-DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+DECISION = json.load(open(DECISION_PATH, encoding='utf-8'))
 KEEP = set(DECISION['TMA']['keep'])
 DEL = set(DECISION['TMA']['del'])
 print(f'\\nUNREC ∩ KEEP: {sorted(UNREC & KEEP)}')

@@ -7,17 +7,27 @@ Pn-x 命名: Pn = PPT slide 页码 (即 P{页码}), x = 该 slide 中第几条�
   2) 之前中断, Pn-S27_1 无输出, Pn-S23_5 图片导出残缺
 本脚本: 每 Pn-x 提取 slide → --slide N --no-vision → 嵌套目录输出 → 记录汇总
 """
-import os, re, sys, io, json, subprocess, time
+import os
+import os as _os
+import re
+import sys
+import io
+import json
+import subprocess
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-import os as _os
 PYTHON = _os.environ.get('TMA_PYTHON') or sys.executable
 SCRIPT = _os.environ.get('TMA_SCRIPT') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'via54_ppt_visual_to_pdf.py')
 # 默认值走 $HOME 派生, 不写死某台机器的 Windows 盘符路径
 # (旧默认写死了某台 Windows 机器的用户目录, 换机器/换平台都不成立; 环境变量仍可覆盖)。
-_TMA_BASE = _os.environ.get('TMA_PROJECT') or _os.path.expanduser('~/Desktop/TMA_test')
+
+_TMA_BASE = _os.environ.get('TMA_PROJECT') or project_paths.TMA_TEST_ROOT
 PPTX = _os.environ.get('TMA_PPTX') or os.path.join(_TMA_BASE, 'TMA临床路径的诊断与鉴别.pptx')
 PDF_DIR = _os.environ.get('TMA_PDF_DIR') or os.path.join(_TMA_BASE, '_2_pdfs')
 OUT_BASE = _os.environ.get('TMA_OUT_BASE') or os.path.join(_TMA_BASE, '_highlight_nested')

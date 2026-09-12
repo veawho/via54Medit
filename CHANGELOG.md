@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to via54Medit will be documented in this file.
 
@@ -47,6 +47,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
+
+## [5.4.48] - 2026-09-12 (多平台部署与规范合规标准化: 一键安装器 + 清理硬编码 + GitHub 工作流)
+
+### 核心变更
+
+1. **统一双平台一键安装入口 (对标 hermes-agent / openclaw)**
+   - 新增 `install.sh` / `scripts/install.sh`: 针对 POSIX (macOS / Linux)，内置 `unset PYTHONPATH/PYTHONHOME` 环境变量隔离与 Python 3.10+ 自动多级嗅探。
+   - 新增 `scripts/install.ps1`: 针对 Windows PowerShell，自动识别 `python.exe` / `py -3` 与标准路径，透传参数执行引导。
+   - 强化 `scripts/bootstrap_device.py`:
+     - 自动检测 Windows 追加 `.exe` 后缀，注入与 `Makefile` 对齐的 `-ldflags` 版本戳记，消除版本回退硬编码。
+     - 无 `pytest` 时优雅回退至内置 `python -m unittest discover -s tests`，测试永不静默漏跑。
+
+2. **代码库硬编码清理与路径规范**
+   - 彻底修复 `test_citation_sync.py`、`test_via54_rules.py`、`test_ppt_understand.py` 及 `strict_eval_ocr_locate.py` 中的用户目录与 POSIX `/tmp` 硬编码，改用跨平台临时目录与通用路径。
+   - 修复 `test_hl_lib.py` 孤立执行时的 `sys.path` 优先级，自动同步技能分发包（保持 `test_repo_hygiene` 全绿）。
+   - 去隐私化：清理 `.trae/rules/project_rules.md` 中的个人绝对路径。
+
+3. **GitHub 仓库与 Releases 交付规范**
+   - 规范 `.gitattributes`：强制 `*.sh` 使用 LF，`*.ps1`/`*.bat` 使用 CRLF。
+   - 补齐社区治理与资助规范：`.github/FUNDING.yml`、`CONTRIBUTING.md`。
+   - 建立 GitHub Actions 自动化发布流水线：`.github/workflows/release.yml`，打标自动触发 GoReleaser 多架构构建（Windows/macOS/Linux 各 amd64/arm64）。
 
 ## [5.4.47] - 2026-09-12 (修红 CI: v5.4.46 在 Windows 跑者上红了 —— 跨盘符时 relpath 抛 ValueError)
 

@@ -140,7 +140,7 @@ for slide_num in range(3, 34):
 # 正确做法（vision，逐页读）：
 for slide_num in [3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 17, 23, 25, 28, 30, 31]:
     vision_analyze(
-        f'/Users/david/Desktop/TMA_文献整理/_ppt_renders/slide_pp_{slide_num:03d}.jpg',
+        f'<project_dir>/_ppt_renders/slide_pp_{slide_num:03d}.jpg',
         "Slide N底部引用区。列出所有引用编号和对应的作者/期刊（逐条）。"
     )
 ```
@@ -203,7 +203,7 @@ vision_analyze(slide_pp_NNN.jpg, "Slide N：标题、底部引用区所有文献
 ```python
 import fitz, os
 
-PNX = '/Users/david/Desktop/TMA_文献整理/_pnx'
+PNX = '<project_dir>/_pnx'
 
 # 示例：找 George NEJM 2006（TMA 经典文献，PPT Slide 3 引用①）
 target = 'George'
@@ -368,7 +368,7 @@ python3 via54medit-literature-pipeline/scripts/copy_hl_images.py
 **快速审计脚本**（每行单独处理，不批量）：
 ```python
 import fitz, os
-PNX = '/Users/david/Desktop/TMA_文献整理/_pnx'
+PNX = '<project_dir>/_pnx'
 for pnx_dir in sorted(os.listdir(PNX)):
     if not pnx_dir.startswith('P'): continue
     main = os.path.join(PNX, pnx_dir, 'main.pdf')

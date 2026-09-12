@@ -13,8 +13,8 @@
   - A: CI 的 ``working-directory``、``scripts/auto_sync.py`` 的定时自测路径、
        7 个 ``scripts/*.py`` 的 ``sys.path.insert``、``.trae/rules/project_rules.md``、
        ``.cursorrules``、``.github/copilot-instructions.md``、``AGENTS.md`` 与多份 ``docs/``。
-  - B: 技能必须**自包含**才能被镜像/分发到 ``~/.hermes/skills/``; 有两个 SKILL.md 按
-       ``~/.hermes/skills/...`` 路径引用它。
+  - B: 技能必须**自包含**才能被镜像/分发到 ``~/.via54medit/skills/``; 有两个 SKILL.md 按
+       ``~/.via54medit/skills/...`` 路径引用它。
 
 历史上这个同步是手工做的 (见提交 ``01a9452``, 当时只同步了 2 个文件), 所以在 4 天内又
 漂了 —— B 缺少 A 在 2026-09-07 新增的 5 个 OCR/版面脚本, ``vision_check.py`` 也停在旧版。

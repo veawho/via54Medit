@@ -852,7 +852,7 @@ def main():
         print("  Merge:    via54_highlight_fix_v10.py merge <source_dir> [--by md5|filename] [--execute]")
         print()
         print("Examples:")
-        print("  via54_highlight_fix_v10.py hl P11-1 in.pdf out.pdf '摘要,方法' /tmp/jpg")
+        print("  via54_highlight_fix_v10.py hl P11-1 in.pdf out.pdf '摘要,方法' <tempdir>/jpg")
         print("  via54_highlight_fix_v10.py expand '1,2-3,5'")
         print("  via54_highlight_fix_v10.py merge /path/to/highlight_dir --by md5")
         sys.exit(1)

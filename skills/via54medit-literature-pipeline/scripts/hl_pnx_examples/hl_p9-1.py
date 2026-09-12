@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P9-1: slide 9 引用1 (George NEJM 2014 TMA) 遗传/获得性分类应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P9-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P9-1/P9-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P9-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P9-1/P9-1_highlight.pdf")
 
 SENTENCES = [
     "The thrombotic microangiopathy (TMA) syndromes are extraordinarily diverse.",

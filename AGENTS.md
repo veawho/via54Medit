@@ -620,7 +620,7 @@ python3 scripts/via54.py diff                                       # 双项目�
 
 ### GLM 集成层 (v10.2, 2026-08-10)
 
-`scripts/glm_integration.py` 包装 `~/.hermes/skills/via54/glm_academic_official.py`, 默认模型 `glm-4-flash-250414` (免费 + 128K context)。所有函数都接受 `use_glm: bool` 参数, 默认 False (向后兼容):
+`scripts/glm_integration.py` 包装 GLM 学术模块(通过 `VIA54_GLM_DIR` 环境变量指定, 不默认假设 hermes 路径), 默认模型 `glm-4-flash-250414` (免费 + 128K context)。所有函数都接受 `use_glm: bool` 参数, 默认 False (向后兼容):
 
 | 函数 | 兜底场景 | 典型效果 |
 |---|---|---|

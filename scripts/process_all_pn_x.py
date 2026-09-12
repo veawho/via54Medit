@@ -15,22 +15,24 @@ Usage:
   python3.11 process_all_pn_x.py --limit 5  # 测试用, 前 5 个
   python3.11 process_all_pn_x.py --pnx P22-1  # 跑单个
 """
+import project_paths
 import argparse
 import json
 import subprocess
 import sys
 import os
+import tempfile
 from pathlib import Path
 from datetime import datetime
 import re
 
 # 路径
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LIT_ROOT = Path(os.path.expanduser('~/Desktop/雷管方案_文献整理'))
+LIT_ROOT = Path(project_paths.LEIGUAN_ROOT)
 ARCHIVE_ROOT = LIT_ROOT / '_literature_citation_index'
 CSV_PATH = LIT_ROOT / '_citation_table' / 'citation_table.csv'
-MEDIT_BIN = '/tmp/medit'
-PYTHON = os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11')
+MEDIT_BIN = os.path.join(tempfile.gettempdir(), 'medit')
+PYTHON = sys.executable
 
 # Highlight 颜色
 YELLOW = (1, 0.92, 0)
@@ -465,9 +467,10 @@ def main():
     print(f'Failed: {summary["failed"]}')
 
     # 详细报告
-    with open('/tmp/process_all_pn_x_report.json', 'w') as f:
+    report_path = os.path.join(tempfile.gettempdir(), 'process_all_pn_x_report.json')
+    with open(report_path, 'w') as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-    print(f'Detailed report: /tmp/process_all_pn_x_report.json')
+    print(f'Detailed report: {report_path}')
 
     return summary
 

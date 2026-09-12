@@ -9,9 +9,10 @@ audit_all_pn_x_real_literature.py
 输出: report.json (每 Pn-x 状态) + 控制台 summary
 """
 
+import project_paths
 import os, csv, json, sys
 
-BASE = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+BASE = project_paths.LEIGUAN_ROOT
 CSV = os.path.join(BASE, '_citation_table', 'citation_table.csv')
 
 

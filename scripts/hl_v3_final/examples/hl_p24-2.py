@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P24-2: slide 24 引用2 (中华血液学杂志 2021 TA-TMA共识) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P24-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P24-2/P24-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P24-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P24-2/P24-2_highlight.pdf")
 
 SENTENCES = [
     "TA-TMA 的早期诊断：①高血压；②蛋白尿；③LDH 升高。这三项指标在TA-TMA 诊断前即可发生，可作为早期诊断指标指导早期干预，改善预后",

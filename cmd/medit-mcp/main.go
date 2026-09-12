@@ -39,6 +39,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -98,7 +99,7 @@ func main() {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "medit_hlo_truth",
-		Description: "查询 HLO 字段真值表 (160 Row DOI + Author ground truth). 数据源 ~/.hermes/cache/lit_truth.json. 用于 medit_grade 升级 + CrossRef 二次验证.",
+		Description: "查询 HLO 字段真值表 (160 Row DOI + Author ground truth). 数据源 ~/.via54medit/cache/lit_truth.json 或由 VIA54_LIT_TRUTH_PATH 指定. 用于 medit_grade 升级 + CrossRef 二次验证.",
 	}, hloTruthTool)
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -170,14 +171,17 @@ func askTool(ctx context.Context, _ *mcp.CallToolRequest, input AskInput) (*mcp.
 			log.Printf("antfu init: %v", err)
 		}
 	}
-	if !input.NoLLM {
-		// Try hermes (local), fall back to no-LLM.
-		llm, err := foundation.NewLLM("hermes", map[string]any{
-			"endpoint": "http://localhost:8765",
-			"model":    "MiniMax-M3",
+	if !input.NoLLM && os.Getenv("LLM_PROVIDER") != "" {
+		// Only wire an LLM when explicitly requested; do not default to hermes.
+		llm, err := foundation.NewLLM(os.Getenv("LLM_PROVIDER"), map[string]any{
+			"endpoint": os.Getenv("LLM_ENDPOINT"),
+			"model":    os.Getenv("LLM_MODEL"),
+			"api_key":  os.Getenv("LLM_API_KEY"),
 		})
 		if err == nil {
 			r.LLM = llm
+		} else {
+			log.Printf("LLM init (%s): %v; continuing without LLM summary", os.Getenv("LLM_PROVIDER"), err)
 		}
 	}
 
@@ -425,7 +429,10 @@ func hloTruthTool(_ context.Context, _ *mcp.CallToolRequest, input HloTruthInput
 		return nil, HloTruthOutput{}, err
 	}
 	// 读真值表
-	truthPath := os.Getenv("HOME") + "/.hermes/cache/lit_truth.json"
+	truthPath := os.Getenv("VIA54_LIT_TRUTH_PATH")
+	if truthPath == "" {
+		truthPath = filepath.Join(os.Getenv("HOME"), ".via54medit", "cache", "lit_truth.json")
+	}
 	data, err := os.ReadFile(truthPath)
 	if err != nil {
 		return nil, HloTruthOutput{}, fmt.Errorf("read truth: %w", err)

@@ -5,14 +5,15 @@ batch_scihub_download_oa.py — 批量从 PubMed OA candidates 下载 PDF
 输入: docs/wrong_pdf_replacement_candidates_20260811.json
 输出: _2_pdfs_replaced/ 目录
 """
+import project_paths
 import os, sys, json, time, re
 import urllib.request
 import urllib.parse
 import pymupdf as fitz
 
-TMA_ROOT = os.path.expanduser("~/Desktop/TMA_文献整理")
+TMA_ROOT = project_paths.TMA_ROOT
 PDF_REPLACE_DIR = os.path.join(TMA_ROOT, "_2_pdfs_replaced")
-BACKUP_DIR = os.path.expanduser("~/Desktop/TMA_文献整理/_downloads/_pdfs_real")
+BACKUP_DIR = os.path.join(project_paths.TMA_ROOT, "_downloads/_pdfs_real")
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CANDIDATES_JSON = os.path.join(_REPO_ROOT, "docs",
                                "wrong_pdf_replacement_candidates_20260811.json")

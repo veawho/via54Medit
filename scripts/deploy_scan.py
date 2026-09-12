@@ -767,8 +767,6 @@ def ocr_script_path():
         (os.path.join(REPO, "scripts", rel), "仓库 scripts/"),
         (os.path.join(REPO, "skills", "via54medit-anno2ppt-phase7", "scripts", rel),
          "仓库技能包"),
-        (os.path.expanduser("~/.hermes/skills/via54medit-anno2ppt-phase7/scripts/" + rel),
-         "旧技能布局"),
         (os.path.join(REPO, "skills", "via54medit", "via54medit-anno2ppt-phase7",
                       "scripts", rel), "旧技能布局(带 via54medit 前缀)"),
         (os.path.join("scripts", rel), "当前工作目录(开发态兜底)"),

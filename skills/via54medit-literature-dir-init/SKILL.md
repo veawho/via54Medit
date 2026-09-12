@@ -3,7 +3,7 @@ name: via54medit-literature-dir-init
 description: >
   文献整理任务 Step 1+2 umbrella (2026-08-05 v1.3.0). 触发: 用户给新 PPT /
   "拿到 PPT" / "建文献整理目录" / "分析 PPT 引用" / "4 列引用表" / "算法能达成当前表格质量".
-  Step 1: ~/.medit/scripts/init_literature_dir.py (8 标准子目录, --dry-run 强制保护).
+  Step 1: scripts/init_literature_dir.py (8 标准子目录, --dry-run 强制保护).
   Step 2: 4 脚本链 (expand_slide_for_visibility → export_ppt_to_images → analyze_ppt_citations → test_ppt_citation_rules).
   v1.3.0 修订: 拒绝重跑对照真值 — 真值表不是 "校准靶", 是 single source of truth.
   用户原话 5 轮硬话: "你到底听没听懂" / "标准答案" / "必须真看图" / "我不想看表格" / "你他妈的就是不扫不继承".
@@ -59,16 +59,16 @@ Step 2 (第二件事): 分析 PPT 中文献标注 → 4 列 CSV (真值优先)
 
 ```bash
 # 1. 先 dry-run (强制)
-python ~/.medit/scripts/init_literature_dir.py --dry-run
+python scripts/init_literature_dir.py --dry-run
 
 # 2. 实际建
-python ~/.medit/scripts/init_literature_dir.py
+python scripts/init_literature_dir.py
 
 # 3. 单个 project
-python ~/.medit/scripts/init_literature_dir.py --project 雷管方案_文献整理
+python scripts/init_literature_dir.py --project 雷管方案_文献整理
 
 # 4. 列 config
-python ~/.medit/scripts/init_literature_dir.py --list
+python scripts/init_literature_dir.py --list
 ```
 
 ### Step 1 硬规则
@@ -118,25 +118,25 @@ A_slide,B_mark,C_citation,D_ppt_content_visual_text
 
 ```bash
 # 1. 视觉分析 + 扩大 PPT (规则 #2) — dry-run 默认
-python ~/.medit/scripts/expand_slide_for_visibility.py <pptx>
+python scripts/expand_slide_for_visibility.py <pptx>
 #   → 6 slide 需扩大, 加 --apply 才写
 
 # 2. 导出图片 (规则 #6) — 默认输出 _ppt_renders/
-python ~/.medit/scripts/export_ppt_to_images.py <pptx>
+python scripts/export_ppt_to_images.py <pptx>
 #   → 必走 Keynote AppleScript (1-tell-block), 1 文件 1 tell
 #   → 输出到 <project_root>/_ppt_renders/slide_NNN.jpg
 
 # 3. 4 列分析 (规则 #3-5, v1.2.0 真值优先)
-python ~/.medit/scripts/analyze_ppt_citations.py \
-    --truth /Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv \
-    --images /Users/david/Desktop/雷管方案_文献整理/_ppt_renders \
-    --out /Users/david/Desktop/雷管方案_文献整理/PPT_citations_4col.csv \
+python scripts/analyze_ppt_citations.py \
+    --truth <project_dir>/_citation_table/citation_table.csv \
+    --images <project_dir>/_ppt_renders \
+    --out <project_dir>/PPT_citations_4col.csv \
     --no-vision
 #   → A/B/C 从真值表读, 不重算
 #   → D 列 = [原真值文字] (vision 部分由 agent 手动跑填)
 
 # 4. 锁住规则 (回归) — 6 个测试
-python ~/.medit/tests/test_ppt_citation_rules.py
+python tests/test_ppt_citation_rules.py
 ```
 
 ### D 列 vision 真跑 (P3 4 行已示范)
@@ -356,7 +356,7 @@ subprocess.run(['osascript', '-e', ascript], capture_output=True, text=True, tim
 if not args.out_dir:
     from init_literature_dir import load_projects
     projects = load_projects()
-    proj_root = os.path.join('/Users/david/Desktop', projects[0])
+    proj_root = os.path.expanduser(os.path.join('~/projects', projects[0]))
     args.out_dir = os.path.join(proj_root, '_ppt_renders')
 os.makedirs(args.out_dir, exist_ok=True)
 ```
@@ -387,14 +387,14 @@ os.makedirs(args.out_dir, exist_ok=True)
 - **GLM 文献批处理**: `scripts/glm_literature_processor.py` — 智谱 file-extract API + glm-4-flash 并行分析
 - **GLM 学术数据处理参考**: `references/glm-academic-data-processing.md` — 官方文档集成 + 模型对比 + Prompt 库
 - **引用提取算法参考**: `references/ppt-citation-extraction-algorithm.md` — 语义+序号切分算法 (解决页码误切)
-- 主 SKILL: `~/.hermes/skills/via54medit-algorithm-driven-upgrade-v2/SKILL.md` v2.0.0
-- 4 列参考: `~/.hermes/skills/via54medit-algorithm-driven-upgrade-v2/references/v2.0.0-ppt-truth-table-4col-analysis.md`
+- 主 SKILL: `skills/via54medit-algorithm-driven-upgrade-v2/SKILL.md` v2.0.0
+- 4 列参考: `skills/via54medit-algorithm-driven-upgrade-v2/references/v2.0.0-ppt-truth-table-4col-analysis.md`
 - PowerPoint 沙盒 workaround + 飞书群附件下载: `references/ppt-sandbox-workaround-and-feishu-file-download.md`
-- 脚本: `~/.medit/scripts/{init_literature_dir,expand_slide_for_visibility,export_ppt_to_images,analyze_ppt_citations}.py`
-- 测试: `~/.medit/tests/{test_init_literature_dir,test_ppt_citation_rules}.py`
-- Config: `~/.medit/config/project_layout.json` (projects 列表)
-- 复用核心: `/Users/david/Desktop/developments/via54Medit/scripts/ppt_understand.py` (find_citation_marks_v2)
-- via54Medit 项目: `/Users/david/Desktop/developments/via54Medit/AGENTS.md` (30+ 铁律, 不属于我)
+- 脚本: `scripts/{init_literature_dir,expand_slide_for_visibility,export_ppt_to_images,analyze_ppt_citations}.py`
+- 测试: `tests/{test_init_literature_dir,test_ppt_citation_rules}.py`
+- Config: `~/.via54medit/config/project_layout.json` (projects 列表)
+- 复用核心: `<repo>/scripts/ppt_understand.py` (find_citation_marks_v2)
+- via54Medit 项目: `<repo>/AGENTS.md` (30+ 铁律, 不属于我)
 
 ---
 
@@ -441,7 +441,7 @@ which soffice libreoffice  # 检查外部工具
 
 ```bash
 # 1. 跑 init_literature_dir.py --dry-run 确认 8 子目录
-python ~/.medit/scripts/init_literature_dir.py --dry-run
+python scripts/init_literature_dir.py --dry-run
 
 # 2. 8 目录是 single source of truth:
 #    _citation_table/ _literature_citation_index/ _audit_report/
@@ -551,7 +551,7 @@ python ~/.medit/scripts/init_literature_dir.py --dry-run
   "slide_N": {
     "marks": [{"n": 1, "context": "...", "cell": "R1C1"}, ...],
     "cites": ["citation 1 full text", "citation 2 full text", ...],
-    "img": "/Users/david/Desktop/雷管方案_文献整理/_ppt_renders/slide_NNN.jpg"
+    "img": "<project_dir>/_ppt_renders/slide_NNN.jpg"
   }
 }
 
@@ -634,7 +634,7 @@ lark-cli im +chat-messages-list --chat-id <chat_id> --page-size 5
 
 # 3. 从 content 拿 file_key (如 file_v3_0014b_xxx) + message_id (om_xxx)
 # 4. 下载 (用相对 --output, 用 cd 进目标目录)
-cd /Users/david/Desktop/<项目>_文献整理
+cd <project_dir>
 lark-cli im +messages-resources-download \
     --message-id <om_xxx> \
     --file-key <file_v3_xxx> \
@@ -768,7 +768,7 @@ matches = list(re.finditer(r'(\d{1,3})\.\s*(?=[A-Z\u4e00-\u9fff\u00c0-\u024f])',
 
 ```python
 from zhipuai import ZhipuAI
-client = ZhipuAI(api_key=KEY)  # 从 ~/.hermes/.env 读 GLM_API_KEY
+client = ZhipuAI(api_key=KEY)  # 从环境变量 GLM_API_KEY 读取
 
 # 上传 PDF
 file_object = client.files.create(file=Path("xxx.pdf"), purpose="file-extract")

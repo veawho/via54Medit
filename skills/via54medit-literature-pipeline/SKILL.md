@@ -436,11 +436,14 @@ def call_vision(img_path, prompt, max_tokens=600):
 
 **脚本位置**：`/tmp/sv.py`（已验证可用）
 
-**Gateway 重启**（如果需要）：
+**LLM 接入**（如果需要）：
+不再默认启动 hermes gateway。通过环境变量显式指定 provider，例如：
 ```bash
-kill 84835  # 旧 gateway
-sleep 2
-~/.hermes/hermes-agent/venv/bin/hermes gateway start &
+export LLM_PROVIDER=deepseek
+export LLM_API_KEY=sk-...
+# 或本地 openai-compatible 服务
+export LLM_PROVIDER=hermes
+export LLM_GATEWAY_URL=http://localhost:8765
 ```
 
 ### P13: D_ppt_content 列是 Step 2 的核心产出（2026-08-10 新增）

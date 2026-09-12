@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P22-1: slide 22 引用1 (Laurence Clin Adv Hematol Oncol 2016) aHUS识别应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P22-1_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P22-1/P22-1_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P22-1_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P22-1/P22-1_highlight.pdf")
 
 SENTENCES = [
     "DIC must be recognized and treated before it is possible to discriminate among the other 3 major TMAs.",

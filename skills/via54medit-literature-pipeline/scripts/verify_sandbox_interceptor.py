@@ -7,11 +7,13 @@
 import os
 import sys
 import subprocess
+import tempfile
 
-#: 被验证的 via54_sandbox_forbidden.py 属 hermes 侧运行时 (不在本仓库), 默认按 ~ 定位。
-#: 原先写死成 /Users/<user>/.hermes/..., 换机器/换用户就失效; 现可用 HERMES_VIA54_DIR 覆盖。
-sys.path.insert(0, os.environ.get("HERMES_VIA54_DIR")
-                or os.path.expanduser("~/.hermes/skills/via54"))
+#: 被验证的 via54_sandbox_forbidden.py 属 hermes 侧运行时 (不在本仓库)。
+#: 其他设备不使用 hermes, 故默认不再假设该路径; 需要时显式设置 HERMES_VIA54_DIR。
+_HERMES_VIA54_DIR = os.environ.get("HERMES_VIA54_DIR")
+if _HERMES_VIA54_DIR:
+    sys.path.insert(0, os.path.expanduser(_HERMES_VIA54_DIR))
 
 print('=' * 60)
 print('Sandbox 拦截器自检 (2026-08-07 用户硬规则)')
@@ -92,7 +94,7 @@ except Exception as e:
 # 9. 拦截 curl -o
 try:
     import subprocess
-    subprocess.run(['curl', '-o', '/tmp/x', 'https://example.com/x.pdf'])
+    subprocess.run(['curl', '-o', os.path.join(tempfile.gettempdir(), 'x'), 'https://example.com/x.pdf'])
     check('拦截 curl -o', False)
 except RuntimeError:
     check('拦截 curl -o', True, 'raise')

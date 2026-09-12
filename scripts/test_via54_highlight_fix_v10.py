@@ -14,6 +14,7 @@ test_via54_highlight_fix_v10.py — v10 修复版高亮单测
   T9: merge_pn_x_dirs 目录合并
   T10: via54_rules 6 步校验
 """
+import project_paths
 import os, sys, tempfile, unittest
 from pathlib import Path
 
@@ -446,7 +447,7 @@ class TestFindMergeGroups(unittest.TestCase):
 class TestRealTMACases(unittest.TestCase):
     """真实 TMA PDF 回归 (P11-1 中文, P12-2 中文)"""
 
-    BASE = os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs")
+    BASE = os.path.join(project_paths.TMA_ROOT, "_2_pdfs")
 
     def _run(self, pn, kws, mode="line"):
         src = os.path.join(self.BASE, f"{pn}_main.pdf")
@@ -476,7 +477,7 @@ class TestRegressionVsOldPipeline(unittest.TestCase):
     """对比 v9.7 旧 pipeline 的 known-bad 案例"""
 
     def test_old_P11_1_was_0pct_new_should_be_above(self):
-        src = os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs/P11-1_main.pdf")
+        src = os.path.join(project_paths.TMA_ROOT, "_2_pdfs/P11-1_main.pdf")
         if not os.path.isfile(src):
             self.skipTest("no P11-1 main")
         out = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name
@@ -485,7 +486,7 @@ class TestRegressionVsOldPipeline(unittest.TestCase):
         os.unlink(out)
 
     def test_old_P12_2_page3_was_0pct_new_should_have(self):
-        src = os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs/P12-2_main.pdf")
+        src = os.path.join(project_paths.TMA_ROOT, "_2_pdfs/P12-2_main.pdf")
         if not os.path.isfile(src):
             self.skipTest("no P12-2 main")
         out = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False).name

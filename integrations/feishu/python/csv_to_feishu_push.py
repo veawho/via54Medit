@@ -14,7 +14,7 @@ Hard Rules:
 
 GitHub-ready (无硬编码 token/路径):
 - 通过环境变量或 CLI 参数配置
-- 推荐使用 config 文件 (~/.config/hermes/feishu_credentials.json)
+- 推荐使用 config 文件 (~/.config/via54medit/feishu_credentials.json)
 
 Usage:
   FEISHU_TOKEN=<token> SHEET_ID=<sheet_id> \\
@@ -22,15 +22,17 @@ Usage:
   BASE_DIR=/path/to/project \\
   python3 csv_to_feishu_push.py [--dry-run]
 
-Or via config file (~/.config/hermes/feishu_credentials.json):
+Or via config file (~/.config/via54medit/feishu_credentials.json):
   {"feishu_token": "...", "sheet_id": "..."}
 """
 
+import shutil
 import os
 import csv as csv_mod
 import sys
 import json
 import time
+import tempfile
 import argparse
 import subprocess
 import re
@@ -45,13 +47,13 @@ def load_config():
         'sheet_id': os.environ.get('SHEET_ID', ''),
         'csv_path': os.environ.get('CSV_PATH', ''),
         'base_dir': os.environ.get('BASE_DIR', ''),
-        'lark_cli': os.environ.get('LARK_CLI', os.path.expanduser('~/.hermes/node/bin/lark-cli')),
+        'lark_cli': os.environ.get('LARK_CLI') or shutil.which('lark-cli'),
     }
     
-    # 尝试 config 文件
+    # 尝试 config 文件(不再默认读取 hermes 配置)
     config_paths = [
         os.environ.get('FEISHU_CONFIG_PATH', ''),
-        os.path.expanduser('~/.config/hermes/feishu_credentials.json'),
+        os.path.expanduser('~/.config/via54medit/feishu_credentials.json'),
         os.path.expanduser('~/.feishu_credentials.json'),
     ]
     
@@ -102,7 +104,7 @@ def load_config():
         raise ValueError(
             'FEISHU_TOKEN not set. Either:\n'
             '  1. Set environment variable FEISHU_TOKEN=<token>\n'
-            '  2. Put in config file ~/.config/hermes/feishu_credentials.json\n'
+            '  2. Put in config file ~/.config/via54medit/feishu_credentials.json\n'
             '  3. Pass --feishu-token <token>'
         )
     if not config['sheet_id']:
@@ -257,7 +259,7 @@ def push_single_row(fr, csv_row, dry_run=False):
         build_h_cell(h_content),
     ]]
     
-    cells_path = f'/tmp/literature_clean/csv_feishu_sync_row{fr}.json'
+    cells_path = os.path.join(tempfile.gettempdir(), 'literature_clean', f'csv_feishu_sync_row{fr}.json')
     os.makedirs(os.path.dirname(cells_path), exist_ok=True)
     with open(cells_path, 'w') as f:
         json.dump(cells, f, ensure_ascii=False)

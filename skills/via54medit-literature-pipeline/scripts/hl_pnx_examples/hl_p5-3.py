@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P5-3: slide 5 引用3 (Figueroa Clin Microbiol Rev 1991) 末端补体应证句 (按P5-3实际文本)"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P5-3_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P5-3/P5-3_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P5-3_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P5-3/P5-3_highlight.pdf")
 
 SENTENCES = [
     "Assembly of the membrane attack complex. Incorporation of C3b into either the classical- or alternative-pathway C3 convertase creates the respective C5 convertases C4b2aC3b and C3bBbC3b.",

@@ -9,14 +9,15 @@ m3_pick_body_anchor.py — 不信 plan.target_text, 直接从 PDF 抽 body 段 a
 4. 全角英文转半角 (中文 PDF 常见)
 5. 直接调 m3_vision_highlight 内部函数 (不 subprocess, 避免 timeout)
 """
-import json, os, sys, re, pymupdf as fitz, shutil, time
+import project_paths
+import json, os, sys, re, pymupdf as fitz, shutil, time, tempfile
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import m3_vision_highlight as mv3
 
-TMA = os.path.expanduser('~/Desktop/TMA_文献整理')
-LEIGUAN = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+TMA = project_paths.TMA_ROOT
+LEIGUAN = project_paths.LEIGUAN_ROOT
 
 # 全角转半角
 def fullwidth_to_halfwidth(s: str) -> str:
@@ -155,7 +156,7 @@ def process_pn_x(pn, pdf, out_dir, dry_run=False):
 
 
 def main():
-    DECISION = json.load(open('/tmp/clean_hash_dup_decision.json', encoding='utf-8'))
+    DECISION = json.load(open(os.path.join(tempfile.gettempdir(), 'clean_hash_dup_decision.json'), encoding='utf-8'))
     KEEP = set(DECISION['TMA']['keep'])
     DEL = set(DECISION['TMA']['del'])
     
@@ -205,7 +206,8 @@ def main():
         if len(v) > 30:
             print(f'  ... +{len(v)-30} more')
     
-    with open('/tmp/m3_pick_body_results.json', 'w', encoding='utf-8') as f:
+    results_path = os.path.join(tempfile.gettempdir(), 'm3_pick_body_results.json')
+    with open(results_path, 'w', encoding='utf-8') as f:
         json.dump({k: v for k, v in results.items()}, f, ensure_ascii=False, indent=2)
 
 

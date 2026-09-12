@@ -10,18 +10,19 @@ self_check.py - 自检脚本 (v4.0)
 
 Output: self_check_report.json + summary
 """
+import project_paths
 import json
 import os
 import random
+import tempfile
 import subprocess
 import sys
 from pathlib import Path
 
-LIT_ROOT = Path(os.environ.get('LIT_ROOT', os.path.expanduser('~/Desktop/雷管方案_文献整理')))
+LIT_ROOT = Path(os.environ.get('LIT_ROOT', project_paths.LEIGUAN_ROOT))
 ARCHIVE_ROOT = LIT_ROOT / '_literature_citation_index'
-PYTHON = (os.environ.get('HERMES_PYTHON')
-          or os.environ.get('PYTHON')
-          or os.path.expanduser('~/.hermes/hermes-agent/venv/bin/python3.11'))
+PYTHON = (os.environ.get('PYTHON')
+          or sys.executable)
 
 
 def main():
@@ -181,9 +182,10 @@ print(result.get('content', '')[:300])
         for it in report['issues'][:20]:
             print(f'  {it["pnx"]}: {it["issues"]}')
 
-    with open('/tmp/self_check_report.json', 'w') as f:
+    report_path = os.path.join(tempfile.gettempdir(), 'self_check_report.json')
+    with open(report_path, 'w') as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f'\nFull report: /tmp/self_check_report.json')
+    print(f'\nFull report: {report_path}')
 
     return report
 

@@ -11,10 +11,13 @@ v6_vision_align_eval.py — D 列 ≥50% 命中度量 (v2.5.0)
 用法:
   python v6_vision_align_eval.py
 """
-import os, re, sys, json, csv
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
+import os, re, sys, json, csv, tempfile
 
-TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
-VISION_D = '/tmp/vision_d_merged.json'
+TRUTH = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
+VISION_D = os.path.join(tempfile.gettempdir(), 'vision_d_merged.json')
 MISALIGNED_4 = {('12', '5'), ('14', '2'), ('22', '13'), ('30', '10')}
 
 

@@ -213,7 +213,7 @@ pricing: 0 (免费)
 ## 5. 实现位置
 
 ```
-/Users/david/Desktop/developments/via54Medit/
+<repo>/via54Medit/
 ├── internal/anno2ppt/                     (L4 应证推理机 + L4+ 双源 + L4+ Producer 分类)
 │   ├── algorithm.go                       (4 维要素对齐, 9/9 测试)
 │   ├── l0_verify.go                       (L0 Crossref 验证, 9/9 测试)

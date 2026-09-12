@@ -10,12 +10,13 @@ test_h_column_builder.py — H 列构建器单元测试 (v9.7 模块化拆分后
 - markdown: markdown → rich_text
 - builder: build_h_md_v6 / build_h_rich_text_v6
 """
+import project_paths
 import os, sys, unittest, json, subprocess, shutil
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import h_column_builder
 
-LIT_BASE = os.path.expanduser("~/Desktop/雷管方案_文献整理/_literature_citation_index")
+LIT_BASE = os.path.join(project_paths.LEIGUAN_ROOT, "_literature_citation_index")
 
 
 class TestParseDField(unittest.TestCase):

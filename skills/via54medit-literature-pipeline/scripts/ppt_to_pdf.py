@@ -5,7 +5,7 @@
 ------------------
 本文件位于权威工具链 ``scripts/hl_v3_final/``, 会被 ``scripts/sync_skill_bundle.py``
 整目录镜像到技能分发包 ``skills/via54medit-literature-pipeline/scripts/``。
-技能包必须**自包含** (会被分发到 ``~/.hermes/skills/``), 不能 import 上层
+技能包必须**自包含** (会被分发到 ``~/.via54medit/skills/``), 不能 import 上层
 ``scripts/ppt_render_engine.py``, 所以这里放一份可独立运行的最小实现。
 
 规则与判定标准 (2026-08-05 用户硬规则; 2026-09-11 用户澄清)

@@ -13,7 +13,11 @@ tma_cascade_download.py — TMA 文献多级 OA 级联下载器
 """
 import json, os, re, sys, time, urllib.request, urllib.parse
 
-T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
+
+T = os.environ.get('TMA_PROJECT') or project_paths.TMA_TEST_ROOT
 REF_JSON = os.path.join(T, '_references_FINAL.json')
 DOI_MAP = os.path.join(T, '_doi_map_full.json')
 OUT = os.path.join(T, '_2_pdfs')

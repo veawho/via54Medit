@@ -3,23 +3,26 @@
 analyze_ppt_citations_v6_vision_align.py — D 列第一轮视觉对齐 PPT (v3.0.0)
 
 用法:
-  python /Users/david/.medit/scripts/analyze_ppt_citations_v6_vision_align.py
+  python3 analyze_ppt_citations_v6_vision_align.py
 
 输入:
-  /Users/david/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv (160 行真值, 飞书 164 - 4 错位)
-  /tmp/vision_d_merged.json (来自 subagent batch + 手跑)
+  <LEIGUAN_ROOT>/_citation_table/citation_table.csv (由 project_paths.LEIGUAN_ROOT 决定)
+  <tempfile.gettempdir()>/vision_d_merged.json (来自 subagent batch + 手跑)
 
 输出:
   stdout: 160 行 D 列覆盖率 (%/月/万) + ≥50% 命中度量 + 漏标号列表
 """
 
-import os, re, sys, json, csv
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
+import os, re, sys, json, csv, tempfile
 from collections import defaultdict
 
 # 路径
-TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
-OUT = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT_citations_4col.csv')
-VISION_D = '/tmp/vision_d_merged.json'
+TRUTH = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
+OUT = os.path.join(project_paths.LEIGUAN_ROOT, "PPT_citations_4col.csv")
+VISION_D = os.path.join(tempfile.gettempdir(), 'vision_d_merged.json')
 
 # 4 行错位 (飞书 164 - 视觉验证 160)
 MISALIGNED_4 = {('12', '5'), ('14', '2'), ('22', '13'), ('30', '10')}

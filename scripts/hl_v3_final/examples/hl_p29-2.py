@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P29-2: 固定句子定义, 自动定位页并 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P29-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P29-2/P29-2_highlight.pdf")
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P29-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P29-2/P29-2_highlight.pdf")
 
 SENTENCES = [
     'Although the sensitivity of this finding for the diagnosis of aHUS is 100%, the specificity is only 28%, with a positive likelihood ratio of 1.39.',

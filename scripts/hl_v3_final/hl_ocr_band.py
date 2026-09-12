@@ -16,7 +16,7 @@ hl_ocr_band.py — OCR 词级高亮器 (乱码 / 纯图像 PDF 通道)
     # --dry-run 只打印命中行文本与预估 band, 不改文件。
     # start/end 为 OCR 将出现的子串 (短语内断字请缩短关键词避开)。
 """
-import argparse, csv, os, re, subprocess, sys, tempfile
+import argparse, csv, os, re, shutil, subprocess, sys, tempfile
 
 try:
     import pymupdf as fitz  # PyMuPDF >= 1.24 的正式导入名
@@ -27,13 +27,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hl_lib  # noqa: E402  (复用 canon/canon_keys 规范化)
 import layout  # noqa: E402  (版面区域: 页眉页脚/双栏阅读序)
 
-DEFAULT_TESS = os.path.expanduser('~/Library/Application Support/TRAE SOLO CN/ModularData/ai-agent/vm/tools/bin/tesseract')
 YELLOW = (1.0, 0.85, 0.0)
 _PUNCT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 
 
 def find_tess():
-    cands = [DEFAULT_TESS, os.environ.get('TESSERACT', ''), 'tesseract']
+    cands = [os.environ.get('TESSERACT', ''), shutil.which('tesseract')]
+    cands = [c for c in cands if c]
     for c in cands:
         if not c:
             continue

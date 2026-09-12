@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P11-7: slide 11 引用7 (Yerigeri J Multidiscip Healthc 2023 aHUS) 三联征应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P11-7_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P11-7/P11-7_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P11-7_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P11-7/P11-7_highlight.pdf")
 
 SENTENCES = [
     "Hemolytic uremic syndrome (HUS) is a thrombotic microangiopathy (TMA) deﬁned by the triad of hemolytic anemia, thrombocytopenia, and acute kidney injury.",

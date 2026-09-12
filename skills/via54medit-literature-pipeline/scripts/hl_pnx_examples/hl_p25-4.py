@@ -2,12 +2,13 @@
 """P25-4 = Yerigeri K, et al. J Multidiscip Healthc. 2023;16:2233-2249 (aHUS review)
 slide 25 aHUS 列: 核心发病机制(补体旁路失调→MAC→微血栓)、血小板轻-中度减少<150、肾损伤重(AKI)、
 ADAMTS13≥10%(通常正常)、补体检测价值低、确诊靠排除TTP/STEC-HUS+基因检测"""
+import project_paths
 import sys, os
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, locate_sentence
 
-SRC = os.path.expanduser('~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-4_main.pdf')
-OUT = os.path.expanduser('~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-4/P25-4_highlight.pdf')
+SRC = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P25-4_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P25-4/P25-4_highlight.pdf")
 
 SENTENCES = [
     # 核心发病机制: 补体旁路失调→补体损伤+微血栓(肾小球毛细血管)

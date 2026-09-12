@@ -11,23 +11,26 @@ analyze_ppt_citations_v7_dual_track.py — D 列算法 v7: 双轨方案
 3. 同时 vision 提 data_points + 视觉关联
 4. 合并 XML + vision 到 D 字段
 
-输出: /Users/david/Desktop/雷管方案_文献整理/PPT_citations_4col.csv
+输出: <LEIGUAN_ROOT>/PPT_citations_4col.csv (由 project_paths.LEIGUAN_ROOT 决定)
 
 参考: references/v2.8.0-dual-track-pptx-xml-plus-vision.md
 """
-import os, re, json, csv, shutil
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
+import os, re, json, csv, shutil, tempfile
 from datetime import datetime
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 # 路径常量
-PPTX_PATH = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622_expanded.pptx')
-OUT_XML = os.path.expanduser('~/Desktop/雷管方案_文献整理/_pptx_xml_structured.json')
-OUT_CSV = os.path.expanduser('~/Desktop/雷管方案_文献整理/PPT_citations_4col.csv')
-TRUTH = os.path.expanduser('~/Desktop/雷管方案_文献整理/_citation_table/citation_table.csv')
-VISION_JSON = '/tmp/vision_d_merged.json'
+PPTX_PATH = os.path.join(project_paths.LEIGUAN_ROOT, "PPT原版_雷管方案_三重获益_引领uHCC一线治疗_0622_expanded.pptx")
+OUT_XML = os.path.join(project_paths.LEIGUAN_ROOT, "_pptx_xml_structured.json")
+OUT_CSV = os.path.join(project_paths.LEIGUAN_ROOT, "PPT_citations_4col.csv")
+TRUTH = os.path.join(project_paths.LEIGUAN_ROOT, "_citation_table/citation_table.csv")
+VISION_JSON = os.path.join(tempfile.gettempdir(), 'vision_d_merged.json')
 MISALIGNED_4 = {('12', '5'), ('14', '2'), ('22', '13'), ('30', '10')}
-ARCHIVE_DIR = os.path.expanduser('~/Desktop/雷管方案_文献整理/_archived_old_dirs')
+ARCHIVE_DIR = os.path.join(project_paths.LEIGUAN_ROOT, "_archived_old_dirs")
 
 # ============================================================
 # 轨道 A: python-pptx 提 PPTX 结构化数据

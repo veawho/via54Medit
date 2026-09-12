@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P3-2: slide 3 引用2 (Luzzatto Br J Haematol 2020 PNH综述) 应证句逐行 highlight"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, page_char_stream, canon_keys, canon
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P3-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P3-2/P3-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P3-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P3-2/P3-2_highlight.pdf")
 
 S = {
     0: [  # 第1页 Summary

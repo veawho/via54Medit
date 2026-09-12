@@ -234,6 +234,64 @@ def ingest(path: Optional[str] = None, db: Optional[TelemetryDB] = None,
     return out
 
 
+def write_spool_record(record: Dict[str, Any], path: Optional[str] = None) -> bool:
+    """把一条 LLM 用量记录追加到 spool。
+
+    供 TraeWork 伴侣进程 / 插件 / MCP 调用: 它们拿到 IDE 的真实 usage 后,
+    以 ``provider="traework"`` 写入 spool, 由 :func:`ingest` 统一摄入本库。
+
+    ``record`` 建议包含的字段(与 Go 侧 ``recordLLMUsage`` 一致):
+      provider, model, prompt_tokens, completion_tokens, total_tokens,
+      req_id, source, project_name, ts。
+    缺失的字段会自动补齐: ts 为当前 UTC 时间, provider/model 默认 unknown,
+    total_tokens 为 prompt + completion, 空 req_id 会生成一个指纹 id。
+
+    返回 ``True`` 表示成功追加; 失败时静默返回 ``False``(记账是旁路)。
+    """
+    if not isinstance(record, dict):
+        return False
+    prompt = _as_int(record.get("prompt_tokens"))
+    completion = _as_int(record.get("completion_tokens"))
+    total = _as_int(record.get("total_tokens"))
+    if total <= 0:
+        total = prompt + completion
+    if total <= 0:
+        return False
+
+    provider = str(record.get("provider") or "unknown").strip() or "unknown"
+    model = str(record.get("model") or "unknown").strip() or "unknown"
+    req_id = str(record.get("req_id") or "").strip()
+    if not req_id:
+        fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False)
+        req_id = "traework-" + hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:24]
+
+    ts = str(record.get("ts") or "").strip()
+    if not ts:
+        ts = datetime.now().astimezone().isoformat()
+
+    line = json.dumps({
+        "ts": ts,
+        "provider": provider,
+        "model": model,
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+        "req_id": req_id,
+        "source": str(record.get("source") or "traework").strip() or "traework",
+        "project_name": str(record.get("project_name") or ""),
+    }, ensure_ascii=False)
+
+    target = path or spool_path()
+    try:
+        if dir_ := os.path.dirname(target):
+            os.makedirs(dir_, exist_ok=True)
+        with open(target, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+        return True
+    except OSError:
+        return False
+
+
 def spool_status(path: Optional[str] = None) -> Dict[str, Any]:
     """spool 当前状态, 用于报表与部署自检里的"有没有漏记"。"""
     target = path or spool_path()

@@ -66,7 +66,7 @@ class TestClassifyLink(unittest.TestCase):
         self.assertEqual(info["expected_status"], 302)
 
     def test_d_local(self):
-        info = classify_link("file:///Users/david/test.pdf")
+        info = classify_link("file:///path/to/test.pdf")
         self.assertEqual(info["type"], "D_LOCAL")
         self.assertEqual(info["expected_status"], None)
 

@@ -682,6 +682,144 @@ class TestTelemetry(unittest.TestCase):
         self.assertEqual(rep.token_mode, "exact")
         self.assertEqual(rep.llm_call_count, 1)
 
+    def test_mmx_quota_parsing(self):
+        """测试：mmx-cli 账户级配额可真实读取(单位是次数, 不是 token)。"""
+        from telemetry import llm_providers
+
+        sample_stdout = json.dumps({
+            "model_remains": [
+                {
+                    "model_name": "general",
+                    "current_interval_total_count": 100,
+                    "current_interval_usage_count": 23,
+                    "current_weekly_total_count": 700,
+                    "current_weekly_usage_count": 145,
+                    "current_interval_remaining_percent": 77,
+                    "current_weekly_remaining_percent": 79,
+                },
+                {
+                    "model_name": "video",
+                    "current_interval_total_count": 50,
+                    "current_interval_usage_count": 5,
+                    "current_weekly_total_count": 350,
+                    "current_weekly_usage_count": 30,
+                    "current_interval_remaining_percent": 90,
+                    "current_weekly_remaining_percent": 91,
+                },
+            ]
+        })
+
+        def fake_run(cmd, **kwargs):
+            self.assertEqual(cmd[:3], ["/fake/mmx", "quota", "show"])
+            return mock.MagicMock(returncode=0, stdout=sample_stdout, stderr="")
+
+        with mock.patch.object(llm_providers, "_which", return_value="/fake/mmx"), \
+                mock.patch("subprocess.run", side_effect=fake_run):
+            quota = llm_providers.read_mmx_quota()
+
+        self.assertIsNotNone(quota)
+        self.assertEqual(quota["units"], "count")
+        self.assertEqual(len(quota["models"]), 2)
+        general = quota["models"][0]
+        self.assertEqual(general["name"], "general")
+        self.assertEqual(general["interval_used"], 23)
+        self.assertEqual(general["interval_total"], 100)
+        self.assertEqual(general["weekly_used"], 145)
+        self.assertEqual(general["weekly_total"], 700)
+        self.assertEqual(general["weekly_remaining_percent"], 79)
+
+    def test_mmx_quota_missing_binary_returns_none(self):
+        """测试：未安装 mmx-cli 时配额读取诚实返回 None。"""
+        from telemetry import llm_providers
+
+        with mock.patch.object(llm_providers, "_which", return_value=""):
+            self.assertIsNone(llm_providers.read_mmx_quota())
+
+    def test_traework_state_detection(self):
+        """测试：从 TraeWork renderer.log 识别当前 provider 与 model。"""
+        from telemetry import llm_providers, platform_paths
+
+        tmp_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_root, ignore_errors=True)
+        app_dir = os.path.join(tmp_root, "TRAE SOLO CN")
+        log_dir = os.path.join(app_dir, "logs", "20260912T120000", "window1")
+        os.makedirs(log_dir)
+        log_path = os.path.join(log_dir, "renderer.log")
+        with open(log_path, "w", encoding="utf-8") as fh:
+            fh.write('{"model_info": {"provider": "openai", "model_name": "gpt-4o"}}\n')
+            fh.write('some prefix {"model_info": {"provider": "deepseek", "model_name": "deepseek-chat", "base_url": "https://api.deepseek.com"}} other text\n')
+
+        with mock.patch.object(platform_paths, "app_data_roots", return_value=[tmp_root]):
+            state = llm_providers.read_traework_state()
+
+        self.assertTrue(state["installed"])
+        self.assertTrue(state["running"])
+        self.assertEqual(state["active_provider"], "deepseek")
+        self.assertEqual(state["active_model"], "deepseek-chat")
+        self.assertEqual(state["base_url"], "https://api.deepseek.com")
+        self.assertIn("renderer.log", state["log_path"])
+
+    def test_traework_state_no_installation(self):
+        """测试：未安装 TraeWork 时状态识别返回未安装。"""
+        from telemetry import llm_providers, platform_paths
+
+        fake_root = os.path.join(self.test_dir, "no_trae")
+        os.makedirs(fake_root)
+        with mock.patch.object(platform_paths, "app_data_roots", return_value=[fake_root]):
+            state = llm_providers.read_traework_state()
+
+        self.assertFalse(state["installed"])
+        self.assertIn("未找到", state["detail"])
+
+    def test_traework_spool_ingestion(self):
+        """测试：TraeWork 侧写入 spool 的真实用量能被摄入并读回。"""
+        from telemetry import llm_spool
+
+        spool_file = os.path.join(self.test_dir, "traework_spool.jsonl")
+        db_path = os.path.join(self.test_dir, "traework.db")
+        db = TelemetryDB(db_path)
+
+        ok = llm_spool.write_spool_record({
+            "provider": "traework",
+            "model": "traework-deepseek-v4-flash",
+            "prompt_tokens": 500,
+            "completion_tokens": 120,
+            "total_tokens": 620,
+            "req_id": "tw-req-001",
+            "source": "traework-extension",
+            "project_name": "RSV",
+        }, path=spool_file)
+        self.assertTrue(ok)
+
+        res = llm_spool.ingest(path=spool_file, db=db)
+        self.assertEqual(res["imported"], 1)
+        self.assertEqual(res["duplicated"], 0)
+        self.assertEqual(res["invalid"], 0)
+
+        rows = db.query_llm_tokens(provider="traework")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["provider"], "traework")
+        self.assertEqual(rows[0]["model"], "traework-deepseek-v4-flash")
+        self.assertEqual(rows[0]["prompt_tokens"], 500)
+        self.assertEqual(rows[0]["completion_tokens"], 120)
+        self.assertEqual(rows[0]["total_tokens"], 620)
+
+        # 幂等：同一条记录再次写入 spool 后摄入应被去重
+        ok2 = llm_spool.write_spool_record({
+            "provider": "traework",
+            "model": "traework-deepseek-v4-flash",
+            "prompt_tokens": 500,
+            "completion_tokens": 120,
+            "total_tokens": 620,
+            "req_id": "tw-req-001",
+            "source": "traework-extension",
+            "project_name": "RSV",
+        }, path=spool_file)
+        self.assertTrue(ok2)
+        res2 = llm_spool.ingest(path=spool_file, db=db)
+        self.assertEqual(res2["imported"], 0)
+        self.assertEqual(res2["duplicated"], 1)
+
     def test_standalone_packaging_metadata(self):
         """测试：独立模块打包配置文件与元数据完整性。"""
         import telemetry

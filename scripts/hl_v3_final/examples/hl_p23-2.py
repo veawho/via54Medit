@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P23-2: slide 23 引用2 (Schoettler TCT 2023 TA-TMA共识) 应证句"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P23-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P23-2/P23-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P23-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P23-2/P23-2_highlight.pdf")
 
 SENTENCES = [
     # slide23: "由于诊断标准、筛查实践的差异以及潜在低报, 报道的发生率差异较大2,17"

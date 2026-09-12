@@ -2,7 +2,11 @@
 """tma_manual_list.py — 生成人工下载清单 (含访问链接)"""
 import json, os, re, io, sys, urllib.parse
 
-T = os.environ.get('TMA_PROJECT') or r'C:\\Users\\via54\\Desktop\\TMA_test'
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import project_paths
+
+T = os.environ.get('TMA_PROJECT') or project_paths.TMA_TEST_ROOT
 MISSING = os.path.join(T, '_manual_download_list.json')
 REF_JSON = os.path.join(T, '_references_FINAL.json')
 OUT_MD = os.path.join(T, '_人工下载清单.md')

@@ -32,12 +32,13 @@ pdf_understand.py — Docling 多模态 PDF 深度理解工具
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import re
 
 # 缓存 docling 输出 (避免重复跑)
-DOCLING_CACHE_DIR = Path("/tmp/docling_cache")
+DOCLING_CACHE_DIR = Path(tempfile.gettempdir()) / "docling_cache"
 DOCLING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -13,6 +13,7 @@ auto_redownload.py — L0 错论文自动重下 (2026-08-10)
 
 输出: 替换的 PDF + _redownload_log.json
 """
+import project_paths
 import os, sys, csv, json, re, shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -26,18 +27,18 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 PROJECTS = {
     "TMA": {
-        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
-        "suggestions_json": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm/_redownload_suggestions.json"),
-        "pdf_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_2_pdfs"),
-        "old_highlight_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight"),
-        "new_highlight_dir": os.path.expanduser("~/Desktop/TMA_文献整理/_3_highlight_v10_glm"),
+        "root": project_paths.TMA_ROOT,
+        "suggestions_json": os.path.join(project_paths.TMA_ROOT, "_3_highlight_v10_glm/_redownload_suggestions.json"),
+        "pdf_dir": os.path.join(project_paths.TMA_ROOT, "_2_pdfs"),
+        "old_highlight_dir": os.path.join(project_paths.TMA_ROOT, "_3_highlight"),
+        "new_highlight_dir": os.path.join(project_paths.TMA_ROOT, "_3_highlight_v10_glm"),
     },
     "雷管方案": {
-        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
-        "suggestions_json": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm/_redownload_suggestions.json"),
-        "pdf_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step3_pdf下载_160目录"),
-        "old_highlight_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_96目录_合并DOI"),
-        "new_highlight_dir": os.path.expanduser("~/Desktop/雷管方案_文献整理/step4_highlight_v10_glm"),
+        "root": project_paths.LEIGUAN_ROOT,
+        "suggestions_json": os.path.join(project_paths.LEIGUAN_ROOT, "step4_highlight_v10_glm/_redownload_suggestions.json"),
+        "pdf_dir": os.path.join(project_paths.LEIGUAN_ROOT, "step3_pdf下载_160目录"),
+        "old_highlight_dir": os.path.join(project_paths.LEIGUAN_ROOT, "step4_highlight_96目录_合并DOI"),
+        "new_highlight_dir": os.path.join(project_paths.LEIGUAN_ROOT, "step4_highlight_v10_glm"),
     },
 }
 

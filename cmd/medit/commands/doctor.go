@@ -38,7 +38,7 @@ var doctorCmd = &cobra.Command{
   - 依赖     PyMuPDF / python-pptx / Pillow / OCR(PaddleOCR) / pywin32 (仅 Windows)
   - 视觉     mmx-cli 视觉引擎 (经 **npm** 安装, 不是 PyPI) + MINIMAX_API_KEY
   - 渲染     桌面版 PowerPoint / Word (仅 Windows/macOS; Linux 无桌面 Office, 标"不适用")
-  - 工具     poppler / Chrome / Go 工具链 / lark-cli
+  - 工具     poppler / Chrome / Go 工具链 / lark-cli (可选, Feishu 集成时才需要)
   - 兼容性   硬编码 /tmp、外机绝对路径、未加 darwin 守卫的 osascript 等平台相关代码点
 
 与平台无关的能力标"不适用", 且**不安装、不校验**。
@@ -111,16 +111,21 @@ type dsResult struct {
 	OK     bool `json:"ok"`
 }
 
-// locateRepoScript 按"已安装的 skill -> 仓库 scripts/ -> 相对可执行文件"三处找脚本。
+// locateRepoScript 按"VIA54_REPO -> 仓库根 -> 相对可执行文件 -> 相对 cwd"顺序找脚本。
+// 不再默认查 ~/.hermes/skills, 新设备不需要 hermes 布局。
 func locateRepoScript(name string) string {
-	cands := []string{
-		foundation.HermesPath("skills", "via54medit", name),
-		filepath.Join("scripts", name),
+	var cands []string
+	if v := os.Getenv("VIA54_REPO"); v != "" {
+		cands = append(cands, filepath.Join(v, "scripts", name))
+	}
+	if root := foundation.FindRepoRoot(); root != "" {
+		cands = append(cands, filepath.Join(root, "scripts", name))
 	}
 	if exe, err := os.Executable(); err == nil {
 		// bin/medit -> 仓库根
 		cands = append(cands, filepath.Join(filepath.Dir(filepath.Dir(exe)), "scripts", name))
 	}
+	cands = append(cands, filepath.Join("scripts", name))
 	for _, c := range cands {
 		if _, err := os.Stat(c); err == nil {
 			return c

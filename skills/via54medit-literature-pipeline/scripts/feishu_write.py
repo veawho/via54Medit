@@ -6,6 +6,7 @@
   3) python3 feishu_write.py --sheet <spreadsheet_token> [--csv tma_citation_table_feishu_ALIGNED.csv]
 流程: tenant_access_token → 获取 sheet 元数据(匹配列头) → 清空旧数据 → 写入 106 行 14 列
 依赖: requests"""
+import project_paths
 import sys, os, json, csv, time
 import urllib.request
 
@@ -73,5 +74,5 @@ if __name__ == '__main__':
         print('需提供 spreadsheet_token: --sheet <token> 或环境变量 FEISHU_SPREADSHEET_TOKEN')
         sys.exit(1)
     csv_path = sys.argv[sys.argv.index('--csv') + 1] if '--csv' in sys.argv else \
-        os.path.expanduser('~/Desktop/TMA_文献整理/_citation_table/tma_citation_table_feishu_ALIGNED.csv')
+        os.path.join(project_paths.TMA_ROOT, "_citation_table/tma_citation_table_feishu_ALIGNED.csv")
     write_sheet(tok, csv_path)

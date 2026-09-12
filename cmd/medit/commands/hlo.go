@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -179,7 +180,10 @@ func runHloAudit(cmd *cobra.Command, args []string) error {
 // runHloTruth — 真值表查询
 func runHloTruth(cmd *cobra.Command, args []string) error {
 	home := os.Getenv("HOME")
-	cachePath := home + "/.hermes/cache/lit_truth.json"
+	cachePath := os.Getenv("VIA54_LIT_TRUTH_PATH")
+	if cachePath == "" {
+		cachePath = filepath.Join(home, ".via54medit", "cache", "lit_truth.json")
+	}
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		return fmt.Errorf("read truth cache %s: %w", cachePath, err)

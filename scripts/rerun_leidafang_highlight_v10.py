@@ -15,6 +15,7 @@ rerun_leidafang_highlight_v10.py — 雷管方案 step4 v9.7 → v10.1 全量迁
 
 用法:  python3.11 rerun_leidafang_highlight_v10.py [--limit 5] [--mode line]
 """
+import project_paths
 import os, sys, csv, re, json, shutil, glob
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -33,7 +34,7 @@ import pymupdf as fitz
 fitz.TOOLS.mupdf_display_warnings(False)
 
 
-LEIDA_ROOT = os.path.expanduser("~/Desktop/雷管方案_文献整理")
+LEIDA_ROOT = project_paths.LEIGUAN_ROOT
 STEP3_DIR = os.path.join(LEIDA_ROOT, "step3_pdf下载_160目录")
 STEP4_OLD_DIR = os.path.join(LEIDA_ROOT, "step4_highlight_96目录_合并DOI")
 STEP4_NEW_DIR = os.path.join(LEIDA_ROOT, "step4_highlight_v10")

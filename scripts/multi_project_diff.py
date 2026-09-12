@@ -6,6 +6,7 @@ multi_project_diff.py — 多项目对比报告 (TMA vs 雷管方案)
 
 输出: multi_project_diff_<timestamp>.md
 """
+import project_paths
 import os, sys, json, csv, time
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -16,12 +17,12 @@ from via54_rules import check_all, RULES_TEXT
 PROJECTS = [
     {
         "name": "雷管方案 (uHCC/HCC 三重获益 PPT)",
-        "root": os.path.expanduser("~/Desktop/雷管方案_文献整理"),
+        "root": project_paths.LEIGUAN_ROOT,
         "size_mb": None,  # lazy
     },
     {
         "name": "TMA (临床路径诊断与鉴别 PPT)",
-        "root": os.path.expanduser("~/Desktop/TMA_文献整理"),
+        "root": project_paths.TMA_ROOT,
         "size_mb": None,
     },
 ]

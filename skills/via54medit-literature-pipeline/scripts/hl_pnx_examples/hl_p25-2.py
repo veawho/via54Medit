@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """P25-2: slide 25 引用2 (aHUS共识2025) aHUS鉴别应证句 (按slide25重选)"""
+import project_paths
 import os
 import sys
 sys.path.insert(0, '/tmp')
 from hl_lib import fitz, highlight_sentences, locate_sentence, page_char_stream
 
-PDF = os.path.expanduser("~/Desktop/TMA_文献整理/step3_pdf下载_106目录/P25-2_main.pdf")
-OUT = os.path.expanduser("~/Desktop/TMA_文献整理/step4_highlight_106目录_合并DOI/P25-2/P25-2_highlight.pdf")
+PDF = os.path.join(project_paths.TMA_ROOT, "step3_pdf下载_106目录/P25-2_main.pdf")
+OUT = os.path.join(project_paths.TMA_ROOT, "step4_highlight_106目录_合并DOI/P25-2/P25-2_highlight.pdf")
 
 SENTENCES = [
     "TMA的临床表现主要包括微血管病性溶血性贫血（MAHA）、血小板减少和多器官损伤，包括肾、脑、眼、心脏、胃肠系统等器官，而aHUS以肾脏受累最为显著",

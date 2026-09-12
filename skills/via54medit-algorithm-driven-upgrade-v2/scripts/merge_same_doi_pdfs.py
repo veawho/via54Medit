@@ -13,11 +13,14 @@ merge_same_doi_pdfs.py — 步骤 6.1: 整合同一文献的目录
 - 0 DOI 冲突
 - 最大合并: P5-17P12-1P22-1P24-3P26-3P27-3P33-1P43-1 (8 标号, DOI 10.1016/j.annonc.2025.08.2124)
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../scripts'))
+import project_paths
 import os, csv, shutil, re
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = os.path.expanduser('~/Desktop/雷管方案_文献整理')
+ROOT = project_paths.LEIGUAN_ROOT
 CSV_8COL = f'{ROOT}/PPT_citations_8col_aligned.csv'
 HL_BASE = f'{ROOT}/_highlight'
 DL_BASE = ROOT

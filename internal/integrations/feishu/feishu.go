@@ -60,8 +60,7 @@ type Config struct {
 	BaseDir string
 
 	// LarkCLI is the path to the lark-cli executable.
-	// Optional; defaults to ~/.hermes/node/bin/lark-cli when present,
-	// otherwise to whatever "lark-cli" resolves to on PATH.
+	// Optional; defaults to whatever "lark-cli" resolves to on PATH.
 	LarkCLI string
 
 	// Logger allows callers to inject a custom logger. Optional.
@@ -70,21 +69,12 @@ type Config struct {
 
 // defaultLarkCLI 返回 lark-cli 的默认位置。
 //
-// 顺序: ~/.hermes/node/bin/lark-cli(存在就用) -> PATH 上的 lark-cli。
-//
-// 不写死某个账号的绝对路径: 旧默认值是 /Users/<name>/.hermes/node/bin/lark-cli,
-// 换台机器/换个用户名就不存在, 而报错会发生在推送那一刻 —— 与"配置缺失"很难区分。
+// 只查 PATH 上的 lark-cli, 不再默认假设 hermes 安装路径。
 func defaultLarkCLI() string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		p := filepath.Join(home, ".hermes", "node", "bin", "lark-cli")
-		if _, statErr := os.Stat(p); statErr == nil {
-			return p
-		}
-	}
 	if p, err := exec.LookPath("lark-cli"); err == nil {
 		return p
 	}
-	// 都不在: 回落到 PATH 名字, 让真正的执行处报出"找不到可执行文件"
+	// 不在 PATH: 回落到名字, 让真正的执行处报出"找不到可执行文件"
 	return "lark-cli"
 }
 
