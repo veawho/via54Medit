@@ -48,6 +48,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.47] - 2026-09-12 (修红 CI: v5.4.46 在 Windows 跑者上红了 —— 跨盘符时 relpath 抛 ValueError)
+
+v5.4.46 的 CI 是 5/6: `python (windows-latest)` 在 "Deploy scanner tests" 挂了。
+
+### 成因
+
+```
+File "scripts\deploy_scan.py", line 1253, in scan_platform_compat
+    rel = os.path.relpath(path, REPO)
+File "<frozen ntpath>", line 766, in relpath
+ValueError: path is on mount 'C:', start on mount 'D:'
+```
+
+新加的测试 `TestMacosHardcodingScan._scan()` 把 `_compat_roots()` 指到
+`tempfile.TemporaryDirectory()`, 而 CI 上仓库在 `D:`、临时目录在 `C:` ——
+`ntpath.relpath` 跨盘符直接抛异常, 不是返回相对路径。
+
+这是**真缺陷**, 不只是测试环境问题: `_compat_roots()` 本来就是可覆盖的
+(测试、以及任何把扫描面指到别处的调用), 而"报告里怎么显示路径"这件事
+不该让整段扫描崩掉。macOS/Linux 上只有一个根, 所以本地与那两个跑者都看不出来 ——
+典型的"只在第三个平台显形"。
+
+### 修法
+
+新增 `_rel_display(path)`: 优先 `relpath`, 跨盘符(ValueError)时退回绝对路径。
+只影响报告显示, 不影响判定逻辑。
+
+### 补一条跨平台的用例
+
+`test_rel_display_survives_cross_drive_roots` —— 用 `side_effect=ValueError` 模拟跨盘符,
+**在所有平台都跑**。否则那段 `except ValueError` 只在 Windows 上才被覆盖,
+下次谁把它删掉, 另外两个跑者会照样绿。
+
+同时验证了扫描结果本身没变: 本机仍是 567 文件 / 40 处 `posix_tmp`,
+`macos_user_path` 等四类为 0。
+
 ## [5.4.46] - 2026-09-12 (清除 macOS 相关硬编码: 604 处写死账号的绝对路径 + 补齐扫描器规则)
 
 回应"检查并避免出现 macOS 相关的硬编码"。

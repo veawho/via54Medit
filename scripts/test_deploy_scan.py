@@ -1401,6 +1401,18 @@ class TestMacosHardcodingScan(unittest.TestCase):
         probed = src + "if os.path.exists(CHROME):\n    pass\n"
         self.assertEqual(self._scan({"b.py": probed}), [])
 
+    def test_rel_display_survives_cross_drive_roots(self):
+        """Windows 上仓库在 D: 而临时目录在 C: 时, relpath 会抛 ValueError。
+
+        报告里怎么显示路径, 不该让整段扫描崩掉。这条用例在所有平台都跑 ——
+        否则那段守卫只在 Windows CI 上才被覆盖到。
+        """
+        with mock.patch.object(ds.os.path, "relpath",
+                               side_effect=ValueError("path is on mount 'C:', start on mount 'D:'")):
+            self.assertEqual(ds._rel_display("/tmp/x/a.py"), "/tmp/x/a.py")
+        self.assertEqual(ds._rel_display(os.path.join(ds.REPO, "scripts", "a.py")),
+                         os.path.join("scripts", "a.py"))
+
     def test_repo_has_no_macos_specific_hardcoding(self):
         """不变量: 仓库里不许再出现这几类 macOS 专属硬编码。
 

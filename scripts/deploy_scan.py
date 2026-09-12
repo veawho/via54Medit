@@ -1219,6 +1219,20 @@ def _is_commented(line, lang):
     return s.startswith("#")
 
 
+def _rel_display(path):
+    """报告用的相对路径。
+
+    os.path.relpath 在 **Windows 上跨盘符**时会抛 ValueError("path is on mount
+    'C:', start on mount 'D:'") —— 而 _compat_roots() 是可以被覆盖的(测试会指到
+    临时目录), CI 上仓库在 D: 而 tempfile 在 C: 就是这个情形。这里只影响
+    **报告里怎么显示**, 不该让整段扫描崩掉, 所以退回绝对路径。
+    """
+    try:
+        return os.path.relpath(path, REPO)
+    except ValueError:
+        return path
+
+
 def scan_platform_compat():
     """扫出与当前平台不兼容 / 机器专属的代码点。返回 (findings, scanned_files)。
 
@@ -1250,7 +1264,7 @@ def scan_platform_compat():
                         lines = fh.readlines()
                 except OSError:
                     continue
-                rel = os.path.relpath(path, REPO)
+                rel = _rel_display(path)
                 whole = "".join(lines)
                 guarded = any(g in whole for g in _PLATFORM_GUARDS)
                 probed = any(g in whole for g in _EXISTENCE_PROBES)
