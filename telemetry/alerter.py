@@ -20,6 +20,7 @@
 
 import json
 import os
+import re
 import socket
 import urllib.request
 from datetime import datetime
@@ -33,6 +34,15 @@ RETRY_BACKOFF_MINUTES = 10
 
 # 未配置时使用的默认值
 DEFAULT_MIN_INTERVAL_MINUTES = 60
+
+# 过滤已知底座/外部组件的良性调试噪声，避免升级为致命告警刷屏
+IGNORED_ALERT_PATTERNS = [
+    r"crashpad.*directory_reader_win\.cc",
+    r"crashpad.*FindFirstFile",
+    r"net::ERR_NETWORK_CHANGED",
+    r"GL_INVALID_ENUM",
+    r"GVA: unhandled attribute",
+]
 
 _LEVEL_COLORS = {"critical": "red", "warning": "orange", "info": "blue"}
 
@@ -201,6 +211,11 @@ def send_alert(
 
         bucket_key = key or title
         if not force:
+            joined_content = f"{title} " + " ".join(str(ln) for ln in lines)
+            for pat in IGNORED_ALERT_PATTERNS:
+                if re.search(pat, joined_content, re.IGNORECASE):
+                    return False, f"过滤已知良性底座日志噪声: {pat}"
+
             wait = rate_limited_for(bucket_key, conf["min_interval_minutes"])
             if wait is not None:
                 return False, f"限流中: 同类告警约 {wait} 分钟后再试"

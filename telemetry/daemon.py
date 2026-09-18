@@ -206,6 +206,9 @@ class TelemetryDaemon:
         cfg = load_config()
         now = datetime.now()
 
+        # 优先刷新心跳，确保外部监控（看门狗）即便在重型目录扫描期间也不会误判超时
+        self._update_heartbeat(cfg, now)
+
         # 1. 产出物主动嗅探 (每 poll_interval_seconds 执行一次)
         poll_int = cfg.get("watcher", {}).get("poll_interval_seconds", 30)
         if time.time() - self.last_scan_time >= poll_int:
@@ -297,6 +300,17 @@ class TelemetryDaemon:
                         ok_b, msg_b = bmgr.sync_weekly_report(rep)
                         self.db.record_sync_log("feishu_bitable_weekly", bmgr.app_token or "local_csv", "success" if ok_b else "failed", msg_b)
                         self.log(f"  • 多维表格同步: {msg_b}")
+
+                        if hasattr(bmgr, "finalize_weekly_drafts"):
+                            try:
+                                fin_res = bmgr.finalize_weekly_drafts(rep)
+                                if isinstance(fin_res, (tuple, list)) and len(fin_res) >= 2:
+                                    ok_fin, msg_fin = fin_res[0], fin_res[1]
+                                else:
+                                    ok_fin, msg_fin = bool(fin_res), "周报草稿归档完成"
+                                self.log(f"  • 多维表格周报归档: {msg_fin}")
+                            except Exception as ef:
+                                self.log(f"  ⚠️ 多维表格周报归档提示(已忽略): {ef}")
                     except Exception as e:
                         self.log(f"  ❌ 周报自动推送异常: {e}")
 
@@ -332,6 +346,17 @@ class TelemetryDaemon:
                         ok_b, msg_b = bmgr.sync_weekly_report(rep)
                         self.db.record_sync_log("feishu_bitable_monthly", bmgr.app_token or "local_csv", "success" if ok_b else "failed", msg_b)
                         self.log(f"  • 多维表格月报同步: {msg_b}")
+
+                        if hasattr(bmgr, "finalize_weekly_drafts"):
+                            try:
+                                fin_res = bmgr.finalize_weekly_drafts(rep)
+                                if isinstance(fin_res, (tuple, list)) and len(fin_res) >= 2:
+                                    ok_fin, msg_fin = fin_res[0], fin_res[1]
+                                else:
+                                    ok_fin, msg_fin = bool(fin_res), "月报草稿归档完成"
+                                self.log(f"  • 多维表格月报归档: {msg_fin}")
+                            except Exception as ef:
+                                self.log(f"  ⚠️ 多维表格月报归档提示(已忽略): {ef}")
                     except Exception as e:
                         self.log(f"  ❌ 月报自动推送异常: {e}")
 
@@ -508,7 +533,7 @@ def stop_daemon_process():
     if is_pid_running(pid):
         try:
             if sys.platform == "win32":
-                subprocess.run(f"taskkill /PID {pid} /F", shell=True, check=False)
+                subprocess.run(f"taskkill /PID {pid} /T /F", shell=True, check=False)
             else:
                 os.kill(pid, signal.SIGTERM)
             print(f"[Daemon] 守护进程 (PID: {pid}) 已成功终止。")

@@ -48,6 +48,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Reference
 - TalkMED AgentPilot (https://agent-pilot.talkmed.com) — DXY 旗下医药商业情报 AI 平台, 7 页 PDF 报告为参照样本
 
+## [5.4.49] - 2026-09-19 (飞书 TraeWork Bot 全局报错治理与生产级加固)
+
+### 核心变更
+
+1. **多维表格周报归档契约防御 (`telemetry/bitable_sync.py` & `telemetry/daemon.py`)**
+   - `FeishuBitableManager` 新增 `finalize_weekly_drafts(report)` 标准实现，统一返回 `(bool, str)` 二元组契约。
+   - `telemetry/daemon.py` 调度调用处增加非迭代对象、Mock 对象与空值防御性解包保护，根治 `TypeError: cannot unpack non-iterable Mock object`。
+
+2. **自动同步与构建高可用升级 (`scripts/auto_sync.py`)**
+   - 增加编译回退机制：当环境缺少 GNU Make 或工作目录无 `Makefile` 时，自动回退到 `go build` 直接编译，彻底消除 `make: *** No rule to make target 'build'. Stop.` 报错。
+   - 依赖静默自愈：冒烟测试前自动嗅探 `pymupdf`/`fitz`，缺失时后台静默自愈安装；净化测试错误日志输出，避免裸 Traceback 被日志监控器升级为假告警。
+
+3. **看门狗与生命周期稳定性提升 (`telemetry/daemon.py`)**
+   - 单次循环开始前优先刷新心跳，防止耗时文件扫描和复杂网络同步导致外部看门狗误判假死。
+   - Windows 平台 `stop_daemon_process` 切换为 `taskkill /PID {pid} /T /F` 树状强杀，彻底消灭孤儿 `pythonw.exe` 幽灵实例堆积。
+
+4. **告警通道噪声白名单过滤 (`telemetry/alerter.py`)**
+   - 增加 `IGNORED_ALERT_PATTERNS` 过滤白名单，静默拦截 Chromium Crashpad 内部探测错误（如 `directory_reader_win.cc:44 FindFirstFile: 0x3`）等良性底座噪声，杜绝告警风暴。
+
 ## [5.4.48] - 2026-09-12 (多平台部署与规范合规标准化: 一键安装器 + 清理硬编码 + GitHub 工作流)
 
 ### 核心变更

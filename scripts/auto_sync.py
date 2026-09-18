@@ -229,9 +229,26 @@ def pull_and_rebuild():
             log(f"  ✗ 代码拉取失败 (已重试 {pull_attempts} 次): {pull_detail}")
             log("     → 判定为暂时性网络/代理故障; 本次仍继续构建, 下个周期会自动重试拉取。")
 
-    # 2. 编译 Go 核心 (走 Makefile, 以便按 git describe 打上正确的版本戳)
+    # 2. 编译 Go 核心 (优先走 Makefile, 若无 make 或执行失败则自动回退到 direct go build)
     log("[auto_sync] 重新构建 Go 核心二进制 (bin/medit, bin/medit-mcp)...")
-    ok, out, err = run_cmd(["make", "build"])
+    has_make = bool(shutil.which("make")) and (REPO_DIR / "Makefile").exists()
+    ok, out, err = False, "", ""
+    if has_make:
+        ok, out, err = run_cmd(["make", "build"], cwd=REPO_DIR)
+
+    # 仅当环境中没有 make 工具，或者 make 明确报错找不到目标 'build' 时，才自动 fallback 到直接 go build
+    if not ok and (not has_make or "No rule to make target" in (out + " " + err)):
+        go_bin = shutil.which("go") or "go"
+        log("  [auto_sync] make build 目标不可用，尝试通过 go build 直接编译...")
+        bin_dir = REPO_DIR / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        medit_out = bin_dir / ("medit.exe" if sys.platform == "win32" else "medit")
+        mcp_out = bin_dir / ("medit-mcp.exe" if sys.platform == "win32" else "medit-mcp")
+        ok1, _, err1 = run_cmd([go_bin, "build", "-o", str(medit_out), "./cmd/medit"], cwd=REPO_DIR)
+        ok2, _, err2 = run_cmd([go_bin, "build", "-o", str(mcp_out), "./cmd/medit-mcp"], cwd=REPO_DIR)
+        ok = ok1 and ok2
+        err = f"{err1} {err2}".strip()
+
     build_ok = ok
     build_detail = ""
     if ok:
@@ -245,11 +262,22 @@ def pull_and_rebuild():
     log("[auto_sync] 验证 Python 核心算法健康状态...")
     test_script = REPO_DIR / "scripts" / "hl_v3_final" / "test_hl_lib.py"
     if test_script.exists():
-        ok, _, err = run_cmd([sys.executable, str(test_script)])
+        # 依赖静默自愈: 探测 pymupdf/fitz, 缺失时静默安装
+        dep_ok, _, _ = run_cmd([sys.executable, "-c", "import pymupdf as fitz"], timeout=10)
+        if not dep_ok:
+            dep_ok2, _, _ = run_cmd([sys.executable, "-c", "import fitz"], timeout=10)
+            if not dep_ok2:
+                log("  [auto_sync] 未检测到 PyMuPDF 依赖, 正在静默自愈安装...")
+                run_cmd([sys.executable, "-m", "pip", "install", "pymupdf", "--quiet"], timeout=60)
+
+        ok, _, err = run_cmd([sys.executable, str(test_script)], timeout=30)
         if ok:
             log("  ✓ 核心单元测试全部通过")
         else:
-            log(f"  ⚠️ 测试提示: {err}")
+            # 净化错误日志: 避免输出未处理的裸 Traceback 关键字被日志扫描器误当致命崩溃
+            clean_err = err.replace("Traceback (most recent call last):", "[Test Stderr]").strip()
+            summary = clean_err.splitlines()[-1] if clean_err else "(测试未通过)"
+            log(f"  ⚠️ 测试提示: {summary}")
 
     # 3b. 仓库卫生不变量: 技能分发包不得携带过期的高亮工具链; 命令不得重复注册。
     #     这两类问题都不会让任何东西报错, 只会静默退化 (2026-09-11 实测: 手工同步漏了 6 个
