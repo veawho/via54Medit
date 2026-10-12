@@ -2,7 +2,7 @@
 
 # via54Medit
 
-> **🌐 Language**: [🇨🇳 中文文档](./README.md) | [🇺🇸 English](#) (current)
+> **🌐 Language**: [🇨🇳+🇺🇸 双语主文档 (bilingual main)](./README.md) | [🇨🇳 中文版](./README.zh-CN.md) | [🇺🇸 English](#) (current)
 
 [![CI](https://github.com/veawho/via54Medit/actions/workflows/ci.yml/badge.svg)](https://github.com/veawho/via54Medit/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/veawho/via54Medit?include_prereleases&color=blue)](https://github.com/veawho/via54Medit/releases)
@@ -19,7 +19,7 @@
 
 `via54Medit` is a multi-source scientific literature retrieval, semantic routing, and evidence synthesis engine built for clinical researchers, medical writers, and systematic review pipelines:
 
-- **Natural Language Question Answering**: Concurrently queries 4 medical literature sources (Antfu Clinical RAG + PubMed + OpenAlex + Semantic Scholar).
+- **Natural Language Question Answering**: Concurrently queries 3 medical literature sources (PubMed + OpenAlex + Semantic Scholar). The Antfu clinical RAG source was removed (no Chrome CDP). Default LLM is DeepSeek (`--llm deepseek`, model deepseek-flash); the hermes provider was removed.
 - **Deduplication & Fusion**: SimHash Hamming distance deduplication with citation, recency, FWCI, and multi-source overlap ranking.
 - **Cognitive Extraction & Grading**: LLM-driven PICO (Population, Intervention, Comparison, Outcome) element extraction and GRADE evidence quality assessment.
 - **Dual-Source Architecture & Layout Fidelity**: L0–L6 6-layer verification architecture supporting journal paper and ClinicalTrials.gov (NCT) data complementarity, backed by native Microsoft Office rendering engines for PPT citation cards (`anno2ppt`).

@@ -2,11 +2,11 @@
 
 > 多源医学文献循证语义路由器
 
-`via54Medit` 是面向**循证医学 (EBM)** 的多源文献检索 + 融合工具，通过自然语言提问，自动调度 4 个文献源（蚂蚁阿福 RAG + PubMed + OpenAlex + Semantic Scholar），返回去重 + 加权排序 + GRADE 评级的循证证据包。
+`via54Medit` 是面向**循证医学 (EBM)** 的多源文献检索 + 融合工具，通过自然语言提问，自动调度 3 个文献源（PubMed + OpenAlex + Semantic Scholar，蚂蚁阿福 antfu 已剥离），返回去重 + 加权排序 + GRADE 评级的循证证据包。
 
 ## 一句话定位
 
-**自然语言问题 → 4 源并发检索 → 循证证据包（JSON + 摘要 + GRADE + PPT）**
+**自然语言问题 → 3 源并发检索 → 循证证据包（JSON + 摘要 + GRADE + PPT）**
 
 ## 与 via54Design 的关系
 
@@ -114,7 +114,7 @@ medit version               # 版本信息
 
 ### A. MCP (Model Context Protocol) 协议接入
 项目提供了基于 Stdio 的 MCP 服务实现（位于 [cmd/medit-mcp](cmd/medit-mcp)，可编译为 `bin/medit-mcp`），注册并暴露了以下 4 个 Tools：
-* `medit_ask`：一句话循证检索 (4 源并发 + LLM 摘要)。
+* `medit_ask`：一句话循证检索 (3 源并发 + LLM 摘要)。
 * `medit_pico`：临床问题 PICO 要素提取。
 * `medit_grade`：对会话证据包执行 GRADE 证据质量评级。
 * `medit_anno2ppt`：将证据包导出为 PPT 幻灯片。
@@ -145,7 +145,7 @@ medit version               # 版本信息
 
 - **Phase 0** — 骨架
 - **Phase 1** — 蚂蚁阿福 + PubMed 适配器
-- **Phase 2** — OpenAlex + S2 + Router + 4 源融合
+- **Phase 2** — OpenAlex + S2 + Router + 3 源融合
 - **Phase 3** — PICO + GRADE + anno2ppt
 - **Phase 4** — MCP Server + 跨平台 + scoop (当前已实装 stdio 传输)
 - **Phase 5** (持续) — 社区化
