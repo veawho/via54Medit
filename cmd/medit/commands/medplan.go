@@ -517,7 +517,7 @@ var medplanOptimizeCmd = &cobra.Command{
 		}
 		llm := buildMedplanLLM(cmd.ErrOrStderr())
 		if llm == nil {
-			return fmt.Errorf("optimize requires an LLM (--llm glm|hermes|openai)")
+			return fmt.Errorf("optimize requires an LLM (--llm glm|openai|deepseek)")
 		}
 		opt := &medplan.Optimizer{LLM: llm}
 		out := cmd.OutOrStdout()

@@ -207,7 +207,28 @@ func (h *HermesProvider) CompleteWithOptions(ctx context.Context, opts CompleteO
 		recModel = got.Model
 	}
 	recordLLMUsage(h.usageProvider(), recModel, got.ID, opts.Source, "", got.Usage)
-	return got.content(), nil
+	// 剥离模型可能附加的推理块 (<think>…</think>, MiniMax-M2 / DeepSeek-R1 等),
+	// 避免下游 JSON 解析 (PICO/GRADE) 因前缀文本失败而静默降级。
+	return stripReasoning(got.content()), nil
+}
+
+// stripReasoning removes <think>…</think> reasoning blocks that some
+// thinking-enabled models (e.g. MiniMax-M2, DeepSeek-R1) prepend to the
+// final answer. It is safe for non-thinking models (no-op).
+func stripReasoning(s string) string {
+	for {
+		i := strings.Index(s, "<think>")
+		if i < 0 {
+			break
+		}
+		rest := s[i:]
+		j := strings.Index(rest, "</think>")
+		if j < 0 {
+			break
+		}
+		s = strings.TrimSpace(s[:i] + rest[j+len("</think>"):])
+	}
+	return s
 }
 
 // --- openai backend (also OpenAI-compatible) ---
@@ -268,7 +289,7 @@ func init() {
 func newDeepSeek(cfg map[string]any) (LLMProvider, error) {
 	d := &DeepSeekProvider{
 		endpoint: "https://api.deepseek.com",
-		model:    "deepseek-chat",
+		model:    "deepseek-flash",
 		client:   &http.Client{Timeout: 90 * time.Second},
 	}
 	if v, ok := cfg["endpoint"].(string); ok && v != "" {

@@ -20,7 +20,7 @@ var rootCmd = &cobra.Command{
 	Short: "via54Medit — multi-source medical literature router for EBM",
 	Long: `via54Medit is a natural-language-driven multi-source medical literature
 router for Evidence-Based Medicine. It dispatches clinical questions
-to Antfu RAG, PubMed, OpenAlex, and Semantic Scholar, fuses results,
+to PubMed, OpenAlex, and Semantic Scholar, fuses results,
 and outputs graded evidence packages with optional PPT rendering.
 
 Phase 5 (2026-07-28): HLO (Hermes Literature Orchestrator) 集成
@@ -107,7 +107,7 @@ func registerAll() {
 	rootCmd.AddCommand(pubmedCmd)   // pubmed <subcmd>
 	rootCmd.AddCommand(openalexCmd) // openalex <subcmd>
 	rootCmd.AddCommand(s2Cmd)       // s2 <subcmd>
-	rootCmd.AddCommand(antfuCmd)    // antfu <subcmd>
+	// antfu 命令组已剥离（2026-10-12），不再注册
 	rootCmd.AddCommand(sciHubCmd)   // sci-hub <doi|pmid>
 	rootCmd.AddCommand(gScholarCmd) // gscholar <query>
 	rootCmd.AddCommand(fullTextCmd) // fulltext <search|download>

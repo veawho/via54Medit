@@ -73,7 +73,7 @@ func main() {
 	// Register the 4 tools.
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "medit_ask",
-		Description: "Run a clinical question through 4 literature sources (PubMed, OpenAlex, S2, antfu), fuse results, and optionally produce an LLM summary. Returns an EvidencePackage (JSON).",
+		Description: "Run a clinical question through 3 literature sources (PubMed, OpenAlex, S2), fuse results, and optionally produce an LLM summary. Returns an EvidencePackage (JSON).",
 	}, askTool)
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -88,7 +88,7 @@ func main() {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "medit_anno2ppt",
-		Description: "Render an evidence package as antfu-style PPT cards. Phase 3 placeholder — returns the path to a future PPTX file (does not exist yet).",
+		Description: "Render an evidence package as PPT cards. Phase 3 placeholder — returns the path to a future PPTX file (does not exist yet).",
 	}, anno2pptTool)
 
 	// HLO 集成 (Phase 5, 2026-07-28)
@@ -160,17 +160,7 @@ func askTool(ctx context.Context, _ *mcp.CallToolRequest, input AskInput) (*mcp.
 		}
 		r.AddSource(s)
 	}
-	if !input.NoAntfu {
-		s, err := source.NewAntfuSource(map[string]any{
-			"cdp_url": "http://localhost:9223",
-			"timeout": "60s",
-		})
-		if err == nil {
-			r.AddSource(s)
-		} else {
-			log.Printf("antfu init: %v", err)
-		}
-	}
+	// antfu 源已剥离（2026-10-12）：不再查询 chat.antafu.com
 	if !input.NoLLM && os.Getenv("LLM_PROVIDER") != "" {
 		// Only wire an LLM when explicitly requested; do not default to hermes.
 		llm, err := foundation.NewLLM(os.Getenv("LLM_PROVIDER"), map[string]any{

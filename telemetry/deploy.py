@@ -484,7 +484,9 @@ def verify_llm_integration():
     """
     print("\n[*] 步骤 6/6: 校验 LLM 接入与 Token 用量读取能力 (强制)...")
     try:
-        from . import llm_providers
+        # 注: 原 `from . import llm_providers` 在 deploy.py 以脚本方式运行时无父包上下文,
+        # 抛 relative import 错误; 改为绝对导入 (PROJECT_ROOT 已在文件顶部加入 sys.path)。
+        import telemetry.llm_providers as llm_providers
 
         res = llm_providers.audit(live=False, ingest=True)
         print(llm_providers.format_report(res))
