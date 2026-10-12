@@ -1,5 +1,9 @@
 # via54Medit (中文 README)
 
+> **🌐 语言 / Language**: [🇨🇳+🇺🇸 双语主文档 (bilingual main)](./README.md) | [🇺🇸 English](./README_EN.md) | [🇨🇳 中文版](#) (current)
+
+> ℹ️ 最新状态（v5.4.51）：默认 LLM 为 **DeepSeek**（`--llm deepseek`，deepseek-flash）；hermes 已剥离；支持豆包工作伙伴一步部署（跨平台）。
+
 > 多源医学文献循证语义路由器
 
 `via54Medit` 是面向**循证医学 (EBM)** 的多源文献检索 + 融合工具，通过自然语言提问，自动调度 3 个文献源（PubMed + OpenAlex + Semantic Scholar，蚂蚁阿福 antfu 已剥离），返回去重 + 加权排序 + GRADE 评级的循证证据包。

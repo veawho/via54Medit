@@ -91,7 +91,6 @@ medit anno2ppt evidence_package.json
 medit pubmed search "Nivolumab HCC"
 medit openalex search "Immunotherapy Hepatocellular"
 medit s2 search "Atezolizumab Bevacizumab"
-medit antfu search "Hepatocellular carcinoma systemic therapy"
 
 # Medical planning & strategy
 medit medplan run --instruction "Launch Medical Strategy" --name DrugX --indication "HCC"
