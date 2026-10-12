@@ -32,18 +32,20 @@ DeepSeek-cli（bin/deepseek.ps1：chat / vision 图像理解 / models / balance�
 - LLM 通道：DeepSeek（**已剥离 hermes**：`--llm hermes` 不再可用；config 无 hermes 段；MiniMax 仅保留为手动备用）。
 - 落地：lark-cli（用户身份）绑定飞书账号与多维表格；DeepSeek-cli / mmx-cli 调用自动实时采集。
 
-## 依赖与强制条件（部署即校验）
+## 一步部署（跨平台，无需手动运行脚本）
 
-运行 `deploy_medit.ps1` 自动补全全部依赖，**缺失即 FAIL**：
+召唤伙伴后，伙伴在对话中自动执行 `deploy_medit.py --key <key>`（Windows / macOS / Linux 均支持），自动补全全部依赖，**缺失即 FAIL**；DeepSeek API Key 在对话中一步提供即可，全程无需打开终端。
 
-- Go 工具链与 medit 二进制（自动编译部署，含 DeepSeek 通道补丁）
+覆盖的自动部署项：
+
+- medit 引擎二进制（按平台分发：Windows `medit.exe` / macOS `medit-arm64`·`medit-amd64`，DeepSeek 通道补丁内置）
 - Python 依赖（pymupdf / python-pptx / Pillow / pywin32）
 - FFmpeg、PaddleOCR、poppler、Office COM
-- **DeepSeek-cli（强制）**：`bin/deepseek.ps1` 自动部署
+- **DeepSeek-cli（强制）**：`bin/deepseek.py`（跨平台）自动部署
 - **DeepSeek API Key（强制）**：`$env:DEEPSEEK_API_KEY` 或 `~/.deepseek.key`，缺失体检 FAIL 并提示提供
 - lark-cli 自动部署 + 自动绑定本地飞书登录账号（用户身份，无企业自建应用凭据）
 - 多维表格自动绑定：`Al8xbS4u9av85esUgjvcWYDankb`（Hack Health）
-- 定时任务：`medit-usage-collector`（每 5 分钟实时采集）、`medit-monday-finalize`（周一 10:30 校验标记）
+- 定时任务：`medit-usage-collector`（每 5 分钟实时采集）、`medit-monday-finalize`（周一 10:30 校验标记）——Windows schtasks / macOS·Linux crontab
 
 ## 安装包内容
 

@@ -8,13 +8,13 @@
 |---|---|
 | `PARTNER.md` | 伙伴元信息：形象 / 人设 / 擅长领域 / 可调用技能 / 运行架构 |
 | `medit伙伴头像.png` | 伙伴形象（导入安装包时展示） |
-| `deploy_medit.ps1` | 一键部署：自动补全全部依赖 + DeepSeek CLI 强制部署 + API Key 交互提示 + lark-cli 飞书账号绑定 + 多维表格绑定 + 定时任务注册 |
+| `deploy_medit.py` | 一键部署引擎（**跨平台 Windows/macOS/Linux**）：自动补全全部依赖 + DeepSeek CLI 强制 + API Key 对话内收集 + lark-cli 绑定 + 定时任务注册 |
 
-## 如何部署为飞书工作伙伴（2 步）
+## 如何部署为飞书工作伙伴（1 步）
 
-1. **导入伙伴安装包**：豆包/飞书客户端 →「插件·技能·伙伴 → 工作伙伴 → 创建新伙伴 → 从本地导入」，选择 Release 附件中的 `via54medit-workmate-installer-v5.4.50.zip`。
-   （备用：技能上传 →「技能 → +添加 → 上传技能」，选择 `via54medit-skill-v5.4.50.zip`。）
-2. **运行一键部署**：解压安装包，以管理员运行 `deploy_medit.ps1`，按提示粘贴 **DeepSeek API Key**（缺失会强制提示，否则体检 FAIL）。
+1. **导入伙伴安装包**：豆包/飞书客户端 →「插件·技能·伙伴 → 工作伙伴 → 创建新伙伴 → 从本地导入」，选择 Release 附件中的 `via54medit-workmate-installer-v5.4.51.zip`。
+
+部署即完成：召唤伙伴后，伙伴自动检查并执行跨平台部署引擎 `deploy_medit.py`，补全全部依赖；若缺 **DeepSeek API Key**，伙伴直接在对话中向你索取，你回复 key 即完成全部部署。**全程无需打开终端，Windows / macOS 均可**。
 
 完成后自动具备全部能力：3 源循证检索融合（PubMed/OpenAlex/S2）、PICO/GRADE、系统综述、PPT 引用应证、文献 highlight、DeepSeek 视觉、medplan、飞书同步、telemetry 遥测、实时多源用量采集（每 5 分钟）与周一校验标记。
 
@@ -32,4 +32,5 @@
 
 | Release | 内容 |
 |---|---|
+| v5.4.51 | **一步部署 + 跨平台（macOS/Windows/Linux）**：deploy_medit.py / deepseek.py 跨平台引擎、darwin 双架构二进制、伙伴对话内收集 API Key |
 | v5.4.50 | DeepSeek 默认通道 + 剥离 hermes/antfu + 推理块剥离 + 伙伴包标准化 |
