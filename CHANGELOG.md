@@ -9,9 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | 公开 Release | 内部版本 | 日期 | 说明 |
 | --- | --- | --- | --- |
+| `v5.4.52` | 5.4.52 | 2026-10-28 | 卸载已部署 via54Medit 并清理本地环境 / Complete Uninstaller & Clean Retirement |
+| `v5.4.51` | 5.4.51 | 2026-10-12 | 一步部署 + 跨平台（macOS/Windows/Linux） |
 | `v5.0.0` | 5.0.0 | 2026-09-10 | medit-telemetry v1.1.0 独立模块发布 |
 | `v4.9.0` | 4.9.0 | 2026-09-06 | Step5 视觉双对齐终版 + 文献高亮复核闭环 |
 | `v1.0.0` | 4.5.x (同期内部号) | 2026-07-03 | 首次公开稳定版: Medical RAG Agent & Multi-Agent MCP Server |
+
+## [v5.4.52] - 2026-10-28 — 卸载已部署 via54Medit 并清理本地环境 / Complete Uninstaller & Clean Retirement
+
+### Added
+- `uninstall.ps1` — Windows 原生 PowerShell 一键全量卸载脚本 (带 UTF-8 BOM，支持 `-CleanRepo`)
+- `uninstall.py` — 跨平台 Python 一键全量卸载脚本 (Windows/macOS/Linux，支持 `--clean-repo`)
+- `uninstall.sh` — macOS / Linux POSIX Shell 卸载脚本 (支持 `--clean-repo`)
+- `README-uninstall.md` — 中英文双语完全卸载与系统清理指南
+- `via54medit-uninstaller-v5.4.52.zip` — 独立分发卸载包
+
+### Actions
+- 停止后台常驻进程：终止 telemetry 守护进程 (`telemetry.cli daemon`) 与用量采集器
+- 注销系统定时排程：清除 Windows 4 个计划任务 (`medit-usage-collector`, `medit-monday-finalize`, `MeditTelemetryWeekly`, `MeditTelemetryMonthly`) 与 macOS/Linux crontab
+- 移除开机自启动项：清除 Windows Startup 自启 VBS 脚本 (`traework_telemetry_silent.vbs`) 与 macOS LaunchAgent
+- 彻底清除部署目录：移除 `~/.via54medit` 与 `~/.medit`
+- 清理集成与技能残留：删除飞书/豆包 lark-chats 解压目录与 `via54medit*` 用户技能
+- 清理安装缓存与下载包：清理 `Downloads` 与 `Temp` 中的安装归档与历史发布缓存
+- 清理本地代码仓库：支持在卸载完成后一并删除本地 Git 代码仓库
+
 
 ## [Unreleased]
 

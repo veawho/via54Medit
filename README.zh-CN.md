@@ -168,6 +168,25 @@ medit version               # 版本信息
 本项目目前**私库**, 由巫师叔叔 via Hermes Agent 迭代。
 v0.5 后考虑公开 (Phase 5)。
 
+## 🧹 完全卸载与环境清理 (v5.4.52)
+
+若需要从当前系统中完全卸载已部署的 `via54Medit`（终止常驻后台、注销计划任务、删除自启动、清理 `~/.via54medit` 与 `~/.medit` 数据、清理工作伙伴及本地仓库），可直接运行内置的一键卸载脚本。详见 [README-uninstall.md](./README-uninstall.md)。
+
+```powershell
+# Windows PowerShell (全量卸载 + 清理本地仓库)
+powershell -ExecutionPolicy Bypass -File uninstall.ps1 -CleanRepo
+```
+
+```bash
+# 跨平台 Python 3
+python uninstall.py --clean-repo
+```
+
+```bash
+# macOS / Linux Shell
+chmod +x uninstall.sh && ./uninstall.sh --clean-repo
+```
+
 ## 许可
 
 - 源码: AGPL-3.0

@@ -156,6 +156,27 @@ make test-py     # Run Python test suites (telemetry, repo hygiene, LLM ledger, 
 
 ---
 
+## 🧹 Complete Uninstallation & System Cleanup (v5.4.52)
+
+To completely uninstall deployed `via54Medit` components from your system (including background daemons, scheduled tasks, autostart scripts, `~/.via54medit`, `~/.medit`, workmate workspaces, and local repository), run the uninstaller directly. See [README-uninstall.md](./README-uninstall.md).
+
+```powershell
+# Windows PowerShell (Full uninstallation + Clean local repo)
+powershell -ExecutionPolicy Bypass -File uninstall.ps1 -CleanRepo
+```
+
+```bash
+# Cross-platform Python 3
+python uninstall.py --clean-repo
+```
+
+```bash
+# macOS / Linux Shell
+chmod +x uninstall.sh && ./uninstall.sh --clean-repo
+```
+
+---
+
 ## 📄 License & Community Standards
 
 - **Dual Licensing**:
